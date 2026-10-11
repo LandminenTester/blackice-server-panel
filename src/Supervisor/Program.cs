@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ReplayPanel.Shared;
 using ReplayPanel.Supervisor;
+if(args.FirstOrDefault()=="--apply-panel-update"){await PanelUpdateWorker.Run(args[1]);return;}
 if(args.FirstOrDefault() is "--controller" or "--stop-stack" or "--force-stop-stack" or "--stop-stack-detached" or "--server-console" or "--stop-server-detached") {
     var mode=args[0];var path=Path.GetFullPath(args.Skip(1).FirstOrDefault()??".local/panel.json");
     if(mode is "--stop-stack-detached" or "--stop-server-detached") {
@@ -32,6 +33,7 @@ if(Environment.GetEnvironmentVariable("REPLAY_PANEL_LOG_DIR") is {} logDirectory
 var configPath=Path.GetFullPath(args.FirstOrDefault()??".local/panel.json");
 var config=PanelConfig.Load(configPath);
 NativeConsole.ConfigPath=configPath;
+using var updates=new PanelUpdates(configPath);
 using var single=new FileStream(Path.Combine(Path.GetDirectoryName(configPath)!,"supervisor.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
 var setup=new SetupService(config,configPath);setup.PrintKey();
 IServerBackend? backend=null;BundleManager? bundles=null;PipeClient? adapter=null;
@@ -55,7 +57,7 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
         requestAction=request.Action;
         string Enc(object value)=>JsonSerializer.Serialize(value,PanelConfig.Json);
         switch(request.Action) {
-            case "bootstrap":reply=new(true,Lines:[Enc(new {configured=config.Configured,dashboardName=config.DashboardName,backend=config.Backend,locale=config.Locale})]);break;
+            case "bootstrap":reply=new(true,Lines:[Enc(new {configured=config.Configured,dashboardName=config.DashboardName,backend=config.Backend,locale=config.Locale,version=PanelUpdates.RunningVersion})]);break;
             case "setup-folders": {var input=JsonSerializer.Deserialize<Dictionary<string,string>>(request.Command!)!;setup.Authorize(input["key"]);reply=new(true,Lines:[Enc(setup.Folders(input["path"]))]);break;}
             case "setup-validate": {var input=JsonSerializer.Deserialize<InstallInput>(request.Command!,PanelConfig.Json)!;setup.Authorize(input.Key);SetupService.Validate(input.ServerRoot,input.Backend);reply=new(true);break;}
             case "setup-install":reply=new(true,Lines:[Enc(setup.Start(JsonSerializer.Deserialize<InstallInput>(request.Command!,PanelConfig.Json)!))]);break;
@@ -67,6 +69,11 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
             case "users":reply=new(true,Lines:[Enc(Accounts.List(config))]);break;
             case "user-save":Accounts.Save(config,configPath,JsonSerializer.Deserialize<UserChange>(request.Command!,PanelConfig.Json)!);reply=new(true);break;
             case "user-delete":Accounts.Delete(config,configPath,request.Command!);reply=new(true);break;
+            case "update-status":reply=new(true,Lines:[Enc(updates.Status())]);break;
+            case "update-check":reply=new(true,Lines:[Enc(await updates.Check(timeout.Token))]);break;
+            case "update-download":reply=new(true,Lines:[Enc(await updates.Download(timeout.Token))]);break;
+            case "update-cancel":await updates.Cancel();reply=new(true,Lines:[Enc(updates.Status())]);break;
+            case "update-apply":reply=new(true,Lines:[Enc(await updates.Apply())]);break;
             case "settings": { lock(config) {
                 if(request.Locale is not null && request.Locale is not ("de" or "en"))throw new InvalidOperationException("settings.invalid");
                 if(request.ShutdownMode is not null && request.ShutdownMode is not ("keep-running" or "stop-server"))throw new InvalidOperationException("settings.invalid");

@@ -101,7 +101,7 @@ try {
   check((await post('/api/login',{username:'reader',password:restrictedPassword})).status===200,'restricted user login accepted');csrf=(await(await request('/api/session')).json()).csrf;
   const readerCookies=new Map(cookies);const readerCsrf=csrf;
   check((await request('/api/bundles')).status===200,'bundle-read permission allows list');
-  for(const route of ['/api/command','/api/bundles/fixture-bundle/start','/api/bundles/fixture-bundle/stop','/api/bundles/fixture-bundle/restart','/api/server/start','/api/server/stop','/api/server/restart','/api/server/force-stop','/api/settings','/api/users/save'])check((await post(route,{text:'echo forbidden',autoStartServer:true})).status===403,'restricted account denied '+route);
+  for(const route of ['/api/command','/api/bundles/fixture-bundle/start','/api/bundles/fixture-bundle/stop','/api/bundles/fixture-bundle/restart','/api/server/start','/api/server/stop','/api/server/restart','/api/server/force-stop','/api/settings','/api/users/save','/api/updates/check','/api/updates/download','/api/updates/apply'])check((await post(route,{text:'echo forbidden',autoStartServer:true})).status===403,'restricted account denied '+route);
   check((await request('/api/logs')).status===403&&(await request('/api/users')).status===403,'logs and user administration separately restricted');
   cookies.clear();for(const [k,v] of adminCookies)cookies.set(k,v);csrf=adminCsrf;
   check((await post('/api/users/save',{username:'reader',permissions:['server.start'],enabled:true})).status===200,'admin can change permissions');

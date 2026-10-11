@@ -33,6 +33,7 @@ jobs:
         shell: bash
         run: cp -R licenses src/Web/wwwroot/
       - run: dotnet run --project tests/Core.Tests
+      - run: dotnet run --project tests/Updates.Tests
       - run: dotnet publish tests/ConsoleFixture -c Release -o .local/fixture
       - run: dotnet build tests/Backend.Tests -c Release
       - if: runner.os == 'Linux'
@@ -51,18 +52,26 @@ jobs:
         run: |
           dotnet publish src/Supervisor -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o .local/launcher
           if [ "${{ runner.os }}" = "Windows" ]; then cp .local/launcher/Supervisor.exe Start.exe; else cp .local/launcher/Supervisor Start; chmod +x Start; fi
+          sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Directory.Build.props > VERSION
           mkdir -p .local/launcher-package/artifacts
           cp -R artifacts/web artifacts/supervisor .local/launcher-package/artifacts/
           cp Start* .local/launcher-package/
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y tmux
       - name: Verify launcher lifecycle
         shell: bash
         env:
           PANEL_LAUNCHER_PACKAGE: .local/launcher-package
         run: node scripts/test-launcher.mjs
+      - name: Verify update replacement and rollback
+        env:
+          PANEL_LAUNCHER_PACKAGE: .local/launcher-package
+        run: node scripts/test-update-worker.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: replay-server-panel-${{ matrix.rid }}
           path: |
+            VERSION
             Start*
             artifacts/
             scripts/

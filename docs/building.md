@@ -39,6 +39,7 @@ dotnet publish src/Web -c Release -r win-x64 --self-contained true -o artifacts/
 
 dotnet publish src/Supervisor -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o .local/launcher
 Copy-Item .local/launcher/Supervisor.exe Start.exe -Force
+ # Keep the repository VERSION file beside Start.exe; match Directory.Build.props when changing the version.
 Copy-Item licenses artifacts/web/wwwroot/licenses -Recurse -Force
 .\Start.exe
 ```

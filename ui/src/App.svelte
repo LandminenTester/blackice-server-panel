@@ -4,6 +4,7 @@
   import Select from "./components/Select.svelte";
   import Toggle from "./components/Toggle.svelte";
   import Users from "./Users.svelte";
+  import Updates from "./Updates.svelte";
   let permissions = $state<string[]>([]);
   const can = (permission: string) => permissions.includes(permission);
   let navItems = $derived(["dashboard", ...(can("console.read") || can("console.write") || can("logs.read") ? ["console"] : []), ...(can("bundles.read") ? ["bundles"] : []), "settings", ...(can("users.manage") ? ["users"] : [])]);
@@ -863,6 +864,7 @@
         <Users {t} {request} onchanged={session} />
       {:else}
         <section class="settings-section">
+          {#if can("settings.write")}<Updates {t} {request} installAllowed={can("users.manage")} />{/if}
           <h2>{t.autoStart}</h2>
           <Toggle checked={status?.autoStartServer ?? true} label={t.autoStart} disabled={busy || !connected || !can("settings.write")} onchange={autoStart} />
           <p class="muted">{t.autoStartHint}</p>

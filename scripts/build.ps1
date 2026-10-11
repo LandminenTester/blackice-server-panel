@@ -17,3 +17,6 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Start entry build failed.' }
   Copy-Item -LiteralPath (Join-Path $root '.local/launcher/Supervisor.exe') -Destination (Join-Path $root 'Start.exe') -Force
 } finally { Pop-Location }
+
+[xml]$projectVersions = Get-Content (Join-Path $root "Directory.Build.props")
+[IO.File]::WriteAllText((Join-Path $root "VERSION"), [string]$projectVersions.Project.PropertyGroup.Version)

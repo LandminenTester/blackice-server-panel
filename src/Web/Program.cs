@@ -111,6 +111,8 @@ app.MapPost("/api/settings", async (Settings body, HttpContext c, PipeClient pip
     if((body.ShutdownMode is not null||body.AutoStartServer is not null)&&!Can(c,"settings.write"))return Results.Forbid();
     return Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode,AutoStartServer:body.AutoStartServer,Locale:body.Locale), ct));
 }).RequireAuthorization();
+app.MapGet("/api/updates",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("update-status"),ct))).RequireAuthorization("settings.write");
+foreach(var updateAction in new[]{"check","download","cancel","apply"}){var action=updateAction;var endpoint=app.MapPost("/api/updates/"+action,async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("update-"+action),ct))).RequireAuthorization("settings.write");if(action is "apply" or "download")endpoint.RequireAuthorization("users.manage");}
 app.MapGet("/api/users",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("users"),ct))).RequireAuthorization("users.manage");
 app.MapPost("/api/users/save",async(UserChange body,PipeClient pipe,CancellationToken ct)=>Result(await pipe.Call(new("user-save",JsonSerializer.Serialize(body,PanelConfig.Json)),ct))).RequireAuthorization("users.manage");
 app.MapPost("/api/users/delete",async(UserDelete body,PipeClient pipe,CancellationToken ct)=>Result(await pipe.Call(new("user-delete",body.Username),ct))).RequireAuthorization("users.manage");
