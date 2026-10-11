@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-11T15:59:48.121Z",
+  "generatedAt": "2026-10-11T21:35:22.592Z",
   "title": "Design System: Unofficial REPLAY.re - Server Webpanel",
   "extensions": {
     "colorMeta": {
@@ -385,9 +385,9 @@
     {
       "name": "Output panel",
       "kind": "card",
-      "description": "A bordered surface with red heading and a selectable cyan output region.",
+      "description": "A bordered surface with red heading and a selectable cyan output region. Desktop output flexes within the viewport-fitting panel; this standalone preview shows its surface treatment.",
       "html": "<section class=\"ds-panel\"><h2>Latest output</h2><textarea readonly aria-label=\"Latest output\">No console output yet.</textarea></section>",
-      "css": ".ds-panel{background:var(--surface,#19171e);border:1px solid var(--line,#834653)}.ds-panel h2{margin:0;padding:20px 24px;border-bottom:1px solid var(--line,#834653);color:var(--red,#ff6477);font:500 20px 'IBM Plex Sans',sans-serif}.ds-panel textarea{display:block;width:100%;min-height:160px;padding:24px;border:0;resize:vertical;background:#0c1016;color:var(--cyan,#74e7e9);font:13px/1.8 'IBM Plex Mono',monospace}.ds-panel textarea:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}"
+      "css": ".ds-panel{background:var(--surface,#19171e);border:1px solid var(--line,#834653)}.ds-panel h2{margin:0;padding:20px 24px;border-bottom:1px solid var(--line,#834653);color:var(--red,#ff6477);font:500 20px 'IBM Plex Sans',sans-serif}.ds-panel textarea{display:block;width:100%;min-height:160px;padding:24px;border:0;resize:none;background:#0c1016;color:var(--cyan,#74e7e9);font:13px/1.8 'IBM Plex Mono',monospace}.ds-panel textarea:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}"
     },
     {
       "name": "Follow output switch",
@@ -403,10 +403,18 @@
       "html": "<button class=\"ds-select\" aria-label=\"Language\" aria-haspopup=\"listbox\" aria-expanded=\"false\">English<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m4 6 4 4 4-4\"/></svg></button>",
       "css": ".ds-select{min-height:44px;padding:10px 20px;font:500 16px 'IBM Plex Sans',sans-serif;border-radius:0;border:1px solid var(--line,#834653);cursor:pointer;transition:background .14s ease-out;display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:120px;background:#211b24;color:var(--cyan,#74e7e9);text-align:left}.ds-select svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5}.ds-select:hover{background:#3b202b;border-color:var(--red,#ff6477)}.ds-select:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}"
     }
+    ,
+    {
+      "name": "User permission switches",
+      "kind": "custom",
+      "description": "Existing square Toggle reused for individual user permissions; three columns on wide screens, two on compact desktop and one on mobile. Static checked-state previews; the application supplies persistence and request disabling.",
+      "html": "<div class=\"ds-permissions\" role=\"group\" aria-label=\"Permissions\"><button type=\"button\" class=\"ds-permission\" role=\"switch\" aria-checked=\"true\"><span aria-hidden=\"true\"><i></i></span>Start server</button><button type=\"button\" class=\"ds-permission\" role=\"switch\" aria-checked=\"false\"><span aria-hidden=\"true\"><i></i></span>Read console</button><button type=\"button\" class=\"ds-permission\" role=\"switch\" aria-checked=\"false\"><span aria-hidden=\"true\"><i></i></span>Manage users</button></div>",
+      "css": ".ds-permissions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;border-top:2px solid var(--red,#ff6477);padding-top:18px}.ds-permission{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px;border:0;border-radius:0;background:transparent;font:13px 'IBM Plex Sans',sans-serif;color:var(--muted,#c3abb2);text-align:left;cursor:pointer}.ds-permission>span{display:flex;align-items:center;justify-content:flex-end;flex-shrink:0;width:34px;height:18px;padding:3px;border:1px solid var(--cyan,#74e7e9)}.ds-permission i{display:block;width:10px;height:10px;background:var(--cyan,#74e7e9)}.ds-permission[aria-checked=false]>span{justify-content:flex-start;border-color:var(--line,#834653)}.ds-permission[aria-checked=false] i{background:var(--muted,#c3abb2)}.ds-permission:hover:not(:disabled){background:#3b202b}.ds-permission:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}.ds-permission:disabled{opacity:.45;cursor:not-allowed}@media(max-width:1100px){.ds-permissions{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:720px){.ds-permissions{grid-template-columns:1fr}}"
+    }
   ],
   "narrative": {
     "northStar": "Cyberpunk server operations",
-    "overview": "The user-pinned direction is a Cyberpunk operating surface. Dark charcoal and plum panels carry sharp red contours, cyan operational information and selective yellow action accents. IBM Plex typography and generous separation keep the expressive palette readable during server administration.\n\nThis system replaces the former green, rounded interface. Preserve the approved dark, angular identity across Dashboard, Console, Bundles, Settings, sign-in and first-run setup. English and German share the same visual hierarchy and control behavior; longer translations must wrap without obscuring an action or state.",
+    "overview": "The user-pinned direction is a Cyberpunk operating surface. Dark charcoal and plum panels carry sharp red contours, cyan operational information and selective yellow action accents. IBM Plex typography and generous separation keep the expressive palette readable during server administration.\n\nThis system replaces the former green, rounded interface. Preserve the approved dark, angular identity across Dashboard, Console, Bundles, Settings, Users, sign-in and first-run setup. English and German share the same visual hierarchy and control behavior; longer translations must wrap without obscuring an action or state.",
     "keyCharacteristics": [
       "Dark tonal surfaces and angular red contours.",
       "Cyan operational information and visible focus.",

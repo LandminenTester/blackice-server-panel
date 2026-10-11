@@ -71,7 +71,7 @@ components:
     padding: "12px"
 ---
 
-# Design System: Replay Server Panel
+# Design System: Unofficial REPLAY.re - Server Webpanel
 
 ## Overview
 
@@ -79,7 +79,7 @@ components:
 
 The user-pinned direction is a Cyberpunk operating surface. Dark charcoal and plum panels carry sharp red contours, cyan operational information and selective yellow action accents. IBM Plex typography and generous separation keep the expressive palette readable during server administration.
 
-This system replaces the former green, rounded interface. Preserve the approved dark, angular identity across Dashboard, Console, Bundles, Settings, sign-in and first-run setup. English and German share the same visual hierarchy and control behavior; longer translations must wrap without obscuring an action or state.
+This system replaces the former green, rounded interface. Preserve the approved dark, angular identity across Dashboard, Console, Bundles, Settings, Users, sign-in and first-run setup. English and German share the same visual hierarchy and control behavior; longer translations must wrap without obscuring an action or state.
 
 **Key Characteristics:**
 
@@ -105,20 +105,20 @@ The frontmatter records implemented colors from `ui/src/style.css`; semantic use
 
 Self-hosted IBM Plex Sans (400, 500 and 600) serves the interface; self-hosted IBM Plex Mono (400) serves output, commands, paths and bundle names. Keep prose in sentence case and preserve the locale's spelling.
 
-- Main screen headings use the headline token; narrow screens use 32px. Authentication/setup headings are 40px on desktop and 32px on mobile.
+- Main screen headings use 34px in the desktop operation shell and 32px on narrow screens. The headline token remains the general heading rule. Authentication/setup headings are 40px on desktop and 32px on mobile.
 - Section titles use the title token. Body paragraphs use the body line height with a maximum width of 70ch.
 - Form labels and state badges use 14px. Metadata and hints use 13px; mobile navigation and footer use 12px.
 - Console text uses the console token and reduces to 11px on mobile. Bundle names use 15px mono. Runtime values use tabular numerals.
 
 ## Layout
 
-An opaque sticky toolbar (82px high on desktop) holds the brand, connection text, language selector and sign-out. The app shell pairs a 228px navigation rail with a flexible workspace, capped at 1700px. Workspace padding is 42px at the top and 40px horizontally. The page heading, textual state badge, feedback and operational controls precede each content region.
+An opaque toolbar (82px high on desktop) holds the brand, server controls and textual state, language selector and sign-out. The desktop app shell fills the remaining viewport height and pairs a fixed 228px navigation rail with a flexible workspace without a maximum width. Workspace padding is 24px at the top, 32px horizontally and 18px at the bottom, with a 16px gap between regions. The page heading and feedback precede each content region. Console and long lists scroll internally; the workspace can scroll when content exceeds the available height, while the header and sidebar remain visible.
 
-Dashboard pairs a 280px runtime column with recent output, separated by 36px. Console uses one full-width panel with a mode toolbar, selectable output and command row. Bundles use a divided list with identity/state on the left and actions on the right. Settings content is capped at 650px; its selectors at 380px. Authentication/setup uses a centered container capped at 620px, padded 64px vertically and 32px horizontally.
+Dashboard pairs a 280px runtime column with recent output, separated by 36px. Console uses one full-width panel with a mode toolbar, selectable output and command row. Bundles use a divided list with identity/state on the left and actions on the right. Desktop Settings content is capped at 900px; its selectors at 380px. Authentication/setup uses a centered container capped at 620px, padded 64px vertically and 32px horizontally.
 
-At 1100px and below, the navigation rail narrows to 190px, workspace gutters become 24px and Dashboard stacks. Runtime details become a two-column definition list; toolbar connection text is hidden, while the page state badge remains.
+Between 721px and 1100px, the navigation rail narrows to 190px, workspace padding becomes 20px and Dashboard stacks. Runtime details become a two-column definition list. Users also stacks, with the user list capped at 220px and permissions arranged in two columns. The header retains compact controls and the textual server state; connection text is hidden.
 
-At 720px and below, navigation becomes a horizontal row of four icon-and-label tabs beneath the toolbar. The toolbar has a minimum height of 72px and can grow with wrapped text. Workspace gutters become 16px; the heading and state badge stack. Toolbars wrap, server actions share available width, and bundle identity precedes full-width action rows. Authentication/setup padding becomes 42px by 22px. Paths, identifiers and feedback wrap; console content scrolls within its textarea. Console output height remains responsive (`clamp(360px, 55vh, 680px)`) and vertically resizable.
+At 720px and below, navigation becomes a horizontally scrollable row of available icon-and-label tabs beneath the toolbar. The toolbar has a minimum height of 72px and can grow with wrapped text; server controls and state occupy a dedicated full-width row. Workspace padding becomes 22px vertically and 16px horizontally. Toolbars wrap, bundle identity precedes full-width action rows, and Users fields and permissions become one column. Authentication/setup padding becomes 42px by 22px. Paths, identifiers and feedback wrap. Console output scrolls within a non-resizable textarea: it flexes to available panel height on desktop and uses 50dvh on mobile. The sidebar footer contains REPLAY.re, the unofficial designation and the public GitHub link; on mobile these wrap beneath navigation.
 
 ## Elevation & Depth
 
@@ -142,11 +142,11 @@ The Follow output control is a button with `role="switch"`, a visible label and 
 
 ### Navigation
 
-Dashboard, Console, Bundles and Settings form a tablist with one active tab in the tab sequence. Each tab declares selection and links to the labelled tabpanel. Left/Right arrows wrap, while Home/End select the first/last view and move focus. Selected tabs use yellow, an outlined contour and the cut corner. Navigation clears action feedback and errors so messages remain tied to the view that produced them.
+Dashboard and Settings, plus permission-visible Console, Bundles and Users, form a tablist with one active tab in the tab sequence. Each tab declares selection and links to the labelled tabpanel. Left/Right arrows wrap through the available tabs, while Home/End select the first/last available view and move focus. Selected tabs use yellow, an outlined contour and the cut corner. Navigation clears action feedback and errors so messages remain tied to the view that produced them.
 
 ### Console and operational state
 
-Recent output and Console output are labelled read-only textareas that retain keyboard focus, selection, scrolling and vertical resizing. Live console and Log file are pressed-state buttons in a labelled group. Following live output scrolls to the latest line; log mode offers explicit refresh. The command field has a visually hidden label and a visible placeholder, and sending requires a running connected server and nonempty input.
+Recent output and Console output are labelled read-only textareas that retain keyboard focus, selection and scrolling. Desktop output regions flex within their panels instead of resizing; Console is also non-resizable on mobile. Live console and Log file are pressed-state buttons in a labelled group. Following live output scrolls to the latest line; log mode offers explicit refresh. The command field has a visually hidden label and a visible placeholder, and sending requires permission, a running connected server and nonempty input.
 
 Server and bundle actions disable while busy or when state/connection makes them unavailable. Restart, Stop and forced stop for the server open a native modal dialog with a labelled heading and Cancel/Confirm actions. Bundle rows keep names, textual states and associated actions together; running bundles offer Restart/Stop, stopped bundles offer Start, and unconfirmed state disables control. While Bundles is selected, refresh is attempted every 1500ms, with overlapping/busy requests skipped; manual refresh remains visible.
 
@@ -172,6 +172,6 @@ Hover background transitions last 140ms with ease-out timing. Under `prefers-red
 Settings reuses the existing custom Toggle for the persisted auto-start preference, with a localized explanation and disabled state during requests or disconnection. Language selection also persists the native control-terminal language. No visual identity or spacing tokens changed. Native process terminals are functional OS surfaces and do not adopt the web dashboard chrome.
 
 ## Fixed dashboard and accounts
-At desktop sizes, the header and sidebar remain visible. The workspace occupies the remaining viewport; the console output and large lists scroll within their own regions. Full HD target: 1920×1080 at default zoom. Server controls and status share the header on every authenticated page. Sidebar footer contains REPLAY.re, the unofficial designation and the public GitHub link. Users reuse Toggle and existing form tokens for individual permissions; API authorization controls capabilities.
+At desktop sizes, the header and sidebar remain visible. The workspace occupies the remaining viewport; the console output and large lists scroll within their own regions. Full HD target: 1920×1080 at default zoom. Server controls and status share the header on every authenticated page. Sidebar footer contains REPLAY.re, the unofficial designation and the public GitHub link. Users reuses Toggle and existing form tokens for individual permissions; API authorization controls capabilities. The wide layout pairs a bordered user list with an editor separated by a red top contour. Username/password fields share a row, and permissions use a three-column grid. The enabled switch and all thirteen permission switches expose labels and checked state, and disable during requests. Editing preserves the username and permits an optional replacement password; creation requires a password. Save uses the existing yellow primary action, and Delete opens a native confirmation dialog. Editor errors and saved feedback retain alert/status semantics.
 
-Verification of the account/shell change: complete 1920×1080 console and Users screenshots; DOM checks on all five authenticated pages show no body/workspace scrolling at default Full HD zoom. Mobile Users at390px has no horizontal overflow. Dynamic-tab Home/End reaches Users. Finish review resolved keyboard wrapping and permission-sensitive cached logs. Backend permission, password/session revocation and protected-last-manager checks are covered separately by integration/core tests.
+Verification of the account/shell change: `.impeccable/review/fullhd-console.png` and `fullhd-users.png` are complete 1920×1080 captures; `mobile-users.png` covers Users at 390px. The bounded finish review disposition is **ship**. Root-agent DOM checks on all five authenticated pages show no body/workspace scrolling at default Full HD zoom; Mobile Users has no horizontal overflow. Dynamic-tab Home/End reaches Users. Finish review resolved keyboard wrapping and permission-sensitive cached logs. Backend permission, password/session revocation and protected-last-manager checks are covered separately by integration/core tests. This increment preserves the Cyberpunk tokens and reduced-motion behavior; its visual confirmation does not constitute an exhaustive accessibility or backend audit.
