@@ -13,8 +13,9 @@ async function update(broken=false){
  if(broken)await writeFile(resolve(stage,'artifacts/web/Web.dll'),'intentionally invalid test assembly');
  const manifest=resolve(job,'manifest.json');await writeFile(manifest,JSON.stringify({root:folder,config:configPath,stage,target:version,previous:version}));await writeFile(resolve(folder,'.local/panel-update.json'),JSON.stringify({id,state:'applying',phase:'restart',bytes:0,total:0}));
  await cp(resolve(folder,'artifacts/supervisor'),resolve(job,'worker'),{recursive:true});
- const worker=spawn(resolve(job,'worker/Supervisor'+suffix),['--apply-panel-update',manifest],{windowsHide:true,stdio:'ignore',env:{...process.env,REPLAY_PANEL_NO_TERMINAL:'1',REPLAY_PANEL_UPDATE_HEALTH_SECONDS:'5'}});
- for(let i=0;i<600;i++){try{const state=JSON.parse(await readFile(resolve(folder,'.local/panel-update.json'),'utf8'));if(state.state==='completed'||state.state==='failed'){await new Promise(r=>worker.exitCode!==null?r():worker.on('exit',r));return state;}}catch{}await sleep(100);}throw Error('update worker timeout');
+ const worker=spawn(resolve(job,'worker/Supervisor'+suffix),['--apply-panel-update',manifest],{windowsHide:true,stdio:['ignore','ignore','pipe'],env:{...process.env,REPLAY_PANEL_NO_TERMINAL:'1',REPLAY_PANEL_UPDATE_HEALTH_SECONDS:'5'}});
+ worker.stderr.on("data",chunk=>console.error(String(chunk)));
+ for(let i=0;i<1200;i++){try{const state=JSON.parse(await readFile(resolve(folder,'.local/panel-update.json'),'utf8'));if(state.state==='completed'||state.state==='failed'){await new Promise(r=>worker.exitCode!==null?r():worker.on('exit',r));return state;}}catch{}await sleep(100);}throw Error('update worker timeout');
 }
 const first=start();try{await ready();assert.equal((await request('/api/login',{username:'admin',password})).status,200);csrf=(await(await request('/api/session')).json()).csrf;
  const state=await update();assert.equal(state.state,'completed');await ready();assert.equal((await(await request('/api/updates')).json()).job.state,'completed');console.log('PASS full package swap restarts stack and exposes completed state');

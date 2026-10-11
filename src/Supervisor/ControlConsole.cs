@@ -142,7 +142,7 @@ public static class ControlConsole
             cancel.Cancel();try{await controlListener;}catch(OperationCanceledException){}
             Console.CancelKeyPress-=interrupt;
             if(OperatingSystem.IsWindows()&&closeHandler is not null)SetConsoleCtrlHandler(closeHandler,false);
-            if(!keep&&!completed&&Interlocked.CompareExchange(ref delegated,0,0)==0)await StopAll(path);
+            if(!keep&&!completed&&!stopping.IsCancellationRequested&&Interlocked.CompareExchange(ref delegated,0,0)==0)await StopAll(path);
         }
     }
     private static FileStream OpenLock(string path)=>new(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!,"controller.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);

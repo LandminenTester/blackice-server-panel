@@ -32,14 +32,18 @@ public static class PanelUpdateWorker {
    Console.Error.WriteLine(e);
    if(artifactsMoved||startMoved){
     Save("applying","rollback");
+    try {
     if(await ControlConsole.StopAll(manifest.Config)!=0){Save("failed","failed","update.rollback");return;}
+    Console.WriteLine("Rollback: moving failed artifacts aside");
     if(newArtifacts)Directory.Move(Path.Combine(root,"artifacts"),Path.Combine(directory,"failed-artifacts"));
     if(newStart)File.Move(Path.Combine(root,launcher),Path.Combine(directory,"failed-"+launcher));
     if(artifactsMoved)Directory.Move(Path.Combine(backup,"artifacts"),Path.Combine(root,"artifacts"));
     if(startMoved)File.Move(Path.Combine(backup,launcher),Path.Combine(root,launcher));
     if(File.Exists(Path.Combine(backup,"VERSION")))File.Copy(Path.Combine(backup,"VERSION"),Path.Combine(root,"VERSION"),true);
     File.Copy(Path.Combine(backup,"panel.json"),manifest.Config,true);
+    Console.WriteLine("Rollback: restarting previous package");
     Restart(root,manifest.Config);Save("failed","failed",await Healthy(manifest.Config,manifest.Previous)?"update.restored":"update.rollback");
+    }catch(Exception recovery){Console.Error.WriteLine(recovery);Save("failed","failed","update.rollback");}
    }else Save("failed","failed",e is InvalidOperationException?e.Message:"update.failed");
   }
  }
@@ -52,7 +56,7 @@ public static class PanelUpdateWorker {
  static async Task<bool> Healthy(string configPath,string version){
   var config=PanelConfig.Load(configPath);using var client=new HttpClient(){Timeout=TimeSpan.FromSeconds(2)};
   var seconds=int.TryParse(Environment.GetEnvironmentVariable("REPLAY_PANEL_UPDATE_HEALTH_SECONDS"),out var requested)?Math.Clamp(requested,5,120):60;
-  for(var i=0;i<seconds;i++){try{using var timeout=new CancellationTokenSource(2000);var boot=await ControlConsole.Call(config,new("bootstrap"));using var doc=JsonDocument.Parse(boot.Lines![0]);if(doc.RootElement.GetProperty("version").GetString()==version&&(await client.GetAsync(config.Url+"/api/session",timeout.Token)).IsSuccessStatusCode)return true;}catch(Exception e)when(e is IOException or HttpRequestException or System.Net.Sockets.SocketException or JsonException or KeyNotFoundException or OperationCanceledException or NullReferenceException){}await Task.Delay(1000);}
+  for(var i=0;i<seconds;i++){try{using var timeout=new CancellationTokenSource(2000);Console.WriteLine("Readiness: querying supervisor");var boot=await ControlConsole.Call(config,new("bootstrap"));using var doc=JsonDocument.Parse(boot.Lines![0]);if(doc.RootElement.GetProperty("version").GetString()==version&&(await client.GetAsync(config.Url+"/api/session",timeout.Token)).IsSuccessStatusCode)return true;}catch(Exception e)when(e is IOException or HttpRequestException or System.Net.Sockets.SocketException or JsonException or KeyNotFoundException or OperationCanceledException or NullReferenceException){}await Task.Delay(1000);}
   return false;
  }
 }
