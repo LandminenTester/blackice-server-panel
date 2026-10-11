@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "ms-dotnettools.csharp",
+    "svelte.svelte-vscode",
+    "ms-vscode.powershell"
+  ]
+}

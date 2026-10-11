@@ -1,0 +1,11 @@
+{
+  "serverRoot": "C:/Replay/Server",
+  "serverArguments": [],
+  "pipeName": "replay-panel-example",
+  "shutdownMode": "keep-running",
+  "stopTimeoutSeconds": 30,
+  "autoRestart": false,
+  "url": "http://127.0.0.1:20772",
+  "passwordSalt": "GENERATED_BY_SETUP",
+  "passwordHash": "GENERATED_BY_SETUP"
+}

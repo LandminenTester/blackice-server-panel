@@ -1,0 +1,59 @@
+name: build-and-test
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm --prefix ui ci
+      - run: npm --prefix ui run check
+      - run: npm --prefix ui run build
+      - run: dotnet restore src/Web --locked-mode
+      - run: dotnet restore src/Supervisor --locked-mode
+      - run: dotnet publish tests/ConsoleFixture -c Release -o .local/fixture
+      - run: dotnet run --project tests/Backend.Tests -- .local/fixture
+      - run: dotnet publish src/Web -c Release -o artifacts/web
+      - run: dotnet publish src/Supervisor -c Release -o artifacts/supervisor
+      - run: node scripts/test-panel.mjs
+      - run: dotnet publish src/Web -c Release -r win-x64 --self-contained true -o artifacts/web
+      - run: dotnet publish src/Supervisor -c Release -r win-x64 --self-contained true -o artifacts/supervisor
+      - uses: actions/upload-artifact@v4
+        with:
+          name: replay-server-panel-win-x64
+          path: |
+            artifacts/
+            scripts/
+            README.md
+            LICENSE
+            panel.example.json
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: replay-server-panel-win-x64
+          path: package
+      - run: Compress-Archive -Path package/* -DestinationPath replay-server-panel-win-x64.zip
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create ${{ github.ref_name }} replay-server-panel-win-x64.zip --repo ${{ github.repository }} --generate-notes

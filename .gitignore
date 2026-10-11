@@ -1,0 +1,12 @@
+bin/
+obj/
+node_modules/
+ui/dist/
+dist/
+.local/
+.env
+*.user
+*.log
+TestResults/
+artifacts/
+src/Web/wwwroot/
