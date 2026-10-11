@@ -57,7 +57,7 @@ try{
  await stopWeb();restartWeb();
  for(let i=0;i<50;i++){try{csrf=(await req('/api/session')).csrf;break;}catch{}await new Promise(r=>setTimeout(r,200));}
  assert.equal((await req('/api/status')).status.state,'running');console.log('PASS '+backend+' keep-running survives Webhost restart');
- const list=await req('/api/bundles');assert.equal(list.ok,true);console.log('PASS '+backend+' bundle query through managed terminal');
+ const list=await req('/api/bundles');if(!list.ok){console.log('Bundle query diagnostic',JSON.stringify(list));const response=await fetch(url+'/api/events',{headers:{Cookie:[...cookies].map(([k,v])=>k+'='+v).join('; ')}});const reader=response.body.getReader();console.log(new TextDecoder().decode((await reader.read()).value));await reader.cancel();}assert.equal(list.ok,true);console.log('PASS '+backend+' bundle query through managed terminal');
  await req('/api/settings',{shutdownMode:'stop-server'});
  await stopWeb();restartWeb();
  for(let i=0;i<50;i++){try{csrf=(await req('/api/session')).csrf;break;}catch{}await new Promise(r=>setTimeout(r,200));}

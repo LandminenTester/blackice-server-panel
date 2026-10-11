@@ -66,6 +66,10 @@ app.Use(async (context, next) =>
         try { await context.RequestServices.GetRequiredService<IAntiforgery>().ValidateRequestAsync(context); }
         catch (AntiforgeryValidationException) { context.Response.StatusCode = 400; await context.Response.WriteAsJsonAsync(new { error = "csrf.invalid" }); return; }
     }
+    if(HttpMethods.IsPost(context.Request.Method)&&context.Request.Path.StartsWithSegments("/api")&&context.Request.Path!="/api/login"&&context.Request.Path!="/api/logout"&&context.User.Identity?.IsAuthenticated==true){
+        var update=await context.RequestServices.GetRequiredService<PipeClient>().Call(new("update-status"),context.RequestAborted);
+        if(update.Ok&&update.Lines is {Length:>0}){using var state=JsonDocument.Parse(update.Lines[0]);if(state.RootElement.TryGetProperty("job",out var job)&&job.ValueKind!=JsonValueKind.Null&&job.GetProperty("state").GetString()=="applying"){context.Response.StatusCode=409;await context.Response.WriteAsJsonAsync(new{error="update.busy"});return;}}
+    }
     await next();
 });
 app.UseRateLimiter(); app.UseAuthorization();

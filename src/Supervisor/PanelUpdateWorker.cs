@@ -16,9 +16,9 @@ public static class PanelUpdateWorker {
   var launcher=OperatingSystem.IsWindows()?"Start.exe":"Start";var backup=Path.Combine(directory,"backup");Directory.CreateDirectory(backup);bool artifactsMoved=false,startMoved=false,newArtifacts=false,newStart=false;
   try{
    PanelUpdates.ValidatePackage(stage,manifest.Target,OperatingSystem.IsWindows());
-   File.Copy(manifest.Config,Path.Combine(backup,"panel.json"),false);
    await Task.Delay(2000); // Let the initiating HTTP response reach the browser.
    if(await ControlConsole.StopAll(manifest.Config)!=0)throw new InvalidOperationException("update.stop");
+   File.Copy(manifest.Config,Path.Combine(backup,"panel.json"),false);
    Save("applying","replace");
    Directory.Move(Path.Combine(root,"artifacts"),Path.Combine(backup,"artifacts"));artifactsMoved=true;
    File.Move(Path.Combine(root,launcher),Path.Combine(backup,launcher));startMoved=true;
