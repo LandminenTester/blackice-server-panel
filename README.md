@@ -2,14 +2,14 @@
 
 A dashboard for one Replay server: server controls, live console, logs and bundle management. English and German, a protected setup assistant, and an original Cyberpunk-inspired interface.
 
-[Deutsch](README.de.md) · [Windows](docs/windows.md) · [Linux](docs/linux.md) · [Docker](docs/docker.md) · [Development](docs/development.md) · [Operations](docs/operations.md)
+[Deutsch](README.de.md) · [Windows](docs/windows.md) · [Linux](docs/linux.md) · [Docker](docs/docker.md) · [Development](docs/development.md) · [Build guide](docs/building.md) · [Operations](docs/operations.md)
 
 ## Quick start
 
 Download a [release package](https://github.com/LandminenTester/replay-server-panel/releases). Windows and Linux packages include the .NET runtime. Node.js is only needed for development.
 
-- Windows: extract separately from the server directory and run `scripts/start.ps1`.
-- Native Linux: Debian 13 x86-64 is the reference platform. Install the documented system libraries, then run `sh scripts/start.sh`.
+- Windows: extract separately from the server directory and open `Start.exe`.
+- Native Linux: Debian 13 x86-64 is the reference platform. Install the documented system libraries, then run `./Start`.
 - Docker: use the [Compose deployment](docs/docker.md).
 
 Open `http://127.0.0.1:20772`. Read the setup key from `.local/supervisor.log` or the Supervisor service logs. Choose a dashboard name, username, password and server folder. Existing installations are preserved; the official installer requires an empty target directory.
@@ -38,3 +38,5 @@ Remote access uses an HTTPS reverse proxy with explicit trusted proxies, hosts a
 `src/Supervisor` owns installation, backends and bundle protocol. `src/Web` hosts authenticated HTTP and static UI. `src/Shared` owns configuration and IPC. `ui` contains Svelte and typed locales. `native/terminal.c` bridges Linux PTYs.
 
 MIT. Community tool, not an official Replay or Cyberpunk product. [Design reference](https://www.artstation.com/artwork/18mLB8); its artwork is not distributed.
+
+The direct Start entry keeps a control terminal open. Closing it, Ctrl+C, or Q requests complete graceful shutdown. A separate native server terminal supports Replay commands and closes the game when closed. Auto-start is configured under Settings. Docker uses Compose instead.

@@ -1,5 +1,11 @@
+param([switch]$Background)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+$launcher = Join-Path $root 'Start.exe'
+if (!$Background -and (Test-Path -LiteralPath $launcher)) {
+ Start-Process -FilePath $launcher -WorkingDirectory $root -WindowStyle Normal | Out-Null
+ return
+}
 $state = Join-Path $root '.local'
 New-Item -ItemType Directory -Force -Path $state | Out-Null
 & icacls $state /inheritance:r /grant:r ($env:USERNAME + ':(OI)(CI)F') 'SYSTEM:(OI)(CI)F' | Out-Null
@@ -19,3 +25,7 @@ if (!(Connected ($config.pipeName + '.web'))) {
 }
 Write-Host ('Panel: ' + $config.url)
 if (!$config.passwordHash) { Write-Host 'Setup key: .local/supervisor.log' }
+
+if (!$Background) {
+ Start-Process -FilePath (Join-Path $root 'artifacts/supervisor/Supervisor.exe') -ArgumentList ('--controller "' + $configPath + '"') -WorkingDirectory $root -WindowStyle Normal | Out-Null
+}

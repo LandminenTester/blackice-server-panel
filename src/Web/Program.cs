@@ -9,6 +9,11 @@ using Microsoft.AspNetCore.DataProtection;
 using ReplayPanel.Shared;
 using ReplayPanel.Web;
 
+if(Environment.GetEnvironmentVariable("REPLAY_PANEL_LOG_DIR") is {} logDirectory){
+ Directory.CreateDirectory(logDirectory);
+ Console.SetOut(new StreamWriter(new FileStream(Path.Combine(logDirectory,"web.log"),FileMode.Append,FileAccess.Write,FileShare.ReadWrite|FileShare.Delete)){AutoFlush=true});
+ Console.SetError(new StreamWriter(new FileStream(Path.Combine(logDirectory,"web.err.log"),FileMode.Append,FileAccess.Write,FileShare.ReadWrite|FileShare.Delete)){AutoFlush=true});
+}
 var configPath = Path.GetFullPath(Environment.GetEnvironmentVariable("REPLAY_PANEL_CONFIG") ?? ".local/panel.json");
 var config = PanelConfig.Load(configPath);
 
@@ -94,7 +99,7 @@ app.MapPost("/api/server/{action}", async (string action, BundleManager bundles,
 app.MapPost("/api/command", async (Command body, BundleManager bundles, CancellationToken ct) =>
     Result(await bundles.Command(new("command", body.Text), ct))).RequireAuthorization();
 app.MapPost("/api/settings", async (Settings body, PipeClient pipe, CancellationToken ct) =>
-    Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode), ct))).RequireAuthorization();
+    Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode,AutoStartServer:body.AutoStartServer,Locale:body.Locale), ct))).RequireAuthorization();
 app.MapGet("/api/events", async (HttpContext c, PipeClient pipe) =>
 {
     c.Response.ContentType = "text/event-stream";
@@ -122,7 +127,7 @@ static IResult Data(Reply reply) => reply.Ok ? Results.Ok(reply.Lines is {Length
 static IResult Result(Reply reply) => reply.Ok ? Results.Ok(reply) : Results.Json(reply, statusCode: 409);
 record Login(string? Password, string? Username);
 record Command(string? Text);
-record Settings(string? ShutdownMode);
+record Settings(string? ShutdownMode, bool? AutoStartServer, string? Locale);
 public partial class Program { }
 
 record SetupKey(string Key);

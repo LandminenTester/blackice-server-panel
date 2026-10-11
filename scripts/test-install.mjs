@@ -11,8 +11,8 @@ const configPath=resolve(folder,'panel.json'),url='http://127.0.0.1:20776';
 let key='',output='',csrf='',cookies=new Map(),supervisor,web,restartWeb,stopWeb;
 const target=backend==='windows'?resolve(folder,'Replay Download'):'/server/download';
 if(backend==='windows') {
- await writeFile(configPath,JSON.stringify({schemaVersion:2,pipeName:'panel-install-'+process.pid,url}));
- supervisor=spawn(resolve(root,build,'supervisor/Supervisor.exe'),[configPath],{stdio:['ignore','pipe','inherit']});
+ await writeFile(configPath,JSON.stringify({schemaVersion:2,autoStartServer:false,pipeName:'panel-install-'+process.pid,url}));
+ supervisor=spawn(resolve(root,build,'supervisor/Supervisor.exe'),[configPath],{env:{...process.env,REPLAY_PANEL_NO_TERMINAL:'1'},stdio:['ignore','pipe','inherit']});
  supervisor.stdout.on('data',chunk=>{output+=chunk;key=output.match(/Setup key: ([A-F0-9]+)/)?.[1]??'';});
  restartWeb=()=>{web=spawn(resolve(root,build,'web/Web.exe'),[],{cwd:resolve(root,build,'web'),env:{...process.env,REPLAY_PANEL_CONFIG:configPath},stdio:'ignore'});};restartWeb();
  stopWeb=async()=>{const previous=web;execFileSync('node',[resolve(root,'scripts/control.mjs'),'stop-web'],{cwd:root,env:{...process.env,REPLAY_PANEL_CONFIG:configPath},stdio:'ignore'});if(previous.exitCode===null)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Webhost shutdown timed out')),10000);previous.once('exit',()=>{clearTimeout(timer);resolve();});});};
@@ -21,8 +21,8 @@ if(backend==='windows') {
  const name='panel-install-'+process.pid;const volume=name+'-files';
  execFileSync('docker',['volume','create',volume]);
  execFileSync('docker',['run','--rm','--user','0','--entrypoint','sh','-v',volume+':/test','replay-panel:next','-c','mkdir -p /test/state /test/run /test/server && chown -R 10001:10001 /test']);
- if(backend==='docker') {
-   const initial={schemaVersion:2,backend:'docker',url:'http://0.0.0.0:20772',allowedHosts:['127.0.0.1:20776'],gamePort:30780,voicePort:30781};
+ {
+   const initial={schemaVersion:2,autoStartServer:false,backend,url:'http://0.0.0.0:20772',allowedHosts:['127.0.0.1:20776'],gamePort:30780,voicePort:30781};
    execFileSync('docker',['run','--rm','--user','0','--entrypoint','sh','-v',volume+':/test','replay-panel:next','-c','printf %s "$1" > /test/state/panel.json && chown 10001:10001 /test/state/panel.json','sh',JSON.stringify(initial)]);
  }
  const dockerGid=process.platform==='linux'?execFileSync('stat',['-c','%g','/var/run/docker.sock'],{encoding:'utf8'}).trim():'0';

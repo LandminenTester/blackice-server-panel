@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "dashboardName": "Replay Server Panel",
+  "dashboardName": "Unofficial REPLAY.re - Server Webpanel",
   "username": "admin",
   "locale": "en",
   "backend": "windows",
@@ -14,5 +14,6 @@
   "passwordHash": "",
   "passwordSalt": "",
   "allowedHosts": [],
-  "trustedProxies": []
+  "trustedProxies": [],
+  "autoStartServer": true
 }

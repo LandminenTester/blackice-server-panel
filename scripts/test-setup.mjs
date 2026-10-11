@@ -5,13 +5,13 @@ import {randomBytes} from 'node:crypto';
 import assert from 'node:assert/strict';
 const root=resolve(import.meta.dirname,'..'),build=process.env.PANEL_TEST_BUILD??'artifacts',directory=resolve(root,'.local/setup-'+randomBytes(6).toString('hex'));
 await mkdir(directory,{recursive:true});
-const configPath=resolve(directory,'panel.json'),config={schemaVersion:2,url:'http://127.0.0.1:20775',pipeName:'panel-setup-'+process.pid,backend:process.platform==='win32'?'windows':'linux'};
+const configPath=resolve(directory,'panel.json'),config={schemaVersion:2,autoStartServer:false,url:'http://127.0.0.1:20775',pipeName:'panel-setup-'+process.pid,backend:process.platform==='win32'?'windows':'linux'};
 await writeFile(configPath,JSON.stringify(config));
 const suffix=process.platform==='win32'?'.exe':'',fixture=resolve(directory,'Server With Spaces');
 await mkdir(resolve(fixture,'cfg'),{recursive:true});await writeFile(resolve(fixture,'cfg/server.cfg'),'# disposable test');
 await copyFile(resolve(root,'.local/fixture/REServer'+suffix),resolve(fixture,'REServer'+suffix));
 let output='',key='',csrf='',cookies=new Map(),count=0;
-const supervisor=spawn(resolve(root,build,'supervisor/Supervisor'+suffix),[configPath],{stdio:['ignore','pipe','inherit']});
+const supervisor=spawn(resolve(root,build,'supervisor/Supervisor'+suffix),[configPath],{env:{...process.env,REPLAY_PANEL_NO_TERMINAL:'1'},stdio:['ignore','pipe','inherit']});
 supervisor.stdout.on('data',data=>{output+=data;key=output.match(/Setup key: ([A-F0-9]+)/)?.[1]??'';});
 const web=spawn(resolve(root,build,'web/Web'+suffix),[],{cwd:resolve(root,build,'web'),env:{...process.env,REPLAY_PANEL_CONFIG:configPath},stdio:'ignore'});
 async function request(route,body){const response=await fetch(config.url+route,{method:body?'POST':'GET',headers:{Cookie:[...cookies].map(x=>x.join('=')).join('; '),'Content-Type':'application/json','X-CSRF':csrf},body:body?JSON.stringify(body):undefined});for(const cookie of response.headers.getSetCookie()){const [name,...value]=cookie.split(';')[0].split('=');cookies.set(name,value.join('='));}return response;}

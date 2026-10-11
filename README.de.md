@@ -1,15 +1,15 @@
-# Replay Server Panel
+# Unofficial REPLAY.re - Server Webpanel
 
 Dashboard für einen Replay-Server: Serversteuerung, Live-Konsole, Logs und Bundle-Verwaltung. Deutsch und Englisch, geschützter Einrichtungsassistent und eigenes, von Cyberpunk inspiriertes Design.
 
-[English](README.md) · [Windows](docs/windows.md) · [Linux](docs/linux.md) · [Docker](docs/docker.md) · [Entwicklung](docs/development.md) · [Betrieb](docs/operations.md)
+[English](README.md) · [Windows](docs/windows.md) · [Linux](docs/linux.md) · [Docker](docs/docker.md) · [Entwicklung](docs/development.md) · [Build-Anleitung](docs/building.md) · [Betrieb](docs/operations.md)
 
 ## Einstieg
 
 Ein passendes [Releasepaket](https://github.com/LandminenTester/replay-server-panel/releases) herunterladen. Die .NET-Laufzeit ist enthalten; Node.js wird nur zum Entwickeln benötigt.
 
-- Windows: getrennt vom Serverordner entpacken und `scripts/start.ps1` ausführen.
-- Natives Linux: Debian 13 x86-64 ist die Referenzplattform. Dokumentierte Systembibliotheken installieren und `sh scripts/start.sh` ausführen.
+- Windows: getrennt vom Serverordner entpacken und `Start.exe` öffnen.
+- Natives Linux: Debian 13 x86-64 ist die Referenzplattform. Dokumentierte Systembibliotheken installieren und `./Start` ausführen.
 - Docker: die [Compose-Bereitstellung](docs/docker.md) verwenden.
 
 `http://127.0.0.1:20772` öffnen. Einrichtungsschlüssel aus `.local/supervisor.log` oder dem Supervisor-Dienstlog lesen. Dashboardname, Benutzername, Passwort und Serverordner festlegen. Vorhandene Installationen bleiben erhalten; der offizielle Download benötigt einen leeren Zielordner.
@@ -38,3 +38,5 @@ Fernzugriff erfolgt über HTTPS-Reverse-Proxy mit ausdrücklich eingetragenen Ho
 `src/Supervisor` verwaltet Installation, Backends und Bundle-Protokoll. `src/Web` stellt geschützte HTTP-Endpunkte und UI-Dateien bereit. `src/Shared` enthält Konfiguration und IPC. `ui` enthält Svelte und typisierte Sprachkataloge. `native/terminal.c` verbindet die Linux-PTY.
 
 MIT-Lizenz. Community-Werkzeug, kein offizielles Replay- oder Cyberpunk-Produkt. [Designreferenz](https://www.artstation.com/artwork/18mLB8); deren Bilder werden nicht ausgeliefert.
+
+Die direkte Startdatei hält ein Steuerterminal offen. Schließen, Strg+C oder Q fordert das vollständige geordnete Beenden an. Das zusätzliche native Serverterminal unterstützt Replay-Befehle und stoppt beim Schließen den Spielserver. Autostart wird unter Einstellungen festgelegt. Docker wird über Compose betrieben.

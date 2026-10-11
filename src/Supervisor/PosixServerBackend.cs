@@ -38,7 +38,7 @@ public sealed class PosixServerBackend(PanelConfig config) : IServerBackend
             var info=new ProcessStartInfo(helper){WorkingDirectory=config.ServerRoot,RedirectStandardInput=true,RedirectStandardOutput=true,UseShellExecute=false};
             info.Environment["LD_LIBRARY_PATH"]=config.ServerRoot; info.ArgumentList.Add(Path.Combine(config.ServerRoot,"REServer"));foreach(var arg in config.ServerArguments)info.ArgumentList.Add(arg);
             process?.Dispose();process=Process.Start(info)!;terminal=process.StandardInput.BaseStream;reading=new();
-            reader=Read(process.StandardOutput.BaseStream,reading.Token);
+            reader=Read(process.StandardOutput.BaseStream,reading.Token);NativeConsole.Server(config);
         } finally {gate.Release();}
     }
     public async Task Reconnect()

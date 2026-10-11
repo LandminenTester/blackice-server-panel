@@ -13,14 +13,14 @@ const suffix=process.platform==='win32'?'.exe':'';
 const password = 'disposable-fixture-password';
 const salt = randomBytes(16);
 const configPath = resolve(folder, 'panel.json');
-const config = { schemaVersion:2, backend:process.platform==='win32'?'windows':'linux', serverRoot: resolve(root, '.local/fixture'), pipeName: 'replay-panel-test-' + process.pid, shutdownMode:'keep-running', stopTimeoutSeconds:10, autoRestart:false, url:'http://127.0.0.1:20774', passwordSalt:salt.toString('base64'), passwordHash:pbkdf2Sync(password,salt,210000,32,'sha256').toString('base64') };
+const config = { schemaVersion:2,autoStartServer:false, backend:process.platform==='win32'?'windows':'linux', serverRoot: resolve(root, '.local/fixture'), pipeName: 'replay-panel-test-' + process.pid, shutdownMode:'keep-running', stopTimeoutSeconds:10, autoRestart:false, url:'http://127.0.0.1:20774', passwordSalt:salt.toString('base64'), passwordHash:pbkdf2Sync(password,salt,210000,32,'sha256').toString('base64') };
 await writeFile(configPath, JSON.stringify(config));
 for (const name of ['fixture-bundle','parked-bundle','broken-bundle']) {
   const directory = resolve(config.serverRoot,'data/ugc',name);
   await mkdir(directory,{recursive:true}); await writeFile(resolve(directory,'config.toml'),'# Disposable bundle fixture\n');
 }
 let count = 0;
-const supervisor = spawn(resolve(root, build+'/supervisor/Supervisor'+suffix), [configPath], { cwd:folder, windowsHide:true, stdio:'ignore' });
+const supervisor = spawn(resolve(root, build+'/supervisor/Supervisor'+suffix), [configPath], { cwd:folder, windowsHide:true,env:{...process.env,REPLAY_PANEL_NO_TERMINAL:'1'}, stdio:'ignore' });
 let web;
 const cookies = new Map(); let csrf;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -31,7 +31,7 @@ async function request(route, options={}) {
 }
 async function post(route,body={}) { return request(route,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF':csrf},body:JSON.stringify(body)}); }
 async function startWeb() {
-  web=spawn(resolve(root,build+'/web/Web'+suffix), [], { cwd:resolve(root,build+'/web'), env:{...process.env,REPLAY_PANEL_CONFIG:configPath},windowsHide:true,stdio:'ignore' });
+  web=spawn(resolve(root,build+'/web/Web'+suffix), [], { cwd:resolve(root,build+'/web'), env:{...process.env,REPLAY_PANEL_NO_TERMINAL:'1',REPLAY_PANEL_CONFIG:configPath},windowsHide:true,stdio:'ignore' });
   for(let i=0;i<60;i++){try{const r=await request('/api/session');if(r.ok){csrf=(await r.json()).csrf;return;}}catch{}await sleep(250);}throw Error('Test webhost did not start.');
 }
 async function pipe(action, webControl=false) {

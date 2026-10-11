@@ -1,5 +1,7 @@
 # Development / Entwicklung
 
+[Complete step-by-step build guide / Vollständige Build-Anleitung](building.md)
+
 ## English
 
 Prerequisites: Git, .NET SDK 10.0.401 (global.json), Node 24.19.0 and npm. Linux also needs cc, libc headers and libutil. Editor suggestions: VS Code with C# and Svelte support.

@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 LABEL org.opencontainers.image.source="https://github.com/LandminenTester/replay-server-panel"
 WORKDIR /app
 COPY --from=build /out /app/artifacts
-ENV REPLAY_PANEL_CONFIG=/state/panel.json REPLAY_PANEL_RUNTIME=/run/replay-panel REPLAY_PANEL_MOUNTS=/server
+ENV REPLAY_PANEL_NO_TERMINAL=1 REPLAY_PANEL_CONFIG=/state/panel.json REPLAY_PANEL_RUNTIME=/run/replay-panel REPLAY_PANEL_MOUNTS=/server
 USER 10001:10001
 EXPOSE 20772
 ENTRYPOINT ["/app/artifacts/web/Web"]

@@ -51,7 +51,7 @@ public sealed partial class WindowsServerBackend(PanelConfig config) : IServerBa
             var next = new ConPtySession();
             try { next.Start(Exe, config.ServerRoot, Append, config.ServerArguments); session = next; }
             catch { next.Dispose(); throw; }
-            desiredRunning = true; detail = null;
+            desiredRunning = true; detail = null;NativeConsole.Server(config);
         }
         finally { gate.Release(); }
     }

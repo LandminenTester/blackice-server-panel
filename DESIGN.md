@@ -1,5 +1,5 @@
 ---
-name: Replay Server Panel
+name: Unofficial REPLAY.re - Server Webpanel
 description: Cyberpunk operating surface with dark panels, angular red contours, cyan information and selective yellow actions.
 colors:
   background: "#101116"
@@ -166,3 +166,7 @@ Hover background transitions last 140ms with ease-out timing. Under `prefers-red
 - **Don't** present unrelated settings feedback after navigation or infer stopped state from empty output.
 - **Don't** treat synthetic review fixtures as product defaults or describe this bounded review as a complete accessibility or backend audit.
 
+
+## Startup preference addition
+
+Settings reuses the existing custom Toggle for the persisted auto-start preference, with a localized explanation and disabled state during requests or disconnection. Language selection also persists the native control-terminal language. No visual identity or spacing tokens changed. Native process terminals are functional OS surfaces and do not adopt the web dashboard chrome.

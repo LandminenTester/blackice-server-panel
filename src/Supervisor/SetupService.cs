@@ -96,7 +96,7 @@ public sealed class SetupService(PanelConfig config, string configPath)
                   catch (Exception e) { Console.Error.WriteLine(e);finalState="failed"; failure=e is InvalidOperationException ? e.Message : "install.failed"; }
                 finally {
                     if(finalState!="completed" && input.Backend=="docker" && config.ContainerId.Length>0){try{await new DockerEngine(config).Remove();config.ContainerId="";PanelConfig.Save(configPath,config);}catch(Exception e){Console.Error.WriteLine(e);}}
-                    if (Directory.Exists(staging)) Directory.Delete(staging, true);
+                    try {if (Directory.Exists(staging)) Directory.Delete(staging,true);}catch(Exception e){Console.Error.WriteLine(e);finalState="failed";failure="install.failed";}
                     lock(sync)job=job! with {State=finalState,Phase=finalState,Error=failure};
                 }
             });
@@ -106,6 +106,7 @@ public sealed class SetupService(PanelConfig config, string configPath)
     private void Update(string phase,long bytes) { lock(sync) job=job! with {Phase=phase,Bytes=bytes}; }
     public InstallJob? Status() { lock(sync) return job; }
     public void Cancel() { lock(sync) cancellation?.Cancel(); }
+    public async Task StopInstallation(){Cancel();while(Status()?.State=="running")await Task.Delay(100);}
     private async Task DownloadWindows(string staging,CancellationToken ct)
     {
         using var client = new HttpClient { Timeout=TimeSpan.FromMinutes(30) };
