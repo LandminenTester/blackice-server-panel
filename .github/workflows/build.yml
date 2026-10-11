@@ -2,13 +2,20 @@ name: build-and-test
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ["v*"]
   pull_request:
 permissions:
   contents: read
 jobs:
-  windows:
-    runs-on: windows-latest
+  native:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -16,47 +23,84 @@ jobs:
           global-json-file: global.json
       - uses: actions/setup-node@v4
         with:
-          node-version: '24.19.0'
+          node-version: "24.19.0"
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - run: npm --prefix ui ci
       - run: npm --prefix ui run check
       - run: npm --prefix ui run build
-      - run: Copy-Item licenses src/Web/wwwroot/licenses -Recurse -Force
-      - run: dotnet restore src/Web --locked-mode
-      - run: dotnet restore src/Supervisor --locked-mode
+      - name: Copy licenses
+        shell: bash
+        run: cp -R licenses src/Web/wwwroot/
+      - run: dotnet run --project tests/Core.Tests
       - run: dotnet publish tests/ConsoleFixture -c Release -o .local/fixture
-      - run: dotnet run --project tests/Backend.Tests -- .local/fixture
+      - run: dotnet build tests/Backend.Tests -c Release
+      - if: runner.os == 'Linux'
+        run: cc -O2 -Wall -Wextra native/terminal.c -lutil -o tests/Backend.Tests/bin/Release/net10.0/replay-terminal
+      - run: dotnet run --project tests/Backend.Tests -c Release --no-build -- .local/fixture
       - run: dotnet publish src/Web -c Release -o artifacts/web
       - run: dotnet publish src/Supervisor -c Release -o artifacts/supervisor
+      - if: runner.os == 'Linux'
+        run: cc -O2 native/terminal.c -lutil -o artifacts/supervisor/replay-terminal
       - run: node scripts/test-panel.mjs
-      - run: dotnet publish src/Web -c Release -r win-x64 --self-contained true -o artifacts/web
-      - run: dotnet publish src/Supervisor -c Release -r win-x64 --self-contained true -o artifacts/supervisor
+      - run: node scripts/test-setup.mjs
+      - run: dotnet publish src/Web -c Release -r ${{ matrix.rid }} --self-contained true -o artifacts/web
+      - run: dotnet publish src/Supervisor -c Release -r ${{ matrix.rid }} --self-contained true -o artifacts/supervisor
       - uses: actions/upload-artifact@v4
         with:
-          name: replay-server-panel-win-x64
+          name: replay-server-panel-${{ matrix.rid }}
           path: |
             artifacts/
             scripts/
-            README.md
+            deploy/
+            docs/
+            README*.md
             LICENSE
             licenses/
             THIRD_PARTY_NOTICES.md
             panel.example.json
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.19.0"
+      - run: docker build -f tests/Linux.Dockerfile -t replay-panel-linux-tests .
+      - run: docker run --rm replay-panel-linux-tests
+      - run: docker build -t replay-panel:next .
+      - run: node scripts/test-install.mjs --linux
+      - run: node scripts/test-install.mjs --docker
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: windows
-    runs-on: windows-latest
+    needs: [native, docker]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: replay-server-panel-win-x64
-          path: package
-      - run: Compress-Archive -Path package/* -DestinationPath replay-server-panel-win-x64.zip
-      - name: Publish release
-        shell: pwsh
+          pattern: replay-server-panel-*
+          path: packages
+      - name: Package releases
+        run: |
+          cd packages/replay-server-panel-win-x64 && zip -r ../../replay-server-panel-win-x64.zip .
+          cd ../replay-server-panel-linux-x64
+          chmod +x artifacts/web/Web artifacts/supervisor/Supervisor artifacts/supervisor/replay-terminal scripts/*.sh
+          tar -czf ../../replay-server-panel-linux-x64.tar.gz .
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish versioned image
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          docker build -t ghcr.io/landminentester/replay-server-panel:$VERSION .
+          docker push ghcr.io/landminentester/replay-server-panel:$VERSION
+      - name: Publish packages
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create ${{ github.ref_name }} replay-server-panel-win-x64.zip --repo ${{ github.repository }} --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" replay-server-panel-win-x64.zip replay-server-panel-linux-x64.tar.gz --repo "$GITHUB_REPOSITORY" --generate-notes

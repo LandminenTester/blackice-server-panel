@@ -6,19 +6,21 @@ import { fileURLToPath } from 'node:url';
 import { pbkdf2Sync, randomBytes } from 'node:crypto';
 import assert from 'node:assert/strict';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const build = process.env.PANEL_TEST_BUILD ?? 'artifacts';
 const folder = resolve(root, '.local/panel-test');
 await mkdir(folder, { recursive: true });
+const suffix=process.platform==='win32'?'.exe':'';
 const password = 'disposable-fixture-password';
 const salt = randomBytes(16);
 const configPath = resolve(folder, 'panel.json');
-const config = { serverRoot: resolve(root, '.local/fixture'), pipeName: 'replay-panel-test-' + process.pid, shutdownMode:'keep-running', stopTimeoutSeconds:10, autoRestart:false, url:'http://127.0.0.1:20774', passwordSalt:salt.toString('base64'), passwordHash:pbkdf2Sync(password,salt,210000,32,'sha256').toString('base64') };
+const config = { schemaVersion:2, backend:process.platform==='win32'?'windows':'linux', serverRoot: resolve(root, '.local/fixture'), pipeName: 'replay-panel-test-' + process.pid, shutdownMode:'keep-running', stopTimeoutSeconds:10, autoRestart:false, url:'http://127.0.0.1:20774', passwordSalt:salt.toString('base64'), passwordHash:pbkdf2Sync(password,salt,210000,32,'sha256').toString('base64') };
 await writeFile(configPath, JSON.stringify(config));
 for (const name of ['fixture-bundle','parked-bundle','broken-bundle']) {
   const directory = resolve(config.serverRoot,'data/ugc',name);
   await mkdir(directory,{recursive:true}); await writeFile(resolve(directory,'config.toml'),'# Disposable bundle fixture\n');
 }
 let count = 0;
-const supervisor = spawn(resolve(root, 'artifacts/supervisor/Supervisor.exe'), [configPath], { cwd:folder, windowsHide:true, stdio:'ignore' });
+const supervisor = spawn(resolve(root, build+'/supervisor/Supervisor'+suffix), [configPath], { cwd:folder, windowsHide:true, stdio:'ignore' });
 let web;
 const cookies = new Map(); let csrf;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -29,14 +31,15 @@ async function request(route, options={}) {
 }
 async function post(route,body={}) { return request(route,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF':csrf},body:JSON.stringify(body)}); }
 async function startWeb() {
-  web=spawn(resolve(root,'artifacts/web/Web.exe'), [], { cwd:resolve(root,'artifacts/web'), env:{...process.env,REPLAY_PANEL_CONFIG:configPath},windowsHide:true,stdio:'ignore' });
+  web=spawn(resolve(root,build+'/web/Web'+suffix), [], { cwd:resolve(root,build+'/web'), env:{...process.env,REPLAY_PANEL_CONFIG:configPath},windowsHide:true,stdio:'ignore' });
   for(let i=0;i<60;i++){try{const r=await request('/api/session');if(r.ok){csrf=(await r.json()).csrf;return;}}catch{}await sleep(250);}throw Error('Test webhost did not start.');
 }
 async function pipe(action, webControl=false) {
-  const payload = (webControl ? 'shutdown' : JSON.stringify({action})).replaceAll("'", "''");
-  const script = '$p = New-Object IO.Pipes.NamedPipeClientStream(".","'+config.pipeName+(webControl?'.web':'')+'",[IO.Pipes.PipeDirection]::InOut); $p.Connect(3000); $w=New-Object IO.StreamWriter($p); $r=New-Object IO.StreamReader($p); $w.AutoFlush=$true; $w.WriteLine(\''+payload+'\'); $r.ReadLine() | Out-Null; $p.Dispose()';
-  const child=spawn('powershell.exe',['-NoProfile','-Command',script],{windowsHide:true,stdio:'ignore'});
-  await new Promise((resolve,reject)=>child.on('exit',code=>code===0?resolve():reject(Error('Pipe shutdown failed.'))));
+  const net=await import('node:net');const os=await import('node:os');
+  const name=config.pipeName+(webControl?'.web':'');
+  const endpoint=process.platform==='win32'?'\\\\.\\pipe\\'+name:(process.env.REPLAY_PANEL_RUNTIME??resolve(os.tmpdir(),'replay-panel-'+os.userInfo().username))+'/'+name+'.sock';
+  await new Promise((resolve,reject)=>{const client=net.createConnection(endpoint);client.on('connect',()=>client.write((webControl?'shutdown':JSON.stringify({action}))+'\n'));client.on('data',()=>{client.end();resolve();});client.on('error',reject);});
+
 }
 function check(value,name){assert(value,name);count++;console.log('PASS '+name);}
 try {

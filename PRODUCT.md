@@ -1,23 +1,2 @@
-# Product
-<!-- impeccable:product-schema 1 -->
-
-## Platform
-web
-
-## Stack
-Confirmed: ASP.NET Core 10, static Svelte/TypeScript, Windows ConPTY supervisor.
-
-## Users
-ReplayRE server developers and administrators working locally on Windows; German interface.
-
-## Product Purpose
-Start, stop, restart and inspect a Replay server through a local authenticated web interface independent of any roleplay framework or database.
-
-## Operating Context
-Local port 20772, Windows first. Future Debian Docker backend behind HTTPS.
-
-## Capabilities and Constraints
-Private current-user named pipes; true console transport; optional continued server operation when the webhost stops. An externally started server is detected and never silently adopted or terminated. No general-purpose shell.
-
-## Product Principles
-Explicit process ownership; accurate states; controlled stop; independently deployable.
+# Replay Server Panel
+Public dashboard for Replay server administrators. One administrator and one managed server per installation. Windows ConPTY, Linux PTY and Docker Engine backends. Protected first-run setup, official installation, typed English/German locales, server controls, console, logs and truthful bundle state. Default localhost:20772; optional HTTPS proxy. User-approved design: dark Cyberpunk-inspired surfaces, angular red contours, cyan information and selective yellow action accents. Private projects have no place in public copy.

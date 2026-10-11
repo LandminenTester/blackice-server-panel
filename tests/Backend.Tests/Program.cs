@@ -1,8 +1,9 @@
 using ReplayPanel.Shared;
 using ReplayPanel.Supervisor;
-if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("ConPTY tests require Windows.");
+
 var root = Path.GetFullPath(args.FirstOrDefault() ?? throw new ArgumentException("Pass an isolated fixture or test server directory."));
-await using var backend = new WindowsServerBackend(new PanelConfig { ServerRoot = root, StopTimeoutSeconds = 10, ServerArguments = args.Skip(1).ToArray() });
+var config = new PanelConfig { ServerRoot = root, StopTimeoutSeconds = 10, ServerArguments = args.Skip(1).ToArray() };
+await using IServerBackend backend = OperatingSystem.IsWindows() ? new WindowsServerBackend(config) : new PosixServerBackend(config);
 Assert(backend.Status().State == "stopped", "initial stopped state");
 await backend.StartAsync();
 Assert(backend.Status().State == "running", "start owns live process");

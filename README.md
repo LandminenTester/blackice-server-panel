@@ -1,87 +1,40 @@
 # Replay Server Panel
 
-Eigenständiges lokales Windows-Webpanel für den ReplayRE / BlackICE Dedicated Server. MIT-Lizenz. Es benötigt weder ein RP-Framework noch eine Datenbank.
+A dashboard for one Replay server: server controls, live console, logs and bundle management. English and German, a protected setup assistant, and an original Cyberpunk-inspired interface.
 
-## Einstieg unter Windows
+[Deutsch](README.de.md) · [Windows](docs/windows.md) · [Linux](docs/linux.md) · [Docker](docs/docker.md) · [Development](docs/development.md) · [Operations](docs/operations.md)
 
-Quellcode-Entwicklung benötigt .NET SDK 10.0.401, Node.js 24 und Git. VS Code mit C#- und Svelte-Erweiterung ist empfohlen.
+## Quick start
 
-In PowerShell im Projektordner:
+Download a [release package](https://github.com/LandminenTester/replay-server-panel/releases). Windows and Linux packages include the .NET runtime. Node.js is only needed for development.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup.ps1 -ServerRoot "C:/Replay/Server"
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start.ps1
-```
+- Windows: extract separately from the server directory and run `scripts/start.ps1`.
+- Native Linux: Debian 13 x86-64 is the reference platform. Install the documented system libraries, then run `sh scripts/start.sh`.
+- Docker: use the [Compose deployment](docs/docker.md).
 
-Öffne http://127.0.0.1:20772. Das generierte Passwort liegt ausschließlich in **.local/login.txt**. Diese Datei und alle Laufzeitdaten sind von Git ausgeschlossen. Setup überschreibt vorhandene Einstellungen nicht.
+Open `http://127.0.0.1:20772`. Read the setup key from `.local/supervisor.log` or the Supervisor service logs. Choose a dashboard name, username, password and server folder. Existing installations are preserved; the official installer requires an empty target directory.
 
-Der Serverordner muss REServer.exe, die Replay-DLLs und dessen Konfiguration enthalten. Der Server wird erst über **Server starten** gestartet. Ein bereits anderweitig gestarteter Server wird angezeigt, aber nicht übernommen oder beendet. Beende ihn in seiner bisherigen Konsole mit `exit` und starte ihn anschließend über das Panel.
+## Server operation
 
-## Bedienung
+Normal stop requests graceful exit and waits up to 30 seconds. Force stop is a separate confirmed action. Bundle operations wait for an actual Replay lifecycle confirmation. An externally started server is detected and cannot be started twice or taken over.
 
-- Start, geordneter Stop und Neustart mit expliziter Prozesszuordnung.
-- Live-Konsole und aktuelle Logdatei.
-- Tab **Bundles** mit installiertem Bestand, Status und **Starten**, **Neustarten** oder **Stoppen** pro Bundle.
-- Replay-Konsolenbefehle, etwa `bundles`, `start replay-rp` oder `restart replay-rp`.
-- Erzwungener Stop als getrennte bestätigte Aktion.
-- Modus **Server weiterlaufen lassen** (Standard) oder **Server geordnet stoppen** beim Beenden des Webhosts.
-- Das Schließen des Browser-Tabs ändert den Serverzustand nicht.
+`keep-running` preserves the game server when the Webhost exits; `stop-server` requests a graceful stop. Closing a browser tab does not stop anything. Windows uses ConPTY, native Linux a real PTY, and Docker the scoped Engine API with TTY and stdin.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-web.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/control.ps1 -Action status
-```
+New downloads use LAN mode and disabled automatic updates. For a public game server, follow [Replay registration](https://docs.replay.re/servers/registering/) and set its private key in `cfg/server.cfg`. [Official installation reference](https://docs.replay.re/servers/installation/).
 
-Der Supervisor läuft im Modus `keep-running` weiter. Der Webhost lässt sich mit `start.ps1` erneut verbinden. Um alles geordnet zu beenden, zuerst `control.ps1 -Action stop`, dann `stop-web.ps1` und zuletzt `control.ps1 -Action shutdown`. `shutdown` wird abgelehnt, solange der verwaltete Spielserver noch läuft.
+Existing v1 configurations are backed up to `panel.json.v1.bak` and migrated, preserving password hash, server path and shutdown mode. The existing login gets username `admin`.
 
-## Bundles verwalten
+| Service | Port |
+|---|---|
+| Game / bundle download | 20770 TCP/UDP |
+| Voice | 20771 TCP/UDP |
+| Dashboard | 20772 TCP, localhost |
+| Private IPC | Named pipe / Unix socket |
 
-Der Tab **Bundles** zeigt Verzeichnisse mit `config.toml` unter `data/ugc` sowie die von Replay gemeldeten Bundles. Gestoppte Bundles bleiben in der Liste. Bei laufendem Server sind **Starten** für gestoppte und **Neustarten / Stoppen** für laufende Bundles verfügbar. Der Status aktualisiert sich bei geöffnetem Tab alle zehn Sekunden und über **Aktualisieren**.
+Remote access uses an HTTPS reverse proxy with explicit trusted proxies, hosts and secure cookies; see [Operations](docs/operations.md).
 
-Replays `bundles`-Ausgabe allein sagt nicht, ob ein Bundle läuft: auch gestoppte Bundles werden dort aufgelistet. Das Panel wertet deshalb die nativen Started/Restarted/Stopped-Meldungen aus und liest beim Wiederverbinden gegebenenfalls das aktuelle Serverlog. Eine Aktion gilt erst nach einer passenden Replay-Bestätigung als abgeschlossen. Konsole und Bundle-Abfragen sind im Webhost serialisiert; frei eingegebene Bundle-Befehle werden beim nächsten Aktualisieren berücksichtigt.
+## Source
 
-Bei fehlender Statusbestätigung erscheint **Status unbekannt** und die Aktion bleibt gesperrt. Bei gestopptem oder extern gestartetem Server ist keine Bundle-Steuerung verfügbar. Die Erkennung ist mit Replay `1ad4600a|22` geprüft; bei geänderter Ausgabe zeigt das Panel einen Fehler, statt einen erfolgreichen Start zu behaupten. Unbekannte Namen und Befehlsverkettung werden abgewiesen. Start-/Stop-Aktionen betreffen nur das gewählte Bundle; der Serverprozess läuft weiter.
+`src/Supervisor` owns installation, backends and bundle protocol. `src/Web` hosts authenticated HTTP and static UI. `src/Shared` owns configuration and IPC. `ui` contains Svelte and typed locales. `native/terminal.c` bridges Linux PTYs.
 
-## Architektur
-
-Browser → ASP.NET Core Webhost → lokale Named Pipe → Supervisor → ConPTY → REServer.exe.
-
-Die Named Pipes sind auf den aktuellen Windows-Benutzer beschränkt. Supervisor und Webhost sind separate Prozesse. Der Supervisor hält die Konsole auch ohne Weboberfläche offen. Eine Prüfung des Executable-Pfads anhand des gehaltenen Prozesshandles schützt vor Verwechslungen mit wiederverwendeten PIDs.
-
-ConPTY wird ohne geerbte Standard-Loghandles erzeugt. Das ist für den Betrieb aus einer Anwendung mit umgeleiteter Ausgabe wichtig. Konsolentext wird als Text angezeigt; Terminal-Steuersequenzen werden entfernt.
-
-Konfiguration: `.local/panel.json`, Vorlage `panel.example.json`. `serverArguments` ist eine optionale Liste nativer Serverargumente; es wird keine Shell gestartet. Native Windows-Adressflags können schon vor Winsock-Initialisierung scheitern. Adressen daher bevorzugt in `cfg/server.cfg` setzen: `sv_bindaddr` und `sv_voip_addr`.
-
-`autoRestart` ist standardmäßig `false`. Bei `true` kann der Supervisor unerwartete Prozessabbrüche mit einer Pause neu starten. Ein bewusst ausgelöster Stop schaltet den gewünschten Laufzustand aus.
-
-## Sicherheit und Grenzen
-
-Nur Loopback-HTTP ist in dieser ersten Version erlaubt. Passwortprüfung mit PBKDF2, signierte HttpOnly-Sitzung, SameSite=Strict, CSRF-Schutz, Host-Prüfung und Anmelderatenbegrenzung. Keine allgemeine Windows-Shell. `exit` und `update` werden nicht als rohe Konsolenaktion ausgeführt; Stop ist ein eigener Ablauf und Updates bleiben ein geplantes Wartungsfenster.
-
-Der Supervisor ist erforderlich, solange er eine ConPTY-Sitzung hält. Webhost-Abschaltung lässt ihn weiterlaufen; das Beenden des Supervisors ist ein anderer Vorgang. Bei einem Supervisor-Absturz ist kein unterbrechungsfreier Fortbestand der Konsole garantiert.
-
-Vor einem Quellcode-Neubau Webhost und Supervisor beenden, damit Windows deren Binärdateien freigibt. Das Beenden des Supervisors setzt einen geordnet gestoppten Spielserver voraus. Frontend-only Änderungen können separat gebaut und ihre statischen Dateien aktualisiert werden.
-
-## Prüfen
-
-```powershell
-dotnet publish tests/ConsoleFixture -c Release -o .local/fixture
-dotnet run --project tests/Backend.Tests -- .local/fixture
-node scripts/test-panel.mjs
-```
-
-Der letzte Test benötigt bereits gebaute `artifacts/web` und `artifacts/supervisor`. Er verwendet ausschließlich die wegwerfbare ConsoleFixture auf Panelport 20774 und prüft in 30 Szenarien Anmeldung, CSRF, Prozesssteuerung, Befehle, beide Abschaltmodi und die Bundle-Verwaltung (einschließlich verzögerter Lifecycle-Bestätigung, konkurrierender Abfragen, falschem Status, nativen Fehlern und Wiederverbindung). Der feste Testzugang ist keine echte Panel-Zugangsinformation. Die Fixture ist kein Replay-Spielserver.
-
-Ein separater echter Replay-Test kann mit einem isolierten Serverordner und anderen Spiel-/Voiceports durchgeführt werden. Er darf nicht auf einer bestehenden Spielinstanz laufen.
-
-## Releases und späterer Linux-Betrieb
-
-GitHub Actions baut und testet unter Windows. Tags `v*` erzeugen ein Releasepaket mit selbstenthaltenden win-x64-Binaries, sodass die .NET-Laufzeit für deren Betrieb nicht separat installiert werden muss. Setup verwendet derzeit Node.js zum Erzeugen der lokalen Konfiguration.
-
-`IServerBackend` hält die Prozessverwaltung austauschbar. Ein Linux-/Docker-Backend und eine öffentliche Bereitstellung sind noch nicht implementiert. Bei diesem späteren Ausbau: Panel hinter HTTPS, interne Steuerverbindung, begrenzter Containerzugriff und keine direkte Freigabe des Docker-Sockets an Browser oder öffentlichen Webhost.
-
-## Quellen
-
-- [Replay Serververwaltung](https://docs.replay.re/servers/managing/)
-- [Windows ConPTY](https://learn.microsoft.com/en-us/windows/console/creating-a-pseudoconsole-session)
+MIT. Community tool, not an official Replay or Cyberpunk product. [Design reference](https://www.artstation.com/artwork/18mLB8); its artwork is not distributed.

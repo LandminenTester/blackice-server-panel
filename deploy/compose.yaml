@@ -1,0 +1,30 @@
+name: replay-panel
+services:
+  supervisor:
+    image: ghcr.io/landminentester/replay-server-panel:${PANEL_VERSION:-0.3.0}
+    entrypoint: ["/app/artifacts/supervisor/Supervisor", "/state/panel.json"]
+    user: "10001:${DOCKER_GID:?Set DOCKER_GID}"
+    environment:
+      REPLAY_PANEL_URL: http://0.0.0.0:20772
+      REPLAY_PANEL_HOSTS: "127.0.0.1:20772;localhost:20772"
+      REPLAY_PANEL_CONFIG: /state/panel.json
+      REPLAY_PANEL_RUNTIME: /run/replay-panel
+      REPLAY_PANEL_MOUNTS: /server
+      REPLAY_PANEL_HOST_SERVER: ${SERVER_PATH:?Set SERVER_PATH}
+    volumes:
+      - ${PANEL_STATE:?Set PANEL_STATE}:/state
+      - ${PANEL_RUNTIME:?Set PANEL_RUNTIME}:/run/replay-panel
+      - ${SERVER_PATH}:/server
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+  web:
+    image: ghcr.io/landminentester/replay-server-panel:${PANEL_VERSION:-0.3.0}
+    depends_on: [supervisor]
+    environment:
+      REPLAY_PANEL_CONFIG: /state/panel.json
+      REPLAY_PANEL_RUNTIME: /run/replay-panel
+    volumes:
+      - ${PANEL_STATE}:/state
+      - ${PANEL_RUNTIME:?Set PANEL_RUNTIME}:/run/replay-panel
+    ports: ["127.0.0.1:20772:20772"]
+    restart: unless-stopped

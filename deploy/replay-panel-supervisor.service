@@ -1,0 +1,15 @@
+[Unit]
+Description=Replay Panel supervisor
+After=network-online.target
+[Service]
+User=replay-panel
+Group=replay-panel
+WorkingDirectory=/opt/replay-panel
+Environment=REPLAY_PANEL_RUNTIME=/var/lib/replay-panel/run
+Environment=REPLAY_PANEL_CONFIG=/var/lib/replay-panel/panel.json
+ExecStart=/opt/replay-panel/artifacts/supervisor/Supervisor /var/lib/replay-panel/panel.json
+Restart=on-failure
+UMask=0077
+TimeoutStopSec=45
+[Install]
+WantedBy=multi-user.target

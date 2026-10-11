@@ -1,0 +1,10 @@
+import net from 'node:net';
+import {readFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+const path=resolve(process.env.REPLAY_PANEL_CONFIG??'.local/panel.json'),config=JSON.parse(await readFile(path));
+const action=process.argv[2]??'status',web=action==='stop-web';
+const socket=process.platform==='win32'?'\\\\.\\pipe\\'+config.pipeName+(web?'.web':''):(process.env.REPLAY_PANEL_RUNTIME??'/tmp/replay-panel-'+process.env.USER)+'/'+config.pipeName+(web?'.web':'')+'.sock';
+const client=net.createConnection(socket);client.setEncoding('utf8');
+client.on('connect',()=>client.write((web?'shutdown':JSON.stringify({action,command:process.argv[3]}))+'\n'));
+client.on('data',data=>{console.log(data.trim());client.end();});
+client.on('error',error=>{console.error(error.message);process.exitCode=1;});

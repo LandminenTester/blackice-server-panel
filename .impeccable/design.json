@@ -1,0 +1,435 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-11T15:59:48.121Z",
+  "title": "Design System: Replay Server Panel",
+  "extensions": {
+    "colorMeta": {
+      "background": {
+        "role": "neutral",
+        "displayName": "Background",
+        "tonalRamp": [
+          "oklch(15% 0.0104 276.4)",
+          "oklch(25% 0.0104 276.4)",
+          "oklch(35% 0.0104 276.4)",
+          "oklch(45% 0.0104 276.4)",
+          "oklch(55% 0.0104 276.4)",
+          "oklch(65% 0.0104 276.4)",
+          "oklch(80% 0.0104 276.4)",
+          "oklch(95% 0.0104 276.4)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "tonalRamp": [
+          "oklch(15% 0.0140 298.3)",
+          "oklch(25% 0.0140 298.3)",
+          "oklch(35% 0.0140 298.3)",
+          "oklch(45% 0.0140 298.3)",
+          "oklch(55% 0.0140 298.3)",
+          "oklch(65% 0.0140 298.3)",
+          "oklch(80% 0.0140 298.3)",
+          "oklch(95% 0.0140 298.3)"
+        ]
+      },
+      "toolbar": {
+        "role": "neutral",
+        "displayName": "Toolbar",
+        "tonalRamp": [
+          "oklch(15% 0.0123 300.5)",
+          "oklch(25% 0.0123 300.5)",
+          "oklch(35% 0.0123 300.5)",
+          "oklch(45% 0.0123 300.5)",
+          "oklch(55% 0.0123 300.5)",
+          "oklch(65% 0.0123 300.5)",
+          "oklch(80% 0.0123 300.5)",
+          "oklch(95% 0.0123 300.5)"
+        ]
+      },
+      "console": {
+        "role": "neutral",
+        "displayName": "Console",
+        "tonalRamp": [
+          "oklch(15% 0.0141 258.4)",
+          "oklch(25% 0.0141 258.4)",
+          "oklch(35% 0.0141 258.4)",
+          "oklch(45% 0.0141 258.4)",
+          "oklch(55% 0.0141 258.4)",
+          "oklch(65% 0.0141 258.4)",
+          "oklch(80% 0.0141 258.4)",
+          "oklch(95% 0.0141 258.4)"
+        ]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Foreground",
+        "tonalRamp": [
+          "oklch(15% 0.0323 15.4)",
+          "oklch(25% 0.0323 15.4)",
+          "oklch(35% 0.0323 15.4)",
+          "oklch(45% 0.0323 15.4)",
+          "oklch(55% 0.0323 15.4)",
+          "oklch(65% 0.0323 15.4)",
+          "oklch(80% 0.0323 15.4)",
+          "oklch(95% 0.0323 15.4)"
+        ]
+      },
+      "field-foreground": {
+        "role": "neutral",
+        "displayName": "Field Foreground",
+        "tonalRamp": [
+          "oklch(15% 0.0219 14.1)",
+          "oklch(25% 0.0219 14.1)",
+          "oklch(35% 0.0219 14.1)",
+          "oklch(45% 0.0219 14.1)",
+          "oklch(55% 0.0219 14.1)",
+          "oklch(65% 0.0219 14.1)",
+          "oklch(80% 0.0219 14.1)",
+          "oklch(95% 0.0219 14.1)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "tonalRamp": [
+          "oklch(15% 0.0293 358.3)",
+          "oklch(25% 0.0293 358.3)",
+          "oklch(35% 0.0293 358.3)",
+          "oklch(45% 0.0293 358.3)",
+          "oklch(55% 0.0293 358.3)",
+          "oklch(65% 0.0293 358.3)",
+          "oklch(80% 0.0293 358.3)",
+          "oklch(95% 0.0293 358.3)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Line",
+        "tonalRamp": [
+          "oklch(15% 0.0844 7.2)",
+          "oklch(25% 0.0844 7.2)",
+          "oklch(35% 0.0844 7.2)",
+          "oklch(45% 0.0844 7.2)",
+          "oklch(55% 0.0844 7.2)",
+          "oklch(65% 0.0844 7.2)",
+          "oklch(80% 0.0844 7.2)",
+          "oklch(95% 0.0844 7.2)"
+        ]
+      },
+      "red": {
+        "role": "primary",
+        "displayName": "Red",
+        "tonalRamp": [
+          "oklch(15% 0.1885 16.1)",
+          "oklch(25% 0.1885 16.1)",
+          "oklch(35% 0.1885 16.1)",
+          "oklch(45% 0.1885 16.1)",
+          "oklch(55% 0.1885 16.1)",
+          "oklch(65% 0.1885 16.1)",
+          "oklch(80% 0.1885 16.1)",
+          "oklch(95% 0.1885 16.1)"
+        ]
+      },
+      "cyan": {
+        "role": "secondary",
+        "displayName": "Cyan",
+        "tonalRamp": [
+          "oklch(15% 0.1047 196.9)",
+          "oklch(25% 0.1047 196.9)",
+          "oklch(35% 0.1047 196.9)",
+          "oklch(45% 0.1047 196.9)",
+          "oklch(55% 0.1047 196.9)",
+          "oklch(65% 0.1047 196.9)",
+          "oklch(80% 0.1047 196.9)",
+          "oklch(95% 0.1047 196.9)"
+        ]
+      },
+      "yellow": {
+        "role": "tertiary",
+        "displayName": "Yellow",
+        "tonalRamp": [
+          "oklch(15% 0.1406 102.2)",
+          "oklch(25% 0.1406 102.2)",
+          "oklch(35% 0.1406 102.2)",
+          "oklch(45% 0.1406 102.2)",
+          "oklch(55% 0.1406 102.2)",
+          "oklch(65% 0.1406 102.2)",
+          "oklch(80% 0.1406 102.2)",
+          "oklch(95% 0.1406 102.2)"
+        ]
+      },
+      "button": {
+        "role": "neutral",
+        "displayName": "Button",
+        "tonalRamp": [
+          "oklch(15% 0.0192 314.4)",
+          "oklch(25% 0.0192 314.4)",
+          "oklch(35% 0.0192 314.4)",
+          "oklch(45% 0.0192 314.4)",
+          "oklch(55% 0.0192 314.4)",
+          "oklch(65% 0.0192 314.4)",
+          "oklch(80% 0.0192 314.4)",
+          "oklch(95% 0.0192 314.4)"
+        ]
+      },
+      "button-hover": {
+        "role": "neutral",
+        "displayName": "Button Hover",
+        "tonalRamp": [
+          "oklch(15% 0.0448 354.4)",
+          "oklch(25% 0.0448 354.4)",
+          "oklch(35% 0.0448 354.4)",
+          "oklch(45% 0.0448 354.4)",
+          "oklch(55% 0.0448 354.4)",
+          "oklch(65% 0.0448 354.4)",
+          "oklch(80% 0.0448 354.4)",
+          "oklch(95% 0.0448 354.4)"
+        ]
+      },
+      "primary-foreground": {
+        "role": "neutral",
+        "displayName": "Primary Foreground",
+        "tonalRamp": [
+          "oklch(15% 0.0103 303.6)",
+          "oklch(25% 0.0103 303.6)",
+          "oklch(35% 0.0103 303.6)",
+          "oklch(45% 0.0103 303.6)",
+          "oklch(55% 0.0103 303.6)",
+          "oklch(65% 0.0103 303.6)",
+          "oklch(80% 0.0103 303.6)",
+          "oklch(95% 0.0103 303.6)"
+        ]
+      },
+      "primary-hover": {
+        "role": "neutral",
+        "displayName": "Primary Hover",
+        "tonalRamp": [
+          "oklch(15% 0.1180 102.1)",
+          "oklch(25% 0.1180 102.1)",
+          "oklch(35% 0.1180 102.1)",
+          "oklch(45% 0.1180 102.1)",
+          "oklch(55% 0.1180 102.1)",
+          "oklch(65% 0.1180 102.1)",
+          "oklch(80% 0.1180 102.1)",
+          "oklch(95% 0.1180 102.1)"
+        ]
+      },
+      "selected-surface": {
+        "role": "neutral",
+        "displayName": "Selected Surface",
+        "tonalRamp": [
+          "oklch(15% 0.0145 76.3)",
+          "oklch(25% 0.0145 76.3)",
+          "oklch(35% 0.0145 76.3)",
+          "oklch(45% 0.0145 76.3)",
+          "oklch(55% 0.0145 76.3)",
+          "oklch(65% 0.0145 76.3)",
+          "oklch(80% 0.0145 76.3)",
+          "oklch(95% 0.0145 76.3)"
+        ]
+      },
+      "field": {
+        "role": "neutral",
+        "displayName": "Field",
+        "tonalRamp": [
+          "oklch(15% 0.0143 291.5)",
+          "oklch(25% 0.0143 291.5)",
+          "oklch(35% 0.0143 291.5)",
+          "oklch(45% 0.0143 291.5)",
+          "oklch(55% 0.0143 291.5)",
+          "oklch(65% 0.0143 291.5)",
+          "oklch(80% 0.0143 291.5)",
+          "oklch(95% 0.0143 291.5)"
+        ]
+      },
+      "notice-surface": {
+        "role": "neutral",
+        "displayName": "Notice Surface",
+        "tonalRamp": [
+          "oklch(15% 0.0275 215.5)",
+          "oklch(25% 0.0275 215.5)",
+          "oklch(35% 0.0275 215.5)",
+          "oklch(45% 0.0275 215.5)",
+          "oklch(55% 0.0275 215.5)",
+          "oklch(65% 0.0275 215.5)",
+          "oklch(80% 0.0275 215.5)",
+          "oklch(95% 0.0275 215.5)"
+        ]
+      },
+      "error-surface": {
+        "role": "neutral",
+        "displayName": "Error Surface",
+        "tonalRamp": [
+          "oklch(15% 0.0387 358.0)",
+          "oklch(25% 0.0387 358.0)",
+          "oklch(35% 0.0387 358.0)",
+          "oklch(45% 0.0387 358.0)",
+          "oklch(55% 0.0387 358.0)",
+          "oklch(65% 0.0387 358.0)",
+          "oklch(80% 0.0387 358.0)",
+          "oklch(95% 0.0387 358.0)"
+        ]
+      },
+      "error-foreground": {
+        "role": "neutral",
+        "displayName": "Error Foreground",
+        "tonalRamp": [
+          "oklch(15% 0.0908 9.8)",
+          "oklch(25% 0.0908 9.8)",
+          "oklch(35% 0.0908 9.8)",
+          "oklch(45% 0.0908 9.8)",
+          "oklch(55% 0.0908 9.8)",
+          "oklch(65% 0.0908 9.8)",
+          "oklch(80% 0.0908 9.8)",
+          "oklch(95% 0.0908 9.8)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Screen heading",
+        "purpose": "Main view heading."
+      },
+      "title": {
+        "displayName": "Section heading",
+        "purpose": "Panel and settings headings."
+      },
+      "body": {
+        "displayName": "Interface prose",
+        "purpose": "Hints and explanatory copy."
+      },
+      "label": {
+        "displayName": "Control label",
+        "purpose": "Form labels and state badges."
+      },
+      "console": {
+        "displayName": "Console",
+        "purpose": "Selectable output, commands and paths."
+      }
+    },
+    "shadows": [
+      {
+        "name": "listbox",
+        "value": "0 12px 24px #0008",
+        "purpose": "Floating custom selector options."
+      },
+      {
+        "name": "dialog",
+        "value": "0 20px 60px #0008",
+        "purpose": "Native modal dialog above the dark backdrop."
+      }
+    ],
+    "motion": [
+      {
+        "name": "button-hover",
+        "value": "background .14s ease-out",
+        "purpose": "Button state feedback; disabled for reduced motion."
+      },
+      {
+        "name": "indeterminate-transfer",
+        "value": "transfer 1.5s ease-in-out infinite",
+        "purpose": "Installation phase activity; becomes static for reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-desktop",
+        "value": "1100px"
+      },
+      {
+        "name": "mobile",
+        "value": "720px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Yellow progression and start action.",
+      "html": "<button class=\"ds-primary\">Start</button>",
+      "css": ".ds-primary{min-height:44px;padding:10px 20px;font:500 16px 'IBM Plex Sans',sans-serif;border-radius:0;border:1px solid var(--line,#834653);cursor:pointer;transition:background .14s ease-out;background:var(--yellow,#f4e56e);color:#17151a;border-color:var(--yellow,#f4e56e)}.ds-primary:hover:not(:disabled){background:#fff393}.ds-primary:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}.ds-primary:disabled{opacity:.45;cursor:not-allowed}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Red text and a muted contour for ordinary operational actions.",
+      "html": "<button class=\"ds-secondary\">Refresh</button>",
+      "css": ".ds-secondary{min-height:44px;padding:10px 20px;font:500 16px 'IBM Plex Sans',sans-serif;border-radius:0;border:1px solid var(--line,#834653);cursor:pointer;transition:background .14s ease-out;background:#211b24;color:var(--red,#ff6477)}.ds-secondary:hover:not(:disabled){background:#3b202b;border-color:var(--red,#ff6477)}.ds-secondary:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}.ds-secondary:disabled{opacity:.45;cursor:not-allowed}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}"
+    },
+    {
+      "name": "Danger action",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Red contour for Stop and forced-stop controls.",
+      "html": "<button class=\"ds-danger\">Stop</button>",
+      "css": ".ds-danger{min-height:44px;padding:10px 20px;font:500 16px 'IBM Plex Sans',sans-serif;border-radius:0;border:1px solid var(--line,#834653);cursor:pointer;transition:background .14s ease-out;background:#211b24;color:var(--red,#ff6477);border-color:var(--red,#ff6477)}.ds-danger:hover:not(:disabled){background:#3b202b}.ds-danger:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}.ds-danger:disabled{opacity:.45;cursor:not-allowed}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}"
+    },
+    {
+      "name": "Text field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Square dark field with a visible label and cyan keyboard focus.",
+      "html": "<label class=\"ds-field\">Username<input class=\"ds-input\" autocomplete=\"username\" placeholder=\"admin\"></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:9px;color:#f5d8d9;font:14px 'IBM Plex Sans',sans-serif}.ds-input{background:#121118;color:#f9e5e6;border:1px solid var(--line,#834653);border-radius:0;padding:12px;min-height:44px;font:16px 'IBM Plex Sans',sans-serif;caret-color:var(--cyan,#74e7e9)}.ds-input::placeholder{color:var(--muted,#c3abb2)}.ds-input:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}"
+    },
+    {
+      "name": "Navigation selection",
+      "kind": "nav",
+      "description": "Current Console tab with yellow selection and a clipped upper-right corner.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Navigation preview\"><button class=\"ds-nav-tab\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m4 6 6 6-6 6m9 0h7\"/></svg>Console</button></nav>",
+      "css": ".ds-nav{padding:12px;background:#151319}.ds-nav-tab{display:flex;align-items:center;gap:14px;min-height:44px;padding:10px 20px;font:500 16px 'IBM Plex Sans',sans-serif;color:var(--yellow,#f4e56e);border:1px solid var(--yellow,#f4e56e);border-radius:0;background:#2c2720;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,0 100%);cursor:pointer;transition:background .14s ease-out}.ds-nav-tab svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5}.ds-nav-tab:hover{background:#3b202b}.ds-nav-tab:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}"
+    },
+    {
+      "name": "Output panel",
+      "kind": "card",
+      "description": "A bordered surface with red heading and a selectable cyan output region.",
+      "html": "<section class=\"ds-panel\"><h2>Latest output</h2><textarea readonly aria-label=\"Latest output\">No console output yet.</textarea></section>",
+      "css": ".ds-panel{background:var(--surface,#19171e);border:1px solid var(--line,#834653)}.ds-panel h2{margin:0;padding:20px 24px;border-bottom:1px solid var(--line,#834653);color:var(--red,#ff6477);font:500 20px 'IBM Plex Sans',sans-serif}.ds-panel textarea{display:block;width:100%;min-height:160px;padding:24px;border:0;resize:vertical;background:#0c1016;color:var(--cyan,#74e7e9);font:13px/1.8 'IBM Plex Mono',monospace}.ds-panel textarea:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}"
+    },
+    {
+      "name": "Follow output switch",
+      "kind": "custom",
+      "description": "Labelled button switch with square cyan selected thumb; static selected-state preview.",
+      "html": "<button class=\"ds-toggle\" role=\"switch\" aria-checked=\"true\"><span aria-hidden=\"true\"><i></i></span>Follow output</button>",
+      "css": ".ds-toggle{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px;border:0;background:transparent;color:var(--muted,#c3abb2);font:13px 'IBM Plex Sans',sans-serif;cursor:pointer}.ds-toggle>span{border:1px solid var(--cyan,#74e7e9);width:34px;height:18px;padding:3px;display:flex;align-items:center;justify-content:flex-end}.ds-toggle i{width:10px;height:10px;background:var(--cyan,#74e7e9);display:block}.ds-toggle:hover{background:#3b202b}.ds-toggle:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}"
+    },
+    {
+      "name": "Language selector",
+      "kind": "custom",
+      "description": "Closed custom listbox trigger preview; application supplies focus management and keyboard interaction.",
+      "html": "<button class=\"ds-select\" aria-label=\"Language\" aria-haspopup=\"listbox\" aria-expanded=\"false\">English<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m4 6 4 4 4-4\"/></svg></button>",
+      "css": ".ds-select{min-height:44px;padding:10px 20px;font:500 16px 'IBM Plex Sans',sans-serif;border-radius:0;border:1px solid var(--line,#834653);cursor:pointer;transition:background .14s ease-out;display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:120px;background:#211b24;color:var(--cyan,#74e7e9);text-align:left}.ds-select svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5}.ds-select:hover{background:#3b202b;border-color:var(--red,#ff6477)}.ds-select:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Cyberpunk server operations",
+    "overview": "The user-pinned direction is a Cyberpunk operating surface. Dark charcoal and plum panels carry sharp red contours, cyan operational information and selective yellow action accents. IBM Plex typography and generous separation keep the expressive palette readable during server administration.\n\nThis system replaces the former green, rounded interface. Preserve the approved dark, angular identity across Dashboard, Console, Bundles, Settings, sign-in and first-run setup. English and German share the same visual hierarchy and control behavior; longer translations must wrap without obscuring an action or state.",
+    "keyCharacteristics": [
+      "Dark tonal surfaces and angular red contours.",
+      "Cyan operational information and visible focus.",
+      "Selective yellow actions and active selections.",
+      "Readable English/German controls and native output interaction."
+    ],
+    "rules": [
+      {
+        "name": "The State Text Rule",
+        "body": "Colored square indicators always accompany readable status text. Cyan is positive operational information; disabled controls and stale or unknown bundle states must not imply confirmed availability.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do preserve the red/cyan/yellow roles and dark angular surfaces selected by the user.",
+      "Do keep state text, visible labels, keyboard access and cyan focus outlines alongside visual indicators.",
+      "Do preserve wrapping and responsive stacking for both English and German.",
+      "Do keep Console selection/scrolling usable and require confirmed bundle control availability."
+    ],
+    "donts": [
+      "Don't restore the former green palette or rounded control language.",
+      "Don't present unrelated settings feedback after navigation or infer stopped state from empty output.",
+      "Don't treat synthetic review fixtures as product defaults or describe this bounded review as a complete accessibility or backend audit."
+    ]
+  }
+}

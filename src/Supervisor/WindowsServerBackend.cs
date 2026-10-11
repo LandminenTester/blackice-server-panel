@@ -37,7 +37,7 @@ public sealed partial class WindowsServerBackend(PanelConfig config) : IServerBa
     {
         if (session is not null && !session.Process.HasExited) return new("running", session.Process.Id, config.ServerRoot, config.ShutdownMode, detail);
         using var external = FindExternal();
-        return external is not null ? new("external", external.Id, config.ServerRoot, config.ShutdownMode, "Extern gestartet. Für die Konsole einmal über das Panel starten.")
+        return external is not null ? new("external", external.Id, config.ServerRoot, config.ShutdownMode, "server.external")
             : new("stopped", null, config.ServerRoot, config.ShutdownMode, detail);
     }
     public async Task StartAsync()
@@ -45,8 +45,8 @@ public sealed partial class WindowsServerBackend(PanelConfig config) : IServerBa
         await gate.WaitAsync();
         try
         {
-            if (Status().State != "stopped") throw new InvalidOperationException("Der Server läuft bereits.");
-            if (!File.Exists(Exe)) throw new FileNotFoundException("REServer.exe fehlt im konfigurierten Serverordner.");
+            if (Status().State != "stopped") throw new InvalidOperationException("server.running");
+            if (!File.Exists(Exe)) throw new FileNotFoundException("server.files");
             session?.Dispose(); session = null;
             var next = new ConPtySession();
             try { next.Start(Exe, config.ServerRoot, Append, config.ServerArguments); session = next; }
@@ -63,16 +63,16 @@ public sealed partial class WindowsServerBackend(PanelConfig config) : IServerBa
             desiredRunning = false;
             if (session is null || session.Process.HasExited)
             {
-                if (Status().State == "external") throw new InvalidOperationException("Extern gestartete Prozesse werden nicht beendet. Bitte die bestehende Konsole verwenden.");
+                if (Status().State == "external") throw new InvalidOperationException("server.external");
                 return;
             }
             // Check owned process identity before any destructive process operation.
             if (!string.Equals(session.ImagePath(), Exe, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Prozessidentität stimmt nicht überein.");
+                throw new InvalidOperationException("server.identity");
             if (force) session.Process.Kill(entireProcessTree: true);
             else await session.SendAsync("exit");
             try { await session.Process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(config.StopTimeoutSeconds)); detail = null; }
-            catch (TimeoutException) { detail = "Server antwortet nicht auf exit. Erzwungenen Stop getrennt auslösen."; throw new InvalidOperationException(detail); }
+            catch (TimeoutException) { detail = "server.stopTimeout"; throw new InvalidOperationException(detail); }
             session.Dispose(); session = null;
         }
         finally { gate.Release(); }
@@ -80,14 +80,14 @@ public sealed partial class WindowsServerBackend(PanelConfig config) : IServerBa
     public async Task SendAsync(string command)
     {
         if (string.IsNullOrWhiteSpace(command) || command.Length > 1024 || command.Any(char.IsControl) || command.Contains(';'))
-            throw new InvalidOperationException("Nur ein einzelner Konsolenbefehl ohne Steuerzeichen ist erlaubt.");
+            throw new InvalidOperationException("command.invalid");
         var verb = command.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
         if (verb.Equals("exit", StringComparison.OrdinalIgnoreCase) || verb.Equals("update", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Stop und Update über die dafür vorgesehenen Abläufe ausführen.");
+            throw new InvalidOperationException("command.invalid");
         await gate.WaitAsync();
         try
         {
-            if (session is null || session.Process.HasExited) throw new InvalidOperationException("Keine verwaltete Konsole verbunden.");
+            if (session is null || session.Process.HasExited) throw new InvalidOperationException("console.unavailable");
             await session.SendAsync(command);
         }
         finally { gate.Release(); }
@@ -117,7 +117,7 @@ public sealed partial class WindowsServerBackend(PanelConfig config) : IServerBa
             if (stream.Length > 256 * 1024) stream.Seek(-256 * 1024, SeekOrigin.End);
             using var reader = new StreamReader(stream);
             return reader.ReadToEnd().Split('\n').TakeLast(1000).Select(x => x.TrimEnd('\r')).ToArray();
-        } catch (IOException) { return ["Logdatei wird gerade gewechselt; erneut laden."]; }
+        } catch (IOException) { return ["logs.changed"]; }
     }
     public async ValueTask DisposeAsync()
     {

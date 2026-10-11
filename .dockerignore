@@ -1,0 +1,8 @@
+.git
+.local
+artifacts
+**/bin
+**/obj
+ui/node_modules
+src/Web/wwwroot
+.impeccable
