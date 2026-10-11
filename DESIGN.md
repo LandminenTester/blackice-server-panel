@@ -173,3 +173,5 @@ Settings reuses the existing custom Toggle for the persisted auto-start preferen
 
 ## Fixed dashboard and accounts
 At desktop sizes, the header and sidebar remain visible. The workspace occupies the remaining viewport; the console output and large lists scroll within their own regions. Full HD target: 1920×1080 at default zoom. Server controls and status share the header on every authenticated page. Sidebar footer contains REPLAY.re, the unofficial designation and the public GitHub link. Users reuse Toggle and existing form tokens for individual permissions; API authorization controls capabilities.
+
+Verification of the account/shell change: complete 1920×1080 console and Users screenshots; DOM checks on all five authenticated pages show no body/workspace scrolling at default Full HD zoom. Mobile Users at390px has no horizontal overflow. Dynamic-tab Home/End reaches Users. Finish review resolved keyboard wrapping and permission-sensitive cached logs. Backend permission, password/session revocation and protected-last-manager checks are covered separately by integration/core tests.

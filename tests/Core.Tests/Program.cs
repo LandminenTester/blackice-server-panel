@@ -16,6 +16,18 @@ try {
  Check(File.Exists(configPath+".v1.bak"),"legacy configuration backed up");
  PanelConfig.Load(configPath);Check(File.Exists(configPath+".v1.bak"),"migration is idempotent");
  config.SetPassword("long-test-password");Check(config.VerifyPassword("long-test-password")&&!config.VerifyPassword("different-password"),"salted authentication verifies only matching password");
+
+ var legacyUser=Accounts.Authenticate(config,"ADMIN","long-test-password");Check(legacyUser is not null&&legacyUser.Permissions.Contains("users.manage"),"legacy admin receives all account permissions");
+ Accounts.Save(config,configPath,new("reader","first-reader-password",["console.read"],Create:true));
+ var reader=Accounts.Authenticate(config,"reader","first-reader-password")!;
+ Check(PanelConfig.Load(configPath).Users!.Any(u=>u.Username=="reader"),"accounts persist across configuration reload");
+ Check(!File.ReadAllText(configPath).Contains("first-reader-password"),"account password never persisted in clear text");
+ Reject(()=>Accounts.Save(config,configPath,new("reader",null,["invalid.permission"])),"unknown permission rejected");
+ Reject(()=>Accounts.Save(config,configPath,new("admin",null,[],false)),"last user manager cannot be disabled");
+ Accounts.Save(config,configPath,new("reader","changed-reader-password",["bundles.read"]));
+ Check(Accounts.Session(config,"reader",reader.Stamp) is null&&Accounts.Authenticate(config,"reader","first-reader-password") is null,"password change revokes old password and session");
+ var updated=Accounts.Authenticate(config,"reader","changed-reader-password")!;Accounts.Save(config,configPath,new("reader",null,["bundles.read"],false));
+ Check(Accounts.Session(config,"reader",updated.Stamp) is null&&Accounts.Authenticate(config,"reader","changed-reader-password") is null,"disabled account cannot authenticate or retain session");
  var staging=Path.Combine(root,"staging");Directory.CreateDirectory(staging);
  var bad=Path.Combine(root,"bad.zip");
  File.WriteAllText(bad,"not a zip");Reject(()=>ArchiveInstaller.Extract(bad,staging),"corrupt ZIP rejected");

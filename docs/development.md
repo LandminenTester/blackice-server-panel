@@ -6,7 +6,7 @@
 
 Prerequisites: Git, .NET SDK 10.0.401 (global.json), Node 24.19.0 and npm. Linux also needs cc, libc headers and libutil. Editor suggestions: VS Code with C# and Svelte support.
 
-Windows: `scripts/build.ps1`. Linux: `sh scripts/build.sh`. Restore exact npm versions with `npm --prefix ui ci`; .NET lockfiles are committed. Run `npm --prefix ui run check` before building.
+Follow the individual Windows/Linux commands in [Building](building.md) from an already open terminal. The build scripts are optional conveniences. Restore exact npm versions with `npm --prefix ui ci`; .NET lockfiles are committed. Run `npm --prefix ui run check` before building.
 
 Backend contract: `IServerBackend` exposes status, start, stop/force, command, console and logs. Platform integrations live in Supervisor; Web never accesses game files or Docker Engine. BundleManager serializes console queries and actions, delimits responses using echo markers, and waits for exact native lifecycle events. Loaded bundles can be stopped: never infer running state from the loaded list alone.
 
@@ -29,7 +29,7 @@ Never point fixture tests at a production directory. Runtime downloads are vendo
 
 Voraussetzungen: Git, .NET SDK 10.0.401 aus global.json, Node 24.19.0 und npm. Linux benötigt zusätzlich cc, libc-Header und libutil. VS Code mit C#- und Svelte-Erweiterung eignet sich als Editor.
 
-Windows: `scripts/build.ps1`. Linux: `sh scripts/build.sh`. Paketversionen mit `npm --prefix ui ci` wiederherstellen; .NET-Lockdateien sind versioniert. Vor dem Build `npm --prefix ui run check` ausführen.
+Die einzelnen Windows-/Linux-Befehle aus [Builden](building.md) im offenen Terminal ausführen. Buildskripte sind optionale Hilfen. Paketversionen mit `npm --prefix ui ci` wiederherstellen; .NET-Lockdateien sind versioniert. Vor dem Build `npm --prefix ui run check` ausführen.
 
 `IServerBackend` definiert Status, Start, Stop/Force, Befehl, Konsole und Logs. Plattformintegration gehört in den Supervisor. Der Webhost greift weder auf Spieldateien noch auf Docker Engine zu. BundleManager serialisiert Abfragen und Aktionen, begrenzt Antworten durch Echo-Marker und wartet auf echte Lebenszyklusereignisse. Geladene Bundles können gestoppt sein.
 

@@ -139,6 +139,8 @@
     csrf = data.csrf;
     authenticated = data.authenticated;
     permissions = data.permissions ?? [];
+    if (!can("logs.read")) { logs = []; logView = false; }
+    if (!can("console.read")) lines = [];
     const boot = await request("/api/bootstrap");
     configured = boot.configured;
     dashboardName = boot.dashboardName;
@@ -150,6 +152,7 @@
     stream.onmessage = (e) => {
       const data = JSON.parse(e.data);
       permissions = data.permissions ?? permissions;
+      if (!can("logs.read")) { logs = []; logView = false; }
       if (!navItems.includes(view)) view = "dashboard";
       connected = data.status.ok;
       if (connected) status = data.status.status;
@@ -172,6 +175,7 @@
       await request("/api/logout", {});
       stream?.close();
       authenticated = false;
+      permissions = []; logs = []; lines = []; logView = false; bundles = []; command = ""; view = "dashboard";
       status = null;
       await session();
     });
@@ -309,10 +313,10 @@
   function tabs(e: KeyboardEvent) {
     const names = navItems;
     let n = names.indexOf(view);
-    if (e.key === "ArrowRight") n = (n + 1) % 4;
-    else if (e.key === "ArrowLeft") n = (n + 3) % 4;
+    if (e.key === "ArrowRight") n = (n + 1) % names.length;
+    else if (e.key === "ArrowLeft") n = (n + names.length - 1) % names.length;
     else if (e.key === "Home") n = 0;
-    else if (e.key === "End") n = 3;
+    else if (e.key === "End") n = names.length - 1;
     else return;
     e.preventDefault();
     navigate(names[n]);
@@ -768,7 +772,7 @@
             bind:this={output}
             readonly
             aria-label={logView ? t.logs : t.console}
-            value={!logView && !can("console.read") ? t.noAccess : text}
+            value={(logView ? !can("logs.read") : !can("console.read")) ? t.noAccess : text}
           ></textarea>
           <form class="command-form" onsubmit={send}>
             <label class="sr-only" for="command">{t.command}</label><svg
