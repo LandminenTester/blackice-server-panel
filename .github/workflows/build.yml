@@ -100,7 +100,8 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           docker build -t ghcr.io/landminentester/replay-server-panel:$VERSION .
           docker push ghcr.io/landminentester/replay-server-panel:$VERSION
+          docker save ghcr.io/landminentester/replay-server-panel:$VERSION | gzip > replay-server-panel-docker.tar.gz
       - name: Publish packages
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" replay-server-panel-win-x64.zip replay-server-panel-linux-x64.tar.gz --repo "$GITHUB_REPOSITORY" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" replay-server-panel-win-x64.zip replay-server-panel-linux-x64.tar.gz replay-server-panel-docker.tar.gz --repo "$GITHUB_REPOSITORY" --generate-notes

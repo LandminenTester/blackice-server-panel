@@ -8,13 +8,14 @@ const folder=resolve(root,'.local/installer-'+randomBytes(5).toString('hex'));
 await mkdir(folder,{recursive:true});
 const backend=process.argv.includes('--linux')?'linux':process.argv.includes('--docker')?'docker':'windows';
 const configPath=resolve(folder,'panel.json'),url='http://127.0.0.1:20776';
-let key='',output='',csrf='',cookies=new Map(),supervisor,web;
+let key='',output='',csrf='',cookies=new Map(),supervisor,web,restartWeb,stopWeb;
 const target=backend==='windows'?resolve(folder,'Replay Download'):'/server/download';
 if(backend==='windows') {
  await writeFile(configPath,JSON.stringify({schemaVersion:2,pipeName:'panel-install-'+process.pid,url}));
  supervisor=spawn(resolve(root,build,'supervisor/Supervisor.exe'),[configPath],{stdio:['ignore','pipe','inherit']});
  supervisor.stdout.on('data',chunk=>{output+=chunk;key=output.match(/Setup key: ([A-F0-9]+)/)?.[1]??'';});
- web=spawn(resolve(root,build,'web/Web.exe'),[],{cwd:resolve(root,build,'web'),env:{...process.env,REPLAY_PANEL_CONFIG:configPath},stdio:'ignore'});
+ restartWeb=()=>{web=spawn(resolve(root,build,'web/Web.exe'),[],{cwd:resolve(root,build,'web'),env:{...process.env,REPLAY_PANEL_CONFIG:configPath},stdio:'ignore'});};restartWeb();
+ stopWeb=async()=>{const previous=web;execFileSync('node',[resolve(root,'scripts/control.mjs'),'stop-web'],{cwd:root,env:{...process.env,REPLAY_PANEL_CONFIG:configPath},stdio:'ignore'});if(previous.exitCode===null)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Webhost shutdown timed out')),10000);previous.once('exit',()=>{clearTimeout(timer);resolve();});});};
 } else {
  // Containers/volumes use a unique test prefix; no production mounts.
  const name='panel-install-'+process.pid;const volume=name+'-files';
@@ -29,6 +30,8 @@ if(backend==='windows') {
  const env=['-e','REPLAY_PANEL_CONFIG=/test/state/panel.json','-e','REPLAY_PANEL_RUNTIME=/test/run','-e','REPLAY_PANEL_MOUNTS=/server','-e','REPLAY_PANEL_URL=http://0.0.0.0:20772','-e','REPLAY_PANEL_HOSTS=127.0.0.1:20776'];
  execFileSync('docker',['run','-d','--name',name+'-supervisor',...env,'-v',volume+':/test','-v',volume+':/server',...(backend==='docker'?['--user','10001:'+dockerGid,'-v','/var/run/docker.sock:/var/run/docker.sock','-e','REPLAY_PANEL_HOST_SERVER='+hostPath]:[]),'--entrypoint','/app/artifacts/supervisor/Supervisor','replay-panel:next','/test/state/panel.json']);
  execFileSync('docker',['run','-d','--name',name+'-web',...env,'-v',volume+':/test','-p','127.0.0.1:20776:20772','replay-panel:next']);
+ stopWeb=()=>execFileSync('docker',['stop',name+'-web'],{stdio:'ignore'});
+ restartWeb=()=>execFileSync('docker',['start',name+'-web'],{stdio:'ignore'});
  supervisor={kill(){if(backend==='docker'){try{const data=JSON.parse(execFileSync('docker',['exec',name+'-supervisor','cat','/test/state/panel.json'],{encoding:'utf8'}));if(/^[a-f0-9]{64}$/.test(data.containerId))execFileSync('docker',['rm','-f',data.containerId]);}catch{}}execFileSync('docker',['rm','-f',name+'-supervisor']);}};
  web={kill(){execFileSync('docker',['rm','-f',name+'-web']);execFileSync('docker',['volume','rm',volume]);}};
  for(let i=0;i<30&&!key;i++){key=execFileSync('docker',['logs',name+'-supervisor'],{encoding:'utf8'}).match(/Setup key: ([A-F0-9]+)/)?.[1]??'';await new Promise(r=>setTimeout(r,200));}
@@ -49,5 +52,18 @@ try{
  csrf=(await req('/api/session')).csrf;
  await req('/api/server/start',{});console.log('PASS downloaded Replay starts');
  await new Promise(r=>setTimeout(r,2500));await req('/api/command',{text:'echo installer-tested'});
+ 
+ await req('/api/settings',{shutdownMode:'keep-running'});
+ await stopWeb();restartWeb();
+ for(let i=0;i<50;i++){try{csrf=(await req('/api/session')).csrf;break;}catch{}await new Promise(r=>setTimeout(r,200));}
+ assert.equal((await req('/api/status')).status.state,'running');console.log('PASS '+backend+' keep-running survives Webhost restart');
+ const list=await req('/api/bundles');assert.equal(list.ok,true);console.log('PASS '+backend+' bundle query through managed terminal');
+ await req('/api/settings',{shutdownMode:'stop-server'});
+ await stopWeb();restartWeb();
+ for(let i=0;i<50;i++){try{csrf=(await req('/api/session')).csrf;break;}catch{}await new Promise(r=>setTimeout(r,200));}
+ assert.equal((await req('/api/status')).status.state,'stopped');console.log('PASS '+backend+' stop-server mode gracefully stops Replay');
+ await req('/api/server/start',{});await new Promise(r=>setTimeout(r,1500));
+ await req('/api/server/restart',{});await new Promise(r=>setTimeout(r,1500));assert.equal((await req('/api/status')).status.state,'running');console.log('PASS '+backend+' restart');
+
  await req('/api/server/stop',{});console.log('PASS downloaded Replay stops gracefully');
 }catch(error){try{console.log(JSON.stringify(await req('/api/logs')));}catch{}throw error;}finally{supervisor?.kill();web?.kill();}
