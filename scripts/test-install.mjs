@@ -24,9 +24,10 @@ if(backend==='windows') {
    const initial={schemaVersion:2,backend:'docker',url:'http://0.0.0.0:20772',allowedHosts:['127.0.0.1:20776'],gamePort:30780,voicePort:30781};
    execFileSync('docker',['run','--rm','--user','0','--entrypoint','sh','-v',volume+':/test','replay-panel:next','-c','printf %s "$1" > /test/state/panel.json && chown 10001:10001 /test/state/panel.json','sh',JSON.stringify(initial)]);
  }
+ const dockerGid=process.platform==='linux'?execFileSync('stat',['-c','%g','/var/run/docker.sock'],{encoding:'utf8'}).trim():'0';
  const hostPath=execFileSync('docker',['volume','inspect',volume,'--format','{{.Mountpoint}}'],{encoding:'utf8'}).trim()+'/download';
  const env=['-e','REPLAY_PANEL_CONFIG=/test/state/panel.json','-e','REPLAY_PANEL_RUNTIME=/test/run','-e','REPLAY_PANEL_MOUNTS=/server','-e','REPLAY_PANEL_URL=http://0.0.0.0:20772','-e','REPLAY_PANEL_HOSTS=127.0.0.1:20776'];
- execFileSync('docker',['run','-d','--name',name+'-supervisor',...env,'-v',volume+':/test','-v',volume+':/server',...(backend==='docker'?['--user','10001:0','-v','/var/run/docker.sock:/var/run/docker.sock','-e','REPLAY_PANEL_HOST_SERVER='+hostPath]:[]),'--entrypoint','/app/artifacts/supervisor/Supervisor','replay-panel:next','/test/state/panel.json']);
+ execFileSync('docker',['run','-d','--name',name+'-supervisor',...env,'-v',volume+':/test','-v',volume+':/server',...(backend==='docker'?['--user','10001:'+dockerGid,'-v','/var/run/docker.sock:/var/run/docker.sock','-e','REPLAY_PANEL_HOST_SERVER='+hostPath]:[]),'--entrypoint','/app/artifacts/supervisor/Supervisor','replay-panel:next','/test/state/panel.json']);
  execFileSync('docker',['run','-d','--name',name+'-web',...env,'-v',volume+':/test','-p','127.0.0.1:20776:20772','replay-panel:next']);
  supervisor={kill(){if(backend==='docker'){try{const data=JSON.parse(execFileSync('docker',['exec',name+'-supervisor','cat','/test/state/panel.json'],{encoding:'utf8'}));if(/^[a-f0-9]{64}$/.test(data.containerId))execFileSync('docker',['rm','-f',data.containerId]);}catch{}}execFileSync('docker',['rm','-f',name+'-supervisor']);}};
  web={kill(){execFileSync('docker',['rm','-f',name+'-web']);execFileSync('docker',['volume','rm',volume]);}};
