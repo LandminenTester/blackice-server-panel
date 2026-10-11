@@ -10,3 +10,4 @@ dist/
 TestResults/
 artifacts/
 src/Web/wwwroot/
+.impeccable/review/

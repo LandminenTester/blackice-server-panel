@@ -16,6 +16,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls(config.Url);
 builder.Services.AddSingleton(config);
 builder.Services.AddSingleton<PipeClient>();
+builder.Services.AddSingleton<BundleManager>();
 builder.Services.AddHostedService<LocalStopService>();
 builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetDirectoryName(configPath)!, "keys"))).SetApplicationName("ReplayPanel");
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(o =>
@@ -67,26 +68,34 @@ app.MapPost("/api/login", async (Login body, HttpContext c) =>
 app.MapPost("/api/logout", async (HttpContext c) => { await c.SignOutAsync(); return Results.Ok(new { ok = true }); }).RequireAuthorization();
 app.MapGet("/api/status", async (PipeClient pipe, CancellationToken ct) => Result(await pipe.Call(new("status"), ct))).RequireAuthorization();
 app.MapGet("/api/logs", async (PipeClient pipe, CancellationToken ct) => Result(await pipe.Call(new("logs"), ct))).RequireAuthorization();
-app.MapPost("/api/server/{action}", async (string action, PipeClient pipe, CancellationToken ct) =>
+app.MapGet("/api/bundles", async (BundleManager bundles, CancellationToken ct) => Results.Ok(await bundles.List(ct))).RequireAuthorization();
+app.MapPost("/api/bundles/{name}/{action}", async (string name, string action, BundleManager bundles, CancellationToken ct) =>
+{
+    try { return Results.Ok(await bundles.Action(name, action, ct)); }
+    catch (InvalidOperationException e) { return Results.Json(new { error = e.Message }, statusCode: 409); }
+}).RequireAuthorization();
+app.MapPost("/api/server/{action}", async (string action, BundleManager bundles, CancellationToken ct) =>
 {
     if (action is not ("start" or "stop" or "restart" or "force-stop")) return Results.BadRequest();
-    return Result(await pipe.Call(new(action), ct));
+    return Result(await bundles.Command(new(action), ct));
 }).RequireAuthorization();
-app.MapPost("/api/command", async (Command body, PipeClient pipe, CancellationToken ct) =>
-    Result(await pipe.Call(new("command", body.Text), ct))).RequireAuthorization();
+app.MapPost("/api/command", async (Command body, BundleManager bundles, CancellationToken ct) =>
+    Result(await bundles.Command(new("command", body.Text), ct))).RequireAuthorization();
 app.MapPost("/api/settings", async (Settings body, PipeClient pipe, CancellationToken ct) =>
     Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode), ct))).RequireAuthorization();
 app.MapGet("/api/events", async (HttpContext c, PipeClient pipe) =>
 {
     c.Response.ContentType = "text/event-stream";
+    using var stopping = CancellationTokenSource.CreateLinkedTokenSource(c.RequestAborted, app.Lifetime.ApplicationStopping);
+    var ct = stopping.Token;
     try {
-        while (!c.RequestAborted.IsCancellationRequested)
+        while (!ct.IsCancellationRequested)
         {
-            var status = await pipe.Call(new("status"), c.RequestAborted);
-            var console = await pipe.Call(new("console"), c.RequestAborted);
-            await c.Response.WriteAsync("data: " + JsonSerializer.Serialize(new { status, console }, PanelConfig.Json) + "\n\n", c.RequestAborted);
-            await c.Response.Body.FlushAsync(c.RequestAborted);
-            await Task.Delay(1000, c.RequestAborted);
+            var status = await pipe.Call(new("status"), ct);
+            var console = await pipe.Call(new("console"), ct);
+            await c.Response.WriteAsync("data: " + JsonSerializer.Serialize(new { status, console }, PanelConfig.Json) + "\n\n", ct);
+            await c.Response.Body.FlushAsync(ct);
+            await Task.Delay(1000, ct);
         }
     } catch (OperationCanceledException) { } catch (IOException) { }
 }).RequireAuthorization();

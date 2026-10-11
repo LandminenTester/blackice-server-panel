@@ -22,6 +22,7 @@ Der Serverordner muss REServer.exe, die Replay-DLLs und dessen Konfiguration ent
 
 - Start, geordneter Stop und Neustart mit expliziter Prozesszuordnung.
 - Live-Konsole und aktuelle Logdatei.
+- Tab **Bundles** mit installiertem Bestand, Status und **Starten**, **Neustarten** oder **Stoppen** pro Bundle.
 - Replay-Konsolenbefehle, etwa `bundles`, `start replay-rp` oder `restart replay-rp`.
 - Erzwungener Stop als getrennte bestätigte Aktion.
 - Modus **Server weiterlaufen lassen** (Standard) oder **Server geordnet stoppen** beim Beenden des Webhosts.
@@ -33,6 +34,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/control.ps1 -Action 
 ```
 
 Der Supervisor läuft im Modus `keep-running` weiter. Der Webhost lässt sich mit `start.ps1` erneut verbinden. Um alles geordnet zu beenden, zuerst `control.ps1 -Action stop`, dann `stop-web.ps1` und zuletzt `control.ps1 -Action shutdown`. `shutdown` wird abgelehnt, solange der verwaltete Spielserver noch läuft.
+
+## Bundles verwalten
+
+Der Tab **Bundles** zeigt Verzeichnisse mit `config.toml` unter `data/ugc` sowie die von Replay gemeldeten Bundles. Gestoppte Bundles bleiben in der Liste. Bei laufendem Server sind **Starten** für gestoppte und **Neustarten / Stoppen** für laufende Bundles verfügbar. Der Status aktualisiert sich bei geöffnetem Tab alle zehn Sekunden und über **Aktualisieren**.
+
+Replays `bundles`-Ausgabe allein sagt nicht, ob ein Bundle läuft: auch gestoppte Bundles werden dort aufgelistet. Das Panel wertet deshalb die nativen Started/Restarted/Stopped-Meldungen aus und liest beim Wiederverbinden gegebenenfalls das aktuelle Serverlog. Eine Aktion gilt erst nach einer passenden Replay-Bestätigung als abgeschlossen. Konsole und Bundle-Abfragen sind im Webhost serialisiert; frei eingegebene Bundle-Befehle werden beim nächsten Aktualisieren berücksichtigt.
+
+Bei fehlender Statusbestätigung erscheint **Status unbekannt** und die Aktion bleibt gesperrt. Bei gestopptem oder extern gestartetem Server ist keine Bundle-Steuerung verfügbar. Die Erkennung ist mit Replay `1ad4600a|22` geprüft; bei geänderter Ausgabe zeigt das Panel einen Fehler, statt einen erfolgreichen Start zu behaupten. Unbekannte Namen und Befehlsverkettung werden abgewiesen. Start-/Stop-Aktionen betreffen nur das gewählte Bundle; der Serverprozess läuft weiter.
 
 ## Architektur
 
@@ -62,7 +71,7 @@ dotnet run --project tests/Backend.Tests -- .local/fixture
 node scripts/test-panel.mjs
 ```
 
-Der letzte Test benötigt bereits gebaute `artifacts/web` und `artifacts/supervisor`. Er verwendet ausschließlich die wegwerfbare ConsoleFixture auf Panelport 20774 und prüft Anmeldung, CSRF, Prozesssteuerung, Befehle und beide Abschaltmodi. Der feste Testzugang ist keine echte Panel-Zugangsinformation. Die Fixture ist kein Replay-Spielserver.
+Der letzte Test benötigt bereits gebaute `artifacts/web` und `artifacts/supervisor`. Er verwendet ausschließlich die wegwerfbare ConsoleFixture auf Panelport 20774 und prüft in 30 Szenarien Anmeldung, CSRF, Prozesssteuerung, Befehle, beide Abschaltmodi und die Bundle-Verwaltung (einschließlich verzögerter Lifecycle-Bestätigung, konkurrierender Abfragen, falschem Status, nativen Fehlern und Wiederverbindung). Der feste Testzugang ist keine echte Panel-Zugangsinformation. Die Fixture ist kein Replay-Spielserver.
 
 Ein separater echter Replay-Test kann mit einem isolierten Serverordner und anderen Spiel-/Voiceports durchgeführt werden. Er darf nicht auf einer bestehenden Spielinstanz laufen.
 

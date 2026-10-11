@@ -1,16 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   type Status = { state: string; pid: number | null; serverRoot: string; shutdownMode: string; detail?: string };
+  type Bundle = { name: string; state: 'running' | 'stopped' | 'unknown' };
   let authenticated = $state(false), ready = $state(false), csrf = $state('');
   let password = $state(''), error = $state(''), notice = $state(''), busy = $state(false);
   let status = $state<Status | null>(null), lines = $state<string[]>([]), logs = $state<string[]>([]);
   let connected = $state(false), command = $state(''), view = $state('console'), follow = $state(true);
   let output = $state<HTMLTextAreaElement>();
+  let bundles = $state<Bundle[]>([]), bundleLoading = $state(false), bundleReady = $state(false), bundleControl = $state(false);
+  let bundleError = $state(''), bundleCheckedAt = $state(''), activeBundle = $state('');
   let confirmDialog: HTMLDialogElement;
   let pendingAction = $state(''), stream: EventSource | undefined;
   const stateNames: Record<string, string> = { running: 'Server läuft', stopped: 'Server gestoppt', external: 'Extern gestartet', unknown: 'Status unbekannt' };
   const serverState = $derived(status?.state ?? 'unknown');
-  const outputText = $derived((view === 'console' ? lines : logs).join('\n') || (view === 'logs' ? 'Noch keine Logeinträge in der aktuellen Datei.' : serverState === 'external' ? 'Extern gestarteter Server. Die Logdatei ist verfügbar; die Live-Konsole benötigt einen Start über den Supervisor.' : serverState === 'running' ? 'Server läuft. Warte auf die erste Konsolenausgabe.' : serverState === 'stopped' ? 'Noch keine Ausgabe. Starte den Server, um seine Konsole hier zu sehen.' : 'Keine Verbindung zum Supervisor. Prüfe den lokalen Dienst.'));
+  const outputText = $derived((view === 'console' ? lines.filter(x => !/panel-query-[a-f0-9]{12}-(begin|end)/.test(x) && !/^\s*>*\s*bundles\s*$/.test(x)) : logs).join('\n') || (view === 'logs' ? 'Noch keine Logeinträge in der aktuellen Datei.' : serverState === 'external' ? 'Extern gestarteter Server. Die Logdatei ist verfügbar; die Live-Konsole benötigt einen Start über den Supervisor.' : serverState === 'running' ? 'Server läuft. Warte auf die erste Konsolenausgabe.' : serverState === 'stopped' ? 'Noch keine Ausgabe. Starte den Server, um seine Konsole hier zu sehen.' : 'Keine Verbindung zum Supervisor. Prüfe den lokalen Dienst.'));
   async function session() {
     const response = await fetch('/api/session');
     if (!response.ok) throw new Error('Panel nicht erreichbar. Seite neu laden.');
@@ -70,9 +73,50 @@
     try { const response = await fetch('/api/logs'); const data = await response.json(); if (!data.ok) throw new Error(data.error); logs = data.lines; view = 'logs'; }
     catch (e) { error = (e as Error).message; }
   }
+  function receiveBundles(data: { ok: boolean; bundles: Bundle[]; canControl: boolean; checkedAt: string; error?: string }) {
+    bundleControl = data.ok && data.canControl;
+    bundleError = data.error ?? '';
+    if (data.ok) { bundles = data.bundles; bundleCheckedAt = data.checkedAt; bundleReady = true; }
+  }
+  async function loadBundles() {
+    if (bundleLoading || busy) return;
+    bundleLoading = true;
+    try {
+      const response = await fetch('/api/bundles');
+      if (!response.ok) throw new Error(response.status === 401 ? 'Bitte erneut anmelden.' : 'Bundle-Liste nicht erreichbar. Erneut aktualisieren.');
+      receiveBundles(await response.json());
+    } catch (e) { bundleError = (e as Error).message; bundleControl = false; }
+    finally { bundleLoading = false; }
+  }
+  async function bundleAction(bundle: Bundle, action: string) {
+    busy = true; activeBundle = bundle.name; error = ''; notice = '';
+    try {
+      receiveBundles(await post('/api/bundles/' + encodeURIComponent(bundle.name) + '/' + action));
+      notice = bundle.name + (action === 'stop' ? ' wurde gestoppt.' : action === 'restart' ? ' wurde neu gestartet.' : ' wurde gestartet.');
+    } catch (e) { error = (e as Error).message; bundleControl = false; }
+    finally { busy = false; activeBundle = ''; }
+    if (!bundleControl) await loadBundles();
+  }
+  function selectView(name: string) {
+    view = name;
+    if (name === 'bundles') loadBundles();
+    if (name === 'logs') loadLogs();
+  }
+  function tabKeys(event: KeyboardEvent) {
+    const names = ['console', 'logs', 'bundles'];
+    let index = names.indexOf(view);
+    if (event.key === 'ArrowRight') index = (index + 1) % names.length;
+    else if (event.key === 'ArrowLeft') index = (index + names.length - 1) % names.length;
+    else if (event.key === 'Home') index = 0;
+    else if (event.key === 'End') index = names.length - 1;
+    else return;
+    event.preventDefault(); selectView(names[index]);
+    (event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('button')[index]?.focus();
+  }
   onMount(() => {
     session().then(() => { if (authenticated) connect(); }).catch(e => error = e.message).finally(() => ready = true);
-    return () => stream?.close();
+    const refresh = setInterval(() => { if (authenticated && view === 'bundles') loadBundles(); }, 10000);
+    return () => { stream?.close(); clearInterval(refresh); };
   });
   $effect(() => { const count = lines.length; const latest = lines.at(-1); if (follow && output && view === 'console') { requestAnimationFrame(() => { if (output) output.scrollTop = output.scrollHeight; }); } void count; void latest; });
 </script>
@@ -117,9 +161,34 @@
     <div class="work-grid">
       <section class="console" aria-label="Serverkonsole">
         <div class="console-toolbar">
-          <div class="tabs"><button class:active={view === 'console'} onclick={() => view = 'console'}>Live-Konsole</button><button class:active={view === 'logs'} onclick={loadLogs}>Logdatei</button></div>
-          <label class="follow"><input type="checkbox" bind:checked={follow} /> Ausgabe folgen</label>
+          <div class="tabs" role="tablist" tabindex="-1" aria-label="Serveransichten" onkeydown={tabKeys}>
+            <button id="tab-console" role="tab" aria-selected={view === 'console'} aria-controls="panel-console" tabindex={view === 'console' ? 0 : -1} class:active={view === 'console'} onclick={() => selectView('console')}>Live-Konsole</button>
+            <button id="tab-logs" role="tab" aria-selected={view === 'logs'} aria-controls="panel-logs" tabindex={view === 'logs' ? 0 : -1} class:active={view === 'logs'} onclick={() => selectView('logs')}>Logdatei</button>
+            <button id="tab-bundles" role="tab" aria-selected={view === 'bundles'} aria-controls="panel-bundles" tabindex={view === 'bundles' ? 0 : -1} class:active={view === 'bundles'} onclick={() => selectView('bundles')}>Bundles</button>
+          </div>
+          {#if view !== 'bundles'}<label class="follow"><input type="checkbox" bind:checked={follow} /> Ausgabe folgen</label>{/if}
         </div>
+        {#if view === 'bundles'}
+          <div id="panel-bundles" role="tabpanel" aria-labelledby="tab-bundles" class="bundle-panel" aria-busy={bundleLoading}>
+            <div class="bundle-heading"><div><h2>Installierte Bundles</h2><p class="help">{bundleCheckedAt ? 'Geprüft um ' + new Date(bundleCheckedAt).toLocaleTimeString('de-DE') + ' · alle 10 Sekunden aktualisiert' : 'Der Status wird direkt beim Server abgefragt.'}</p></div><button class="quiet" onclick={loadBundles} disabled={bundleLoading || busy}>{bundleLoading ? 'Laden …' : 'Aktualisieren'}</button></div>
+            {#if bundleError}<p class="bundle-message" role="status">{bundleError}</p>{/if}
+            {#if !bundleReady && bundleLoading}<p class="bundle-message" role="status">Bundle-Liste wird geladen …</p>
+            {:else if bundleReady && bundles.length === 0}<p class="bundle-message">Keine Bundles gefunden. Lege ein Bundle mit config.toml im Serverordner unter data/ugc ab und aktualisiere die Liste.</p>
+            {/if}
+            <ul class="bundle-list" aria-label="Bundle-Status">
+              {#each bundles as bundle (bundle.name)}
+                <li class="bundle-row"><div class="bundle-identity"><span class="bundle-name">{bundle.name}</span><span class="bundle-state"><span class="dot" class:online={bundle.state === 'running' && bundleControl && connected && serverState === 'running'}></span>{!connected ? 'Status unbekannt' : serverState === 'stopped' ? 'Gestoppt' : !bundleControl ? 'Status unbekannt' : bundle.state === 'running' ? 'Gestartet' : bundle.state === 'stopped' ? 'Gestoppt' : 'Status unbekannt'}</span></div>
+                  <div class="bundle-actions" role="group" aria-label={'Aktionen für ' + bundle.name}>
+                    {#if activeBundle === bundle.name}<span class="help" role="status">Aktion läuft …</span>{/if}
+                    {#if bundle.state === 'running' && serverState !== 'stopped'}<button onclick={() => bundleAction(bundle, 'restart')} disabled={busy || bundleLoading || !bundleControl || !connected || serverState !== 'running'}>Neustarten</button><button class="quiet" onclick={() => bundleAction(bundle, 'stop')} disabled={busy || bundleLoading || !bundleControl || !connected || serverState !== 'running'}>Stoppen</button>
+                    {:else}<button class="primary" onclick={() => bundleAction(bundle, 'start')} disabled={busy || bundleLoading || !bundleControl || !connected || serverState !== 'running' || bundle.state !== 'stopped'}>Starten</button>{/if}
+                  </div>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {:else}
+        <div id={view === 'console' ? 'panel-console' : 'panel-logs'} role="tabpanel" aria-labelledby={view === 'console' ? 'tab-console' : 'tab-logs'}>
         <textarea class="console-output" bind:this={output} readonly aria-label={view === 'console' ? 'Konsolenausgabe' : 'Logausgabe'} value={outputText}></textarea>
         <form class="command-form" onsubmit={send}>
           <label class="sr-only" for="command">Replay-Konsolenbefehl</label>
@@ -127,6 +196,8 @@
           <input id="command" bind:value={command} placeholder="Replay-Befehl eingeben, z. B. bundles" autocomplete="off" maxlength="1024" disabled={busy || !connected || serverState !== 'running'} />
           <button disabled={busy || !connected || serverState !== 'running' || !command.trim()}>Senden</button>
         </form>
+        </div>
+        {/if}
       </section>
       <aside class="details">
         <section><h2>Laufzeit</h2><p class="server-state"><span class:online={serverState === 'running'} class="dot"></span>{stateNames[serverState] ?? serverState}</p><dl><dt>Prozess-ID</dt><dd>{status?.pid ?? '—'}</dd><dt>Backend</dt><dd>Windows · ConPTY</dd><dt>Serverordner</dt><dd class="path">{status?.serverRoot ?? 'Nicht verbunden'}</dd></dl>{#if status?.detail}<p class="help">{status.detail}</p>{/if}</section>
