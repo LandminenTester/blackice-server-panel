@@ -6,10 +6,10 @@
 
 Die folgenden Befehle im integrierten VS-Code-Terminal oder einem selbst geöffneten PowerShell-/Linux-Terminal ausführen. Ein Buildfehler beendet dann nicht das Fenster. Ein roter Fehler ist kein erfolgreicher Build: erst die erste Fehlermeldung beheben, danach denselben Schritt erneut ausführen.
 
-Das Terminal muss im Repositoryordner stehen, der `global.json`, `ui` und `src` enthält. Nicht im Replay-Spielserverordner und nicht in `artifacts/web` bauen.
+Das Terminal muss im Repositoryordner stehen, der `global.json`, `ui` und `src` enthält. Nicht im BlackICE-Spielserverordner und nicht in `artifacts/web` bauen.
 
 ```powershell
-cd "C:\Pfad\zum\replay-server-panel"
+cd "C:\Pfad\zum\blackice-server-panel"
 git --version
 dotnet --version
 node --version
@@ -56,7 +56,7 @@ Referenz: Debian 13, x86-64. Erst Git, .NET SDK und Node installieren. Zusätzli
 sudo apt install build-essential ca-certificates libicu76 libssl3t64 libstdc++6 zlib1g tmux
 # Nur für eine grafische Desktopumgebung:
 sudo apt install xterm
-cd /pfad/zum/replay-server-panel
+cd /pfad/zum/blackice-server-panel
 
 npm --prefix ui ci
 npm --prefix ui run check
@@ -75,7 +75,7 @@ cp -R licenses artifacts/web/wwwroot/
 ./Start
 ```
 
-Der kleine C-Helfer erzeugt eine echte PTY für Replay. Für den Betrieb ist er im Release enthalten; zum lokalen Bau werden cc und libutil benötigt. Auf einem Desktop erscheint ein zusätzliches Serverterminal. Per SSH wird eine getrennte tmux-Sitzung verwendet; `C` im Startterminal hängt diese an. Mit Strg+B, danach D, zurück zum Steuerterminal wechseln. `exit` in der Serverkonsole stoppt den Server; `Q` im Steuerterminal beendet alles.
+Der kleine C-Helfer erzeugt eine echte PTY für BlackICE. Für den Betrieb ist er im Release enthalten; zum lokalen Bau werden cc und libutil benötigt. Auf einem Desktop erscheint ein zusätzliches Serverterminal. Per SSH wird eine getrennte tmux-Sitzung verwendet; `C` im Startterminal hängt diese an. Mit Strg+B, danach D, zurück zum Steuerterminal wechseln. `exit` in der Serverkonsole stoppt den Server; `Q` im Steuerterminal beendet alles.
 
 ### Docker bauen
 
@@ -139,7 +139,7 @@ Use the exact Windows or Linux command block above, one command at a time:
 
 Before replacing active binaries choose `Q` in the Start terminal. Stop Vite separately with Ctrl+C. Keep private `.local` configuration and all real game data. To build while an old release runs, publish into a separate staging directory instead of overwriting loaded DLLs.
 
-Windows opens a control terminal and a separate Replay server terminal. Linux desktop uses a terminal emulator; SSH uses tmux. `C` attaches the server session, Ctrl+B then D returns to control, `exit` stops the game, and `Q` shuts down everything. Docker uses the shown image build and separate services without native windows.
+Windows opens a control terminal and a separate BlackICE server terminal. Linux desktop uses a terminal emulator; SSH uses tmux. `C` attaches the server session, Ctrl+B then D returns to control, `exit` stops the game, and `Q` shuts down everything. Docker uses the shown image build and separate services without native windows.
 
 Troubleshooting:
 - MSB1003: specify `src/Web` or `src/Supervisor` and work from the repository.

@@ -2,7 +2,7 @@
 
 ## English
 
-In **Settings → Panel updates**, the panel checks the latest stable public release from LandminenTester/replay-server-panel. It displays installed/latest versions and release notes. Checks are cached for one minute; no GitHub token is required. Drafts and prereleases are excluded.
+In **Settings → Panel updates**, the panel checks the latest stable public release from LandminenTester/blackice-server-panel. It displays installed/latest versions and release notes. Checks are cached for one minute; no GitHub token is required. Drafts and prereleases are excluded.
 
 Choose **Download and verify**. The supervisor downloads the exact Windows x64 ZIP or Linux x64 tar.gz, verifies length and GitHub's SHA-256 asset digest, rejects unsafe paths/links and checks platform files and VERSION. It stages everything without touching the running installation. Progress and cancellation are available.
 
@@ -20,11 +20,11 @@ The new panel must answer the version and web readiness probes. Failed startup r
 
 Keep backups until the new version works. For manual recovery, stop all remaining panel processes using the direct stop command, move the failed artifacts/Start aside, restore the backup artifacts/Start and, only if configuration migration failed, restore panel.json. Keep the keys directory. Start again. If the stop command fails, inspect process identity before touching active binaries. Never replace the game-server directory with a panel package.
 
-When building a release, VERSION must match the assemblies' Directory.Build.props version. The CI packages this file and verifies replacement plus startup-failure rollback on Windows and Linux. Initial installation of the updater still requires the version0.5.1 package; subsequent releases can be installed directly in the dashboard.
+When building a release, VERSION must match the assemblies' Directory.Build.props version. The CI packages this file and verifies replacement plus startup-failure rollback on Windows and Linux. Version 0.5.1 uses the former repository URL and cannot verify renamed release assets. Install 1.0.0 manually once, retaining .local; subsequent native releases can be installed in the dashboard.
 
 ## Deutsch
 
-Unter **Einstellungen → Panel-Updates** prüft das Panel das neueste stabile öffentliche Release von LandminenTester/replay-server-panel. Installierte/neue Version und Releasehinweise werden angezeigt. Prüfungen werden eine Minute zwischengespeichert; ein GitHub-Token ist nicht erforderlich. Entwürfe und Vorabversionen werden ausgeschlossen.
+Unter **Einstellungen → Panel-Updates** prüft das Panel das neueste stabile öffentliche Release von LandminenTester/blackice-server-panel. Installierte/neue Version und Releasehinweise werden angezeigt. Prüfungen werden eine Minute zwischengespeichert; ein GitHub-Token ist nicht erforderlich. Entwürfe und Vorabversionen werden ausgeschlossen.
 
 **Herunterladen und prüfen** lädt das passende Windows-x64-ZIP beziehungsweise Linux-x64-tar.gz. Der Supervisor prüft Paketlänge und GitHubs SHA-256-Wert, verwirft unsichere Pfade/Links und prüft Plattformdateien und VERSION. Das laufende Paket bleibt währenddessen erhalten. Fortschritt und Abbruch sind verfügbar.
 
@@ -42,4 +42,4 @@ Die neue Version muss Versions- und Webbereitschaftsprüfungen bestehen. Scheite
 
 Sicherungen behalten, bis die neue Version funktioniert. Zur manuellen Wiederherstellung verbliebene Panelprozesse mit dem direkten Stopbefehl beenden, fehlgeschlagene Artefakte/Start zur Seite verschieben und die Sicherung zurückkopieren. panel.json nur bei gescheiterter Konfigurationsmigration zurückspielen; das Schlüsselverzeichnis behalten. Anschließend Start öffnen. Falls der Stopbefehl scheitert, vor dem Dateiaustausch Prozessidentitäten prüfen. Keine Paneldateien in den Spielserverordner kopieren.
 
-VERSION muss beim Releasebau der Assemblyversion aus Directory.Build.props entsprechen. Die CI liefert diese Datei mit und prüft Austausch sowie Wiederherstellung unter Windows und Linux. Einmalig muss das Paket mit dem Updater (ab0.5.1) installiert werden; spätere Releases lassen sich direkt über das Dashboard installieren.
+VERSION muss beim Releasebau der Assemblyversion aus Directory.Build.props entsprechen. Die CI liefert diese Datei mit und prüft Austausch sowie Wiederherstellung unter Windows und Linux. Version 0.5.1 verwendet den alten Repositorynamen und kann umbenannte Release-Artefakte nicht prüfen. 1.0.0 einmal manuell installieren und .local erhalten; spätere native Releases lassen sich über das Dashboard installieren.

@@ -12,10 +12,10 @@ public sealed record UpdateJob(string Id,string State,string Phase,long Bytes=0,
 public sealed record UpdateInfo(string Current,string? Latest,bool Available,bool CanInstall,string? ReleaseUrl,UpdateJob? Job);
 public sealed record UpdateManifest(string Root,string Config,string Stage,string Target,string Previous);
 public sealed class PanelUpdates : IDisposable {
- public const string Repository="LandminenTester/replay-server-panel";
+ public const string Repository="LandminenTester/blackice-server-panel";
  public static string RunningVersion=>typeof(PanelUpdates).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion.Split('+')[0];
  readonly string root,configPath,stateFile;readonly HttpClient http;readonly SemaphoreSlim gate=new(1);readonly object stateGate=new();CancellationTokenSource? cancel;Task? downloadTask;PanelRelease? release;UpdateJob? job;DateTimeOffset checkedAt;
- public PanelUpdates(string configPath,HttpClient? client=null,string? packageRoot=null){this.configPath=Path.GetFullPath(configPath);root=Path.GetFullPath(packageRoot??Path.Combine(AppContext.BaseDirectory,"..",".."));stateFile=Path.Combine(root,".local","panel-update.json");http=client??new HttpClient(){Timeout=TimeSpan.FromMinutes(15)};http.DefaultRequestHeaders.UserAgent.ParseAdd("REPLAY.re-Panel/"+RunningVersion);if(File.Exists(stateFile))try{job=JsonSerializer.Deserialize<UpdateJob>(File.ReadAllText(stateFile),PanelConfig.Json);if(job?.State is "downloading" or "verifying" or "ready")job=job with{State="failed",Error="update.interrupted"};}catch(JsonException){} }
+ public PanelUpdates(string configPath,HttpClient? client=null,string? packageRoot=null){this.configPath=Path.GetFullPath(configPath);root=Path.GetFullPath(packageRoot??Path.Combine(AppContext.BaseDirectory,"..",".."));stateFile=Path.Combine(root,".local","panel-update.json");http=client??new HttpClient(){Timeout=TimeSpan.FromMinutes(15)};http.DefaultRequestHeaders.UserAgent.ParseAdd("BlackICE-Panel/"+RunningVersion);if(File.Exists(stateFile))try{job=JsonSerializer.Deserialize<UpdateJob>(File.ReadAllText(stateFile),PanelConfig.Json);if(job?.State is "downloading" or "verifying" or "ready")job=job with{State="failed",Error="update.interrupted"};}catch(JsonException){} }
  bool HasController {get {try{using var probe=new FileStream(Path.Combine(Path.GetDirectoryName(configPath)!,"controller.lock"),FileMode.Open,FileAccess.ReadWrite,FileShare.None);return false;}catch(IOException e){return File.Exists(Path.Combine(Path.GetDirectoryName(configPath)!,"controller.lock"))&&e is not FileNotFoundException;}}}
  public bool CanInstall=>HasController&&Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER")!="true"&&File.Exists(Path.Combine(root,OperatingSystem.IsWindows()?"Start.exe":"Start"));
  public UpdateInfo Status(){lock(stateGate){if(job?.State=="applying"&&File.Exists(stateFile)){try{job=JsonSerializer.Deserialize<UpdateJob>(File.ReadAllText(stateFile),PanelConfig.Json)??job;}catch(IOException){}catch(JsonException){}}return new(RunningVersion,release?.Version,release is not null&&Version.Parse(release.Version)>Version.Parse(RunningVersion),CanInstall,release?.Url,job);}}
@@ -23,7 +23,7 @@ public sealed class PanelUpdates : IDisposable {
   using var doc=JsonDocument.Parse(json);var value=doc.RootElement;
   var tag=value.GetProperty("tag_name").GetString()!;var version=tag.TrimStart('v');
   if(!Regex.IsMatch(version,@"^[0-9]+[.][0-9]+[.][0-9]+$")||!Version.TryParse(version,out _)||value.GetProperty("draft").GetBoolean()||value.GetProperty("prerelease").GetBoolean())throw new InvalidOperationException("update.release");
-  var name=windows?"replay-server-panel-win-x64.zip":"replay-server-panel-linux-x64.tar.gz";
+  var name=windows?"blackice-server-panel-win-x64.zip":"blackice-server-panel-linux-x64.tar.gz";
   var asset=value.GetProperty("assets").EnumerateArray().SingleOrDefault(a=>a.GetProperty("name").GetString()==name);
   if(asset.ValueKind==JsonValueKind.Undefined)throw new InvalidOperationException("update.asset");
   var digest=asset.TryGetProperty("digest",out var d)?d.GetString():null;

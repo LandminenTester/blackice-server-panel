@@ -1,5 +1,5 @@
 ---
-name: Unofficial REPLAY.re - Server Webpanel
+name: Unofficial BlackICE - Server Webpanel
 description: Cyberpunk operating surface with dark panels, angular red contours, cyan information and selective yellow actions.
 colors:
   background: "#101116"
@@ -71,7 +71,7 @@ components:
     padding: "12px"
 ---
 
-# Design System: Unofficial REPLAY.re - Server Webpanel
+# Design System: Unofficial BlackICE - Server Webpanel
 
 ## Overview
 
@@ -118,7 +118,7 @@ Dashboard pairs a 280px runtime column with recent output, separated by 36px. Co
 
 Between 721px and 1100px, the navigation rail narrows to 190px, workspace padding becomes 20px and Dashboard stacks. Runtime details become a two-column definition list. Users also stacks, with the user list capped at 220px and permissions arranged in two columns. The header retains compact controls and the textual server state; connection text is hidden.
 
-At 720px and below, navigation becomes a horizontally scrollable row of available icon-and-label tabs beneath the toolbar. The toolbar has a minimum height of 72px and can grow with wrapped text; server controls and state occupy a dedicated full-width row. Workspace padding becomes 22px vertically and 16px horizontally. Toolbars wrap, bundle identity precedes full-width action rows, and Users fields and permissions become one column. Authentication/setup padding becomes 42px by 22px. Paths, identifiers and feedback wrap. Console output scrolls within a non-resizable textarea: it flexes to available panel height on desktop and uses 50dvh on mobile. The sidebar footer contains REPLAY.re, the unofficial designation and the public GitHub link; on mobile these wrap beneath navigation.
+At 720px and below, navigation becomes a horizontally scrollable row of available icon-and-label tabs beneath the toolbar. The toolbar has a minimum height of 72px and can grow with wrapped text; server controls and state occupy a dedicated full-width row. Workspace padding becomes 22px vertically and 16px horizontally. Toolbars wrap, bundle identity precedes full-width action rows, and Users fields and permissions become one column. Authentication/setup padding becomes 42px by 22px. Paths, identifiers and feedback wrap. Console output scrolls within a non-resizable textarea: it flexes to available panel height on desktop and uses 50dvh on mobile. The sidebar footer contains BlackICE, the unofficial designation and the public GitHub link; on mobile these wrap beneath navigation.
 
 ## Elevation & Depth
 
@@ -180,6 +180,6 @@ Bounded visual evidence for this increment is `.impeccable/review/fullhd-updates
 Settings reuses the existing custom Toggle for the persisted auto-start preference, with a localized explanation and disabled state during requests or disconnection. Language selection also persists the native control-terminal language. No visual identity or spacing tokens changed. Native process terminals are functional OS surfaces and do not adopt the web dashboard chrome.
 
 ## Fixed dashboard and accounts
-At desktop sizes, the header and sidebar remain visible. The workspace occupies the remaining viewport; the console output and large lists scroll within their own regions. Full HD target: 1920×1080 at default zoom. Server controls and status share the header on every authenticated page. Sidebar footer contains REPLAY.re, the unofficial designation and the public GitHub link. Users reuses Toggle and existing form tokens for individual permissions; API authorization controls capabilities. The wide layout pairs a bordered user list with an editor separated by a red top contour. Username/password fields share a row, and permissions use a three-column grid. The enabled switch and all thirteen permission switches expose labels and checked state, and disable during requests. Editing preserves the username and permits an optional replacement password; creation requires a password. Save uses the existing yellow primary action, and Delete opens a native confirmation dialog. Editor errors and saved feedback retain alert/status semantics.
+At desktop sizes, the header and sidebar remain visible. The workspace occupies the remaining viewport; the console output and large lists scroll within their own regions. Full HD target: 1920×1080 at default zoom. Server controls and status share the header on every authenticated page. Sidebar footer contains BlackICE, the unofficial designation and the public GitHub link. Users reuses Toggle and existing form tokens for individual permissions; API authorization controls capabilities. The wide layout pairs a bordered user list with an editor separated by a red top contour. Username/password fields share a row, and permissions use a three-column grid. The enabled switch and all thirteen permission switches expose labels and checked state, and disable during requests. Editing preserves the username and permits an optional replacement password; creation requires a password. Save uses the existing yellow primary action, and Delete opens a native confirmation dialog. Editor errors and saved feedback retain alert/status semantics.
 
 Verification of the account/shell change: `.impeccable/review/fullhd-console.png` and `fullhd-users.png` are complete 1920×1080 captures; `mobile-users.png` covers Users at 390px. The bounded finish review disposition is **ship**. Root-agent DOM checks on all five authenticated pages show no body/workspace scrolling at default Full HD zoom; Mobile Users has no horizontal overflow. Dynamic-tab Home/End reaches Users. Finish review resolved keyboard wrapping and permission-sensitive cached logs. Backend permission, password/session revocation and protected-last-manager checks are covered separately by integration/core tests. This increment preserves the Cyberpunk tokens and reduced-motion behavior; its visual confirmation does not constitute an exhaustive accessibility or backend audit.

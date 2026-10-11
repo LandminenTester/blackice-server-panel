@@ -4,7 +4,7 @@
 
 Linux x86-64, Docker Engine and Compose v2. Webhost and Supervisor are separate; only the Supervisor receives the Docker socket.
 
-First download the versioned Docker archive from the public GitHub release and load it with `gzip -dc replay-server-panel-docker.tar.gz | docker load`. This installs the exact image tag referenced by Compose without requiring a registry login.
+First download the versioned Docker archive from the public GitHub release and load it with `gzip -dc blackice-server-panel-docker.tar.gz | docker load`. This installs the exact image tag referenced by Compose without requiring a registry login.
 
 1. Copy `deploy/compose.env.example` to private `.env`. Set absolute `PANEL_STATE`, `PANEL_RUNTIME` and `SERVER_PATH`. Set `DOCKER_GID` from `stat -c %g /var/run/docker.sock`.
 2. Create these host directories, owned by UID/GID 10001 with mode 0700. The server directory must be empty for installation.
@@ -22,7 +22,7 @@ Stop only Webhost using `docker compose ... stop web` for keep-running behavior.
 
 Linux x86-64 mit Docker Engine und Compose v2. Webhost und Supervisor sind getrennt; nur der Supervisor erhält den Docker-Socket.
 
-Zuerst das versionierte Docker-Archiv aus dem öffentlichen GitHub-Release laden und mit `gzip -dc replay-server-panel-docker.tar.gz | docker load` importieren. Damit liegt das passende Compose-Image ohne Registryanmeldung lokal vor.
+Zuerst das versionierte Docker-Archiv aus dem öffentlichen GitHub-Release laden und mit `gzip -dc blackice-server-panel-docker.tar.gz | docker load` importieren. Damit liegt das passende Compose-Image ohne Registryanmeldung lokal vor.
 
 1. `deploy/compose.env.example` als private `.env` kopieren. Absolute Pfade für `PANEL_STATE`, `PANEL_RUNTIME` und `SERVER_PATH` festlegen. `DOCKER_GID` mit `stat -c %g /var/run/docker.sock` ermitteln.
 2. Hostordner anlegen, UID/GID 10001 und 0700 zuordnen. Serverordner für Installation leer lassen.

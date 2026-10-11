@@ -33,7 +33,7 @@
     configured = $state(true),
     authenticated = $state(false),
     csrf = $state("");
-  let dashboardName = $state("Unofficial REPLAY.re - Server Webpanel"),
+  let dashboardName = $state("Unofficial BlackICE - Server Webpanel"),
     username = $state("admin"),
     password = $state(""),
     confirmation = $state(""),
@@ -549,7 +549,7 @@
               bind:value={serverRoot}
               oninput={() => (validated = false)}
               placeholder={backend === "windows"
-                ? "C:Replay Server"
+                ? "C:\\BlackICE Server"
                 : "/srv/replay"}
               required
             /><small>{t.directPath}</small></label
@@ -684,7 +684,7 @@
             ]}</button
           >{/each}
       </div>
-      <div class="nav-foot"><strong>REPLAY.re</strong><span>{t.unofficial}</span><a href="https://github.com/LandminenTester/replay-server-panel" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div>
+      <div class="nav-foot"><strong>BlackICE</strong><span>{t.unofficial}</span><a href="https://github.com/LandminenTester/blackice-server-panel" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div>
     </nav>
     <div
       class="workspace"

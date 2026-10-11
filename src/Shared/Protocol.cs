@@ -8,7 +8,7 @@ public sealed class PanelConfig
 {
     public List<PanelUser>? Users { get; set; }
     public int SchemaVersion { get; set; } = 2;
-    public string DashboardName { get; set; } = "Unofficial REPLAY.re Server Webpanel";
+    public string DashboardName { get; set; } = "Unofficial BlackICE Server Webpanel";
     public string Username { get; set; } = "admin";
     public string Locale { get; set; } = "en";
     public string Backend { get; set; } = OperatingSystem.IsWindows() ? "windows" : "linux";

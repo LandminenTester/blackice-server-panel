@@ -12,7 +12,7 @@ Backend contract: `IServerBackend` exposes status, start, stop/force, command, c
 
 Private IPC uses JSON-line request/reply, current-user pipes on Windows and 0600 Unix sockets on Linux. Setup routes forward opaque payloads to Supervisor, which owns the setup key, password hashes, filesystem checks and installation jobs.
 
-Typed `ui/src/locales.ts` defines English keys and requires a complete German catalog. Every user-facing error uses a stable code. Add a code to both catalogs when expanding the backend. Replay logs, usernames and bundle names remain original. UI controls live under `ui/src/components`; preserve keyboard, focus and reduced-motion behavior.
+Typed `ui/src/locales.ts` defines English keys and requires a complete German catalog. Every user-facing error uses a stable code. Add a code to both catalogs when expanding the backend. BlackICE logs, usernames and bundle names remain original. UI controls live under `ui/src/components`; preserve keyboard, focus and reduced-motion behavior.
 
 Tests:
 - `dotnet publish tests/ConsoleFixture -c Release -o .local/fixture`
@@ -35,6 +35,6 @@ Die einzelnen Windows-/Linux-Befehle aus [Builden](building.md) im offenen Termi
 
 Die interne Verbindung nutzt JSON-Zeilen, Benutzer-Pipes unter Windows und Unix-Sockets mit 0600 unter Linux. Der Supervisor besitzt Einrichtungsschlüssel, Passwort-Hashes, Dateiprüfung und Installationsaufträge.
 
-`ui/src/locales.ts` definiert englische Schlüssel und erzwingt die vollständige deutsche Übersetzung. Jeder neue Fehlercode muss in beiden Katalogen stehen. Replay-Logs, Benutzer- und Bundlenamen werden nicht übersetzt. Komponenten in `ui/src/components` müssen Tastaturbedienung, Fokus und reduzierte Bewegung erhalten.
+`ui/src/locales.ts` definiert englische Schlüssel und erzwingt die vollständige deutsche Übersetzung. Jeder neue Fehlercode muss in beiden Katalogen stehen. BlackICE-Logs, Benutzer- und Bundlenamen werden nicht übersetzt. Komponenten in `ui/src/components` müssen Tastaturbedienung, Fokus und reduzierte Bewegung erhalten.
 
 Die oben aufgeführten Tests verwenden eigene Ports, Prozesse und Ordner. Niemals Produktionsverzeichnisse an Fixturetests übergeben. Offizielle Downloads hängen von der Anbietererreichbarkeit ab. Releases enthalten Windows-/Linux-Laufzeit, PTY-Helfer, Dokumentation und Skripte; Docker verwendet getrennte Dienste und ein versioniertes Image.

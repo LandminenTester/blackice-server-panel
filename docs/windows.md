@@ -2,9 +2,9 @@
 
 ## English
 
-Windows 10 1809+ x86-64 with ConPTY. Replay requires a roughly 2013+ x86-64 CPU, 512 MB RAM minimum for the server alone (2 GB+ recommended), and several GB disk space.
+Windows 10 1809+ x86-64 with ConPTY. BlackICE requires a roughly 2013+ x86-64 CPU, 512 MB RAM minimum for the server alone (2 GB+ recommended), and several GB disk space.
 
-1. Extract the release outside the Replay server directory.
+1. Extract the release outside the BlackICE server directory.
 2. Open `Start.exe`. The control terminal stays open.
 3. Open `http://127.0.0.1:20772`. Read the setup key from `.local/supervisor.log`.
 4. Enter dashboard name, username and matching passwords (at least 12 characters).
@@ -20,7 +20,7 @@ Windows native address flags can fail before Winsock initialization. Set `sv_bin
 
 ## Deutsch
 
-Windows 10 ab 1809, x86-64 und ConPTY verwenden. Replay benötigt eine CPU ab etwa 2013, mindestens 512 MB RAM nur für den Server (2 GB empfohlen) und mehrere GB Speicher.
+Windows 10 ab 1809, x86-64 und ConPTY verwenden. BlackICE benötigt eine CPU ab etwa 2013, mindestens 512 MB RAM nur für den Server (2 GB empfohlen) und mehrere GB Speicher.
 
 1. Paket getrennt vom Server entpacken.
 2. `Start.exe` öffnen. Das Steuerterminal bleibt offen.

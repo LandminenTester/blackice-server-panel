@@ -46,7 +46,7 @@ if(config.Configured){Activate();if(config.AutoStartServer&&backend!.Status().St
 using var shutdown=new CancellationTokenSource();
 Console.CancelKeyPress+=(_,e)=>{e.Cancel=true;shutdown.Cancel();};
 using var terminate=OperatingSystem.IsWindows()?null:System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM,c=>{c.Cancel=true;shutdown.Cancel();});
-Console.WriteLine("Replay supervisor ready.");
+Console.WriteLine("BlackICE supervisor ready.");
 try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
     using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);timeout.CancelAfter(TimeSpan.FromSeconds(config.StopTimeoutSeconds+15));
     using var reader=new StreamReader(stream,leaveOpen:true);using var writer=new StreamWriter(stream,leaveOpen:true){AutoFlush=true};

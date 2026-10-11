@@ -16,7 +16,7 @@ The original administrator keeps all permissions. Legacy configurations are reta
 | Settings write | Change startup and shutdown behavior |
 | Users manage | Create, edit, disable and delete accounts; granting other permissions |
 
-**Console write is powerful:** raw REPLAY.re commands can affect bundles and other game state. It is intended for trusted operators. Bundle-only operators should receive bundle permissions without console write. Every signed-in user can view process status and choose a UI language. These panel permissions do not constrain the local OS account or the native server console.
+**Console write is powerful:** raw BlackICE commands can affect bundles and other game state. It is intended for trusted operators. Bundle-only operators should receive bundle permissions without console write. Every signed-in user can view process status and choose a UI language. These panel permissions do not constrain the local OS account or the native server console.
 
 ## Deutsch
 
@@ -26,4 +26,4 @@ Der ursprüngliche Administrator behält alle Rechte. Die bisherige Konfiguratio
 
 Server starten, stoppen, neustarten und erzwungen stoppen sind getrennte Rechte. Gleiches gilt für Konsole lesen/schreiben, Logs lesen, Bundles sehen sowie Bundles starten/stoppen/neustarten. Bundle-Aktionen benötigen zusätzlich Bundles sehen. Einstellungen ändern erlaubt Änderungen an Start-/Abschaltverhalten. Benutzer verwalten umfasst Anlegen, Bearbeiten, Deaktivieren, Löschen und die Vergabe weiterer Rechte.
 
-**Konsole schreiben ist weitreichend:** REPLAY.re-Befehle können Bundles und weitere Spielzustände ändern. Dieses Recht nur vertrauenswürdigen Administratoren geben. Reine Bundle-Verwalter erhalten Bundle-Rechte ohne Konsolenschreibzugriff. Alle angemeldeten Benutzer sehen den Prozessstatus und dürfen ihre Oberflächensprache wählen. Die Panel-Rechte beschränken weder das lokale Betriebssystemkonto noch die native Serverkonsole.
+**Konsole schreiben ist weitreichend:** BlackICE-Befehle können Bundles und weitere Spielzustände ändern. Dieses Recht nur vertrauenswürdigen Administratoren geben. Reine Bundle-Verwalter erhalten Bundle-Rechte ohne Konsolenschreibzugriff. Alle angemeldeten Benutzer sehen den Prozessstatus und dürfen ihre Oberflächensprache wählen. Die Panel-Rechte beschränken weder das lokale Betriebssystemkonto noch die native Serverkonsole.
