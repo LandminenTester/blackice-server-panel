@@ -16,11 +16,11 @@ if(args.FirstOrDefault() is "--controller" or "--stop-stack" or "--force-stop-st
     return;
 }
 if(string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath),"Start",StringComparison.OrdinalIgnoreCase)){
-    try{await PanelLauncher.Run(args);}catch(Exception e){
+    try{await PanelLauncher.Run(args);}catch(OperationCanceledException){}catch(Exception e){
         Console.Error.WriteLine(e.Message);
-        var state=Path.Combine(AppContext.BaseDirectory,".local","panel.json");if(File.Exists(state))await ControlConsole.StopAll(state);
+        var state=NativeConsole.ConfigPath;if(state.Length>0&&File.Exists(state))await ControlConsole.StopAll(state);
         Console.Error.WriteLine("Read .local/*.err.log. Press Enter to close.");
-        if(!Console.IsInputRedirected)Console.ReadLine();
+        if(!Console.IsInputRedirected&&!args.Contains("--update-restart"))Console.ReadLine();
         Environment.ExitCode=1;
     }
     return;

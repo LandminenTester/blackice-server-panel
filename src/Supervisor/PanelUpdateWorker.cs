@@ -47,7 +47,7 @@ public static class PanelUpdateWorker {
   var executable=Path.Combine(root,OperatingSystem.IsWindows()?"Start.exe":"Start");
   // A new real terminal owns the restarted stack; stdin must never be inherited from a detached worker.
   var previous=Environment.GetEnvironmentVariable("REPLAY_PANEL_CONFIG");Environment.SetEnvironmentVariable("REPLAY_PANEL_CONFIG",config);
-  try{NativeConsole.Open(executable,[],"replay-panel-"+PanelConfig.Load(config).InstanceId[..8]);}finally{Environment.SetEnvironmentVariable("REPLAY_PANEL_CONFIG",previous);}
+  try{NativeConsole.Open(executable,["--config",config,"--update-restart"],"replay-panel-"+PanelConfig.Load(config).InstanceId[..8]);}finally{Environment.SetEnvironmentVariable("REPLAY_PANEL_CONFIG",previous);}
  }
  static async Task<bool> Healthy(string configPath,string version){
   var config=PanelConfig.Load(configPath);using var client=new HttpClient(){Timeout=TimeSpan.FromSeconds(2)};

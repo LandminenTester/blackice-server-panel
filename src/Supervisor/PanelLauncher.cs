@@ -9,12 +9,13 @@ public static class PanelLauncher
     public static async Task Run(string[] args)
     {
         var root=AppContext.BaseDirectory;
-        var path=Path.GetFullPath(Environment.GetEnvironmentVariable("REPLAY_PANEL_CONFIG")??Path.Combine(root,".local","panel.json"));
+        var configIndex=Array.IndexOf(args,"--config");
+        var path=Path.GetFullPath((configIndex>=0&&configIndex+1<args.Length?args[configIndex+1]:Environment.GetEnvironmentVariable("REPLAY_PANEL_CONFIG"))??Path.Combine(root,".local","panel.json"));
         var supervisor=Path.Combine(root,"artifacts","supervisor",OperatingSystem.IsWindows()?"Supervisor.exe":"Supervisor");
         var web=Path.Combine(root,"artifacts","web",OperatingSystem.IsWindows()?"Web.exe":"Web");
         if(!File.Exists(supervisor)||!File.Exists(web))throw new InvalidOperationException("Release files are missing. Keep Start together with the artifacts directory.");
         if(!OperatingSystem.IsWindows()&&!args.Contains("--in-terminal")&&Console.IsInputRedirected&&NativeConsole.HasDesktop){
-            NativeConsole.Open(Environment.ProcessPath!,["--in-terminal"],"replay-panel");
+            NativeConsole.Open(Environment.ProcessPath!,["--in-terminal",..args],"replay-panel");
             return;
         }
         var state=Path.GetDirectoryName(path)!;Directory.CreateDirectory(state);
@@ -26,9 +27,14 @@ public static class PanelLauncher
         }else File.SetUnixFileMode(state,UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
         var config=PanelConfig.Load(path);
         NativeConsole.ConfigPath=path;
+        FileStream instance;try{instance=new FileStream(Path.Combine(state,"launcher.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);}catch(IOException){Console.WriteLine("A Start terminal is already open.");return;}
+        using(instance) {
+        using var startup=new CancellationTokenSource();
+        var launcherEndpoint=Transport.Listen(config.PipeName+".launcher",async(stream,ct)=>{using var reader=new StreamReader(stream,leaveOpen:true);if(await reader.ReadLineAsync(ct)=="close")startup.Cancel();},startup.Token);
+        try {
         if(!await Available(config.PipeName)){
             Start(supervisor,[path],Path.GetDirectoryName(supervisor)!,state,"supervisor",path);
-            for(var i=0;i<100&&!await Available(config.PipeName);i++)await Task.Delay(100);
+            for(var i=0;i<100&&!await Available(config.PipeName);i++)await Task.Delay(100,startup.Token);
             if(!await Available(config.PipeName))throw new InvalidOperationException("Supervisor failed to start. Read .local/supervisor.err.log.");
         }
         config=PanelConfig.Load(path);
@@ -47,7 +53,10 @@ public static class PanelLauncher
             if(status.Status?.State=="stopped"){var reply=await ControlConsole.Call(config,new("start"));if(!reply.Ok)Console.WriteLine(reply.Error);}
         }
         if(config.Configured && (await ControlConsole.Call(config,new("status"))).Status?.State=="running")NativeConsole.Server(config);
-        try {await ControlConsole.Run(path);}catch(IOException){Console.WriteLine("A control terminal is already open.");}
+        startup.Token.ThrowIfCancellationRequested();
+        try {await ControlConsole.Run(path,startup.Token);}catch(IOException){Console.WriteLine("A control terminal is already open.");}
+        }finally{startup.Cancel();try{await launcherEndpoint;}catch(OperationCanceledException){}}
+        }
     }
     private static async Task<bool> Available(string name)
     {

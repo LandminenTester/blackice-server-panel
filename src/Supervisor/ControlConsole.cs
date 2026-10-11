@@ -69,7 +69,7 @@ public static class ControlConsole
                 }
                 if(!alive){
                     foreach(var process in new[]{supervisor,web})if(process is not null&&!process.HasExited)await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(config.StopTimeoutSeconds+15));
-                    foreach(var name in new[]{config.PipeName+".controller",config.PipeName+".server-console"}){try{using var token=new CancellationTokenSource(1000);using var endpoint=await Transport.Connect(name,token.Token);using var writer=new StreamWriter(endpoint,leaveOpen:true){AutoFlush=true};
+                    foreach(var name in new[]{config.PipeName+".controller",config.PipeName+".server-console",config.PipeName+".launcher"}){try{using var token=new CancellationTokenSource(1000);using var endpoint=await Transport.Connect(name,token.Token);using var writer=new StreamWriter(endpoint,leaveOpen:true){AutoFlush=true};
                         using var client=Transport.PeerId(endpoint) is {} pid && pid!=Environment.ProcessId?Track(pid):null;
                         await writer.WriteLineAsync("close");
                         if(client is not null&&!client.HasExited)await client.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));}catch(Exception e)when(e is IOException or TimeoutException or OperationCanceledException or System.Net.Sockets.SocketException){}}
@@ -80,10 +80,10 @@ public static class ControlConsole
         }catch(Exception e){Console.Error.WriteLine(e.Message);return 1;}finally{supervisor?.Dispose();web?.Dispose();}
     }
     private static Process? Track(int pid){try{var process=Process.GetProcessById(pid);_=process.Handle;return process;}catch(ArgumentException){return null;}catch(InvalidOperationException){return null;}}
-    public static async Task Run(string path)
+    public static async Task Run(string path,CancellationToken stopping=default)
     {
         var config=PanelConfig.Load(path);
-        using var cancel=new CancellationTokenSource();
+        using var cancel=CancellationTokenSource.CreateLinkedTokenSource(stopping);
         using FileStream single=OpenLock(path);
         if(OperatingSystem.IsWindows()&&!Console.IsInputRedirected){
             Console.Title=config.DashboardName+" — "+Label(config,"Control","Steuerung");
