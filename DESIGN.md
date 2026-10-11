@@ -170,3 +170,6 @@ Hover background transitions last 140ms with ease-out timing. Under `prefers-red
 ## Startup preference addition
 
 Settings reuses the existing custom Toggle for the persisted auto-start preference, with a localized explanation and disabled state during requests or disconnection. Language selection also persists the native control-terminal language. No visual identity or spacing tokens changed. Native process terminals are functional OS surfaces and do not adopt the web dashboard chrome.
+
+## Fixed dashboard and accounts
+At desktop sizes, the header and sidebar remain visible. The workspace occupies the remaining viewport; the console output and large lists scroll within their own regions. Full HD target: 1920×1080 at default zoom. Server controls and status share the header on every authenticated page. Sidebar footer contains REPLAY.re, the unofficial designation and the public GitHub link. Users reuse Toggle and existing form tokens for individual permissions; API authorization controls capabilities.

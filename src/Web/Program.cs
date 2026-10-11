@@ -29,9 +29,14 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     o.Cookie.SecurePolicy = config.PublicUrl is null ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always; o.Cookie.Name = "replay-panel-session"; o.Cookie.HttpOnly = true; o.Cookie.SameSite = SameSiteMode.Strict;
     o.ExpireTimeSpan = TimeSpan.FromHours(4); o.SlidingExpiration = false;
     o.Events.OnRedirectToLogin = c => { c.Response.StatusCode = 401; return Task.CompletedTask; };
-    o.Events.OnRedirectToAccessDenied = c => { c.Response.StatusCode = 403; return Task.CompletedTask; };
+    o.Events.OnRedirectToAccessDenied = c => { c.Response.StatusCode = 403; return c.Response.WriteAsJsonAsync(new {error="auth.denied"}); };
+    o.Events.OnValidatePrincipal = async c => {
+        var user=await CurrentUser(c.Principal!,c.HttpContext.RequestServices.GetRequiredService<PipeClient>(),c.HttpContext.RequestAborted);
+        if(user is null){c.RejectPrincipal();await c.HttpContext.SignOutAsync();}
+        else c.ReplacePrincipal(Principal(user));
+    };
 });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(o=>{foreach(var permission in Permissions.All)o.AddPolicy(permission,p=>p.RequireAuthenticatedUser().RequireClaim("permission",permission));});
 builder.Services.AddAntiforgery(o => { o.HeaderName = "X-CSRF"; o.Cookie.SameSite = SameSiteMode.Strict; });
 builder.Services.AddRateLimiter(o =>
 {
@@ -66,7 +71,7 @@ app.Use(async (context, next) =>
 app.UseRateLimiter(); app.UseAuthorization();
 app.UseDefaultFiles(); app.UseStaticFiles();
 app.MapGet("/api/session", (HttpContext c, IAntiforgery antiforgery) =>
-    Results.Ok(new { authenticated = c.User.Identity?.IsAuthenticated == true, csrf = antiforgery.GetAndStoreTokens(c).RequestToken }));
+    Results.Ok(new { authenticated = c.User.Identity?.IsAuthenticated == true, username=c.User.Identity?.Name, permissions=c.User.FindAll("permission").Select(x=>x.Value), csrf = antiforgery.GetAndStoreTokens(c).RequestToken }));
 app.MapGet("/api/bootstrap", async (PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bootstrap"), ct)));
 foreach(var route in new[]{"folders","validate","install","finish"}) {
     var action=route;
@@ -79,27 +84,36 @@ app.MapPost("/api/login", async (Login body, HttpContext c, PipeClient pipe) =>
     if (body.Password is null || body.Password.Length > 256) return Results.Unauthorized();
     var reply = await pipe.Call(new("authenticate", JsonSerializer.Serialize(new[]{body.Username??"admin",body.Password})));
     if(!reply.Ok)return Results.Unauthorized();
-    await c.SignInAsync(new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, body.Username??"admin")], CookieAuthenticationDefaults.AuthenticationScheme)));
+    var user=JsonSerializer.Deserialize<UserView>(reply.Lines![0],PanelConfig.Json)!;
+    await c.SignInAsync(Principal(user));
     return Results.Ok(new { ok = true });
 }).RequireRateLimiting("login");
 app.MapPost("/api/logout", async (HttpContext c) => { await c.SignOutAsync(); return Results.Ok(new { ok = true }); }).RequireAuthorization();
 app.MapGet("/api/status", async (PipeClient pipe, CancellationToken ct) => Result(await pipe.Call(new("status"), ct))).RequireAuthorization();
-app.MapGet("/api/logs", async (PipeClient pipe, CancellationToken ct) => Result(await pipe.Call(new("logs"), ct))).RequireAuthorization();
-app.MapGet("/api/bundles", async (BundleManager bundles, CancellationToken ct) => Results.Ok(await bundles.List(ct))).RequireAuthorization();
-app.MapPost("/api/bundles/{name}/{action}", async (string name, string action, BundleManager bundles, CancellationToken ct) =>
+app.MapGet("/api/logs", async (PipeClient pipe, CancellationToken ct) => Result(await pipe.Call(new("logs"), ct))).RequireAuthorization("logs.read");
+app.MapGet("/api/bundles", async (BundleManager bundles, CancellationToken ct) => Results.Ok(await bundles.List(ct))).RequireAuthorization("bundles.read");
+app.MapPost("/api/bundles/{name}/{action}", async (string name, string action, HttpContext c, BundleManager bundles, CancellationToken ct) =>
 {
+    if(action is not ("start" or "stop" or "restart"))return Results.Json(new{error="bundle.invalid"},statusCode:409);
+    if(!Can(c,"bundles."+action))return Results.Forbid();
     try { var result=await bundles.Action(name,action,ct);return result.Ok ? Results.Ok(result) : Results.Json(result,statusCode:409); }
     catch (InvalidOperationException e) { return Results.Json(new { error = e.Message }, statusCode: 409); }
-}).RequireAuthorization();
-app.MapPost("/api/server/{action}", async (string action, BundleManager bundles, CancellationToken ct) =>
+}).RequireAuthorization("bundles.read");
+app.MapPost("/api/server/{action}", async (string action, HttpContext c, BundleManager bundles, CancellationToken ct) =>
 {
     if (action is not ("start" or "stop" or "restart" or "force-stop")) return Results.BadRequest();
+    if(!Can(c,"server."+action))return Results.Forbid();
     return Result(await bundles.Command(new(action), ct));
 }).RequireAuthorization();
 app.MapPost("/api/command", async (Command body, BundleManager bundles, CancellationToken ct) =>
-    Result(await bundles.Command(new("command", body.Text), ct))).RequireAuthorization();
-app.MapPost("/api/settings", async (Settings body, PipeClient pipe, CancellationToken ct) =>
-    Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode,AutoStartServer:body.AutoStartServer,Locale:body.Locale), ct))).RequireAuthorization();
+    Result(await bundles.Command(new("command", body.Text), ct))).RequireAuthorization("console.write");
+app.MapPost("/api/settings", async (Settings body, HttpContext c, PipeClient pipe, CancellationToken ct) => {
+    if((body.ShutdownMode is not null||body.AutoStartServer is not null)&&!Can(c,"settings.write"))return Results.Forbid();
+    return Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode,AutoStartServer:body.AutoStartServer,Locale:body.Locale), ct));
+}).RequireAuthorization();
+app.MapGet("/api/users",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("users"),ct))).RequireAuthorization("users.manage");
+app.MapPost("/api/users/save",async(UserChange body,PipeClient pipe,CancellationToken ct)=>Result(await pipe.Call(new("user-save",JsonSerializer.Serialize(body,PanelConfig.Json)),ct))).RequireAuthorization("users.manage");
+app.MapPost("/api/users/delete",async(UserDelete body,PipeClient pipe,CancellationToken ct)=>Result(await pipe.Call(new("user-delete",body.Username),ct))).RequireAuthorization("users.manage");
 app.MapGet("/api/events", async (HttpContext c, PipeClient pipe) =>
 {
     c.Response.ContentType = "text/event-stream";
@@ -108,9 +122,10 @@ app.MapGet("/api/events", async (HttpContext c, PipeClient pipe) =>
     try {
         while (!ct.IsCancellationRequested)
         {
+            var user=await CurrentUser(c.User,pipe,ct);if(user is null)break;
             var status = await pipe.Call(new("status"), ct);
-            var console = await pipe.Call(new("console"), ct);
-            await c.Response.WriteAsync("data: " + JsonSerializer.Serialize(new { status, console }, PanelConfig.Json) + "\n\n", ct);
+            var console = user.Permissions.Contains("console.read")?await pipe.Call(new("console"), ct):new Reply(true,Lines:[]);
+            await c.Response.WriteAsync("data: " + JsonSerializer.Serialize(new { status, console, permissions=user.Permissions }, PanelConfig.Json) + "\n\n", ct);
             await c.Response.Body.FlushAsync(ct);
             await Task.Delay(1000, ct);
         }
@@ -125,6 +140,12 @@ app.Lifetime.ApplicationStopping.Register(() =>
 await app.RunAsync();
 static IResult Data(Reply reply) => reply.Ok ? Results.Ok(reply.Lines is {Length:>0} ? JsonSerializer.Deserialize<JsonElement>(reply.Lines[0]) : JsonSerializer.SerializeToElement(new{ok=true})) : Results.Json(reply,statusCode:409);
 static IResult Result(Reply reply) => reply.Ok ? Results.Ok(reply) : Results.Json(reply, statusCode: 409);
+static bool Can(HttpContext c,string permission)=>c.User.HasClaim("permission",permission);
+static ClaimsPrincipal Principal(UserView user)=>new(new ClaimsIdentity(new[]{new Claim(ClaimTypes.Name,user.Username),new Claim("stamp",user.Stamp)}.Concat(user.Permissions.Select(p=>new Claim("permission",p))),CookieAuthenticationDefaults.AuthenticationScheme));
+static async Task<UserView?> CurrentUser(ClaimsPrincipal principal,PipeClient pipe,CancellationToken ct){
+    try{var reply=await pipe.Call(new("account-session",JsonSerializer.Serialize(new[]{principal.Identity?.Name??"",principal.FindFirst("stamp")?.Value??""})),ct);return reply.Ok?JsonSerializer.Deserialize<UserView>(reply.Lines![0],PanelConfig.Json):null;}catch(IOException){return null;}
+}
+record UserDelete(string Username);
 record Login(string? Password, string? Username);
 record Command(string? Text);
 record Settings(string? ShutdownMode, bool? AutoStartServer, string? Locale);

@@ -18,13 +18,13 @@ public static class ServerConsole
         bool closedByStack=false;int delegated=0;
         void Close(){if(Interlocked.Exchange(ref delegated,1)==0)NativeConsole.StopWorker(path,false);cancel.Cancel();}
         if(OperatingSystem.IsWindows()&&!Console.IsInputRedirected){
-            Console.Title="Replay — Server Console";
+            Console.Title="REPLAY.re — Server Console";
             handler=signal=>{if(signal is 0 or 1 or 2 or 5 or 6){Close();return true;}return false;};
             SetConsoleCtrlHandler(handler,true);
         }
         using var hup=OperatingSystem.IsWindows()?null:PosixSignalRegistration.Create(PosixSignal.SIGHUP,c=>{c.Cancel=true;Close();});
         using var term=OperatingSystem.IsWindows()?null:PosixSignalRegistration.Create(PosixSignal.SIGTERM,c=>{c.Cancel=true;Close();});
-        Console.WriteLine(config.Locale=="de"?"Replay-Serverkonsole. Fenster schließen stoppt den Server.":"Replay server console. Closing this terminal stops the server.");
+        Console.WriteLine(config.Locale=="de"?"REPLAY.re-Serverkonsole. Fenster schließen stoppt den Server.":"REPLAY.re server console. Closing this terminal stops the server.");
         var control=Transport.Listen(config.PipeName+".server-console",async(stream,ct)=>{
             using var reader=new StreamReader(stream,leaveOpen:true);if(await reader.ReadLineAsync(ct)=="close"){closedByStack=true;cancel.Cancel();}
         },cancel.Token);

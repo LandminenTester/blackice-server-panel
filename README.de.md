@@ -2,7 +2,7 @@
 
 Dashboard für einen Replay-Server: Serversteuerung, Live-Konsole, Logs und Bundle-Verwaltung. Deutsch und Englisch, geschützter Einrichtungsassistent und eigenes, von Cyberpunk inspiriertes Design.
 
-[English](README.md) · [Windows](docs/windows.md) · [Linux](docs/linux.md) · [Docker](docs/docker.md) · [Entwicklung](docs/development.md) · [Build-Anleitung](docs/building.md) · [Betrieb](docs/operations.md)
+[English](README.md) · [Windows](docs/windows.md) · [Linux](docs/linux.md) · [Docker](docs/docker.md) · [Entwicklung](docs/development.md) · [Build-Anleitung](docs/building.md) · [Benutzer und Rechte](docs/users.md) · [Betrieb](docs/operations.md)
 
 ## Einstieg
 

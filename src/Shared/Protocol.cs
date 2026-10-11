@@ -6,8 +6,9 @@ public sealed record Reply(bool Ok, string? Error = null, ServerStatus? Status =
 public sealed record ServerStatus(string State, int? Pid, string ServerRoot, string ShutdownMode, string? Detail = null, bool AutoStartServer = true);
 public sealed class PanelConfig
 {
+    public List<PanelUser>? Users { get; set; }
     public int SchemaVersion { get; set; } = 2;
-    public string DashboardName { get; set; } = "Replay Server Panel";
+    public string DashboardName { get; set; } = "Unofficial REPLAY.re Server Webpanel";
     public string Username { get; set; } = "admin";
     public string Locale { get; set; } = "en";
     public string Backend { get; set; } = OperatingSystem.IsWindows() ? "windows" : "linux";

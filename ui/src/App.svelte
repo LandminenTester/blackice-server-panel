@@ -3,6 +3,10 @@
   import { catalog, type Locale } from "./locales";
   import Select from "./components/Select.svelte";
   import Toggle from "./components/Toggle.svelte";
+  import Users from "./Users.svelte";
+  let permissions = $state<string[]>([]);
+  const can = (permission: string) => permissions.includes(permission);
+  let navItems = $derived(["dashboard", ...(can("console.read") || can("console.write") || can("logs.read") ? ["console"] : []), ...(can("bundles.read") ? ["bundles"] : []), "settings", ...(can("users.manage") ? ["users"] : [])]);
   type Status = {
     state: string;
     pid: number | null;
@@ -111,6 +115,7 @@
       throw new Error(
         response.status === 401
           ? "auth.failed"
+          : response.status === 403 ? "auth.denied"
           : response.status === 429
             ? "auth.rate"
             : (data.error ?? "request.failed"),
@@ -133,6 +138,7 @@
     const data = await request("/api/session");
     csrf = data.csrf;
     authenticated = data.authenticated;
+    permissions = data.permissions ?? [];
     const boot = await request("/api/bootstrap");
     configured = boot.configured;
     dashboardName = boot.dashboardName;
@@ -143,12 +149,14 @@
     stream = new EventSource("/api/events");
     stream.onmessage = (e) => {
       const data = JSON.parse(e.data);
+      permissions = data.permissions ?? permissions;
+      if (!navItems.includes(view)) view = "dashboard";
       connected = data.status.ok;
       if (connected) status = data.status.status;
       else error = data.status.error;
       lines = data.console.lines ?? [];
     };
-    stream.onerror = () => (connected = false);
+    stream.onerror = async () => { connected = false; try { await session(); if (!authenticated) stream?.close(); } catch {} };
   }
   async function login(e: SubmitEvent) {
     e.preventDefault();
@@ -299,7 +307,7 @@
     });
   }
   function tabs(e: KeyboardEvent) {
-    const names = ["dashboard", "console", "bundles", "settings"];
+    const names = navItems;
     let n = names.indexOf(view);
     if (e.key === "ArrowRight") n = (n + 1) % 4;
     else if (e.key === "ArrowLeft") n = (n + 3) % 4;
@@ -370,11 +378,49 @@
   /></svelte:head
 >
 <header class="toolbar">
-  <a href="/" class="brand"
+  <a href="/" class="brand" aria-label={t.app}
     ><svg viewBox="0 0 28 28" aria-hidden="true"
       ><path d="M5 23V5h11l7 7-7 7H5m9 0 8 4M5 12h11" /></svg
-    ><span>{dashboardName}</span></a
+    ><span>{t.app}</span></a
   >
+  <div class="header-server">      {#if authenticated}
+        <div
+          class="actions header-actions"
+          role="group"
+          aria-label={t.serverActions}
+        >
+          <button
+            class="primary"
+            onclick={() => action("start")}
+            disabled={busy || !connected || !can("server.start") || serverState !== "stopped"}
+            >{t.start}</button
+          ><button
+            onclick={() => confirm("restart")}
+            disabled={busy || !connected || !can("server.restart") || serverState !== "running"}
+            >{t.restart}</button
+          ><button
+            class="danger"
+            onclick={() => confirm("stop")}
+            disabled={busy || !connected || !can("server.stop") || serverState !== "running"}
+            >{t.stop}</button
+          >
+        </div>        <span
+          class="state-badge"
+          class:online={connected && serverState === "running"}
+          >{connected
+            ? t[
+                serverState as
+                  | "running"
+                  | "stopped"
+                  | "unknown"
+                  | "external"
+                  | "unconfigured"
+              ]
+            : t.disconnected}</span
+        >
+
+      {/if}
+</div>
   <div class="toolbar-right">
     {#if authenticated}<span class="connection" class:online={connected}
         >{connected ? t.connected : t.disconnected}</span
@@ -610,7 +656,7 @@
         tabindex="-1"
         onkeydown={tabs}
       >
-        {#each ["dashboard", "console", "bundles", "settings"] as name, index}<button
+        {#each navItems as name, index}<button
             id={"tab-" + name}
             role="tab"
             aria-selected={view === name}
@@ -629,14 +675,15 @@
                   d="M3 6h18M3 12h18M3 18h18M8 3v6m8 0v6m-7 0v6"
                 />{/if}</svg
             >{t[
-              name as "dashboard" | "console" | "bundles" | "settings"
+              name as "dashboard" | "console" | "bundles" | "settings" | "users"
             ]}</button
           >{/each}
       </div>
-      <p class="nav-foot">Replay</p>
+      <div class="nav-foot"><strong>REPLAY.re</strong><span>{t.unofficial}</span><a href="https://github.com/LandminenTester/replay-server-panel" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div>
     </nav>
     <div
       class="workspace"
+      class:console-page={view === "console"}
       tabindex="-1"
       id={"view-" + view}
       role="tabpanel"
@@ -644,7 +691,7 @@
     >
       <section class="page-heading">
         <div>
-          <h1>{t[view as "dashboard" | "console" | "bundles" | "settings"]}</h1>
+          <h1>{t[view as "dashboard" | "console" | "bundles" | "settings" | "users"]}</h1>
           <p class="muted">
             {view === "dashboard"
               ? t.overviewHint
@@ -652,52 +699,15 @@
                 ? t.consoleHint
                 : view === "bundles"
                   ? t.bundlesHint
-                  : t.settingsHint}
+                  : view === "users" ? t.usersHint : t.settingsHint}
           </p>
         </div>
-        <span
-          class="state-badge"
-          class:online={connected && serverState === "running"}
-          >{connected
-            ? t[
-                serverState as
-                  | "running"
-                  | "stopped"
-                  | "unknown"
-                  | "external"
-                  | "unconfigured"
-              ]
-            : t.disconnected}</span
-        >
       </section>
       {#if error}<p class="error banner" role="alert">
           {message(error)}
         </p>{/if}{#if notice}<p class="notice" role="status">
           {t[notice as keyof typeof t] as string}
         </p>{/if}
-      {#if view === "dashboard" || view === "console"}
-        <div
-          class="actions server-actions"
-          role="group"
-          aria-label={t.serverActions}
-        >
-          <button
-            class="primary"
-            onclick={() => action("start")}
-            disabled={busy || !connected || serverState !== "stopped"}
-            >{t.start}</button
-          ><button
-            onclick={() => confirm("restart")}
-            disabled={busy || !connected || serverState !== "running"}
-            >{t.restart}</button
-          ><button
-            class="danger"
-            onclick={() => confirm("stop")}
-            disabled={busy || !connected || serverState !== "running"}
-            >{t.stop}</button
-          >
-        </div>
-      {/if}
       {#if view === "dashboard"}
         <div class="dashboard-grid">
           <section class="runtime">
@@ -717,7 +727,7 @@
           <section class="activity">
             <div class="section-heading">
               <h2>{t.latestOutput}</h2>
-              <button onclick={() => navigate("console")}
+              <button disabled={!can("console.read") && !can("console.write") && !can("logs.read")} onclick={() => navigate("console")}
                 >{t.openConsole}</button
               >
             </div>
@@ -739,11 +749,11 @@
               <button
                 aria-pressed={!logView}
                 class:active={!logView}
-                onclick={() => (logView = false)}>{t.live}</button
+                onclick={() => (logView = false)} disabled={!can("console.read")}>{t.live}</button
               ><button
                 aria-pressed={logView}
                 class:active={logView}
-                onclick={loadLogs}>{t.logs}</button
+                onclick={loadLogs} disabled={!can("logs.read")}>{t.logs}</button
               >
             </div>
             {#if logView}<button onclick={loadLogs}>{t.refresh}</button
@@ -758,7 +768,7 @@
             bind:this={output}
             readonly
             aria-label={logView ? t.logs : t.console}
-            value={text}
+            value={!logView && !can("console.read") ? t.noAccess : text}
           ></textarea>
           <form class="command-form" onsubmit={send}>
             <label class="sr-only" for="command">{t.command}</label><svg
@@ -770,12 +780,12 @@
               placeholder={t.commandPlaceholder}
               maxlength="1024"
               autocomplete="off"
-              disabled={busy || !connected || serverState !== "running"}
+              disabled={busy || !connected || !can("console.write") || serverState !== "running"}
             /><button
               disabled={busy ||
                 !connected ||
                 serverState !== "running" ||
-                !command.trim()}>{t.send}</button
+                !can("console.write") || !command.trim()}>{t.send}</button
             >
           </form>
         </section>
@@ -820,21 +830,21 @@
                 >
                   {#if bundle.state === "running"}<button
                       onclick={() => bundleAction(bundle, "restart")}
-                      disabled={busy ||
+                      disabled={busy || !can("bundles.restart") ||
                         bundleLoading ||
                         !bundleControl ||
                         !connected}>{t.restart}</button
                     ><button
                       class="danger"
                       onclick={() => bundleAction(bundle, "stop")}
-                      disabled={busy ||
+                      disabled={busy || !can("bundles.stop") ||
                         bundleLoading ||
                         !bundleControl ||
                         !connected}>{t.stop}</button
                     >{:else}<button
                       class="primary"
                       onclick={() => bundleAction(bundle, "start")}
-                      disabled={busy ||
+                      disabled={busy || !can("bundles.start") ||
                         bundleLoading ||
                         !bundleControl ||
                         !connected ||
@@ -845,16 +855,18 @@
           </ul>
           {#if busy}<p role="status">{t.actionPending}</p>{/if}
         </section>
+      {:else if view === "users" && can("users.manage")}
+        <Users {t} {request} onchanged={session} />
       {:else}
         <section class="settings-section">
           <h2>{t.autoStart}</h2>
-          <Toggle checked={status?.autoStartServer ?? true} label={t.autoStart} disabled={busy || !connected} onchange={autoStart} />
+          <Toggle checked={status?.autoStartServer ?? true} label={t.autoStart} disabled={busy || !connected || !can("settings.write")} onchange={autoStart} />
           <p class="muted">{t.autoStartHint}</p>
           <h2>{t.shutdown}</h2>
           <Select
             value={status?.shutdownMode ?? "keep-running"}
             label={t.shutdown}
-            disabled={busy || !connected}
+            disabled={busy || !connected || !can("settings.write")}
             options={[
               { value: "keep-running", label: t.keepRunning },
               { value: "stop-server", label: t.stopServer },
@@ -874,12 +886,12 @@
           <button
             class="danger"
             onclick={() => confirm("force-stop")}
-            disabled={busy || !connected || serverState !== "running"}
+            disabled={busy || !connected || !can("server.force-stop") || serverState !== "running"}
             >{t.forceStop}</button
           >
         </section>
       {/if}
-      <footer>Unofficial REPLAY.re - Server Webpanel <span>{t.backend}: {backend}</span></footer>
+
     </div>
   </div>
 {/if}

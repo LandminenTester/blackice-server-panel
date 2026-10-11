@@ -90,6 +90,32 @@ try {
   check(offlineBundles.ok && !offlineBundles.canControl && offlineBundles.bundles.every(x=>x.state==='stopped'),'stopped server lists installed bundles without allowing actions');
   check((await post('/api/server/start')).status===200,'fixture can restart');
   check((await post('/api/server/force-stop')).status===200,'explicit forced stop works');
+
+  const adminCookies=new Map(cookies);const adminCsrf=csrf;
+  const restrictedPassword='disposable-reader-password';
+  check((await post('/api/users/save',{username:'reader',password:restrictedPassword,permissions:['console.read','bundles.read'],create:true})).status===200,'admin can create restricted account');
+  const userList=await(await request('/api/users')).json();check(userList.some(u=>u.username==='reader')&&!JSON.stringify(userList).includes('passwordHash'),'user listing never exposes password hashes');
+  check((await post('/api/users/save',{username:'reader',password:restrictedPassword,permissions:[],create:true})).status===409,'duplicate username rejected');
+  check((await post('/api/users/save',{username:'admin',permissions:[],enabled:false})).status===409,'last enabled administrator protected');
+  await post('/api/logout');cookies.clear();csrf=(await(await request('/api/session')).json()).csrf;
+  check((await post('/api/login',{username:'reader',password:restrictedPassword})).status===200,'restricted user login accepted');csrf=(await(await request('/api/session')).json()).csrf;
+  const readerCookies=new Map(cookies);const readerCsrf=csrf;
+  check((await request('/api/bundles')).status===200,'bundle-read permission allows list');
+  for(const route of ['/api/command','/api/bundles/fixture-bundle/start','/api/bundles/fixture-bundle/stop','/api/bundles/fixture-bundle/restart','/api/server/start','/api/server/stop','/api/server/restart','/api/server/force-stop','/api/settings','/api/users/save'])check((await post(route,{text:'echo forbidden',autoStartServer:true})).status===403,'restricted account denied '+route);
+  check((await request('/api/logs')).status===403&&(await request('/api/users')).status===403,'logs and user administration separately restricted');
+  cookies.clear();for(const [k,v] of adminCookies)cookies.set(k,v);csrf=adminCsrf;
+  check((await post('/api/users/save',{username:'reader',permissions:['server.start'],enabled:true})).status===200,'admin can change permissions');
+  cookies.clear();for(const [k,v] of readerCookies)cookies.set(k,v);csrf=readerCsrf;
+  check((await request('/api/bundles')).status===401,'permission edit invalidates existing session');
+  cookies.clear();csrf=(await(await request('/api/session')).json()).csrf;
+  check((await post('/api/login',{username:'reader',password:restrictedPassword})).status===200,'updated user can sign in again');csrf=(await(await request('/api/session')).json()).csrf;
+  const noConsole=await request('/api/events');const noConsoleReader=noConsole.body.getReader();const first=new TextDecoder().decode((await noConsoleReader.read()).value);await noConsoleReader.cancel();check(first.includes('"lines":[]')&&!first.includes('fixture-malformed'),'event stream does not leak console without permission');
+  check((await post('/api/server/start')).status===200,'individual server-start permission allowed');
+  const changedCookies=new Map(cookies);
+  cookies.clear();for(const [k,v] of adminCookies)cookies.set(k,v);csrf=adminCsrf;await post('/api/server/stop');
+  check((await post('/api/users/delete',{username:'reader'})).status===200,'admin can delete user');
+  cookies.clear();for(const [k,v] of changedCookies)cookies.set(k,v);check((await request('/api/status')).status===401,'deleted account session rejected');
+  cookies.clear();for(const [k,v] of adminCookies)cookies.set(k,v);csrf=adminCsrf;
   if(process.argv.includes('--review')) { console.log('Review fixture ready on http://127.0.0.1:20774. Test-only password: disposable-fixture-password'); await new Promise(resolve=>process.once('SIGINT',resolve)); }
   console.log(count+' panel integration checks passed.');
 } finally {

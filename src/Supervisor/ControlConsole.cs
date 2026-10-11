@@ -28,7 +28,7 @@ public static class ControlConsole
     {
         if(!File.Exists(path)){Console.Error.WriteLine("Configuration not found: "+path);return 1;}
         var config=PanelConfig.Load(path);
-        Console.WriteLine(Label(config,"Stopping Replay Server Panel…","Replay Server Panel wird beendet…"));
+        Console.WriteLine(Label(config,"Stopping REPLAY.re Server Webpanel…","REPLAY.re Server Webpanel wird beendet…"));
         Process? supervisor=null,web=null;
         try {
             Reply status;
