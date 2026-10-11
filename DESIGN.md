@@ -114,7 +114,7 @@ Self-hosted IBM Plex Sans (400, 500 and 600) serves the interface; self-hosted I
 
 An opaque toolbar (82px high on desktop) holds the brand, server controls and textual state, language selector and sign-out. The desktop app shell fills the remaining viewport height and pairs a fixed 228px navigation rail with a flexible workspace without a maximum width. Workspace padding is 24px at the top, 32px horizontally and 18px at the bottom, with a 16px gap between regions. The page heading and feedback precede each content region. Console and long lists scroll internally; the workspace can scroll when content exceeds the available height, while the header and sidebar remain visible.
 
-Dashboard pairs a 280px runtime column with recent output, separated by 36px. Console uses one full-width panel with a mode toolbar, selectable output and command row. Bundles use a divided list with identity/state on the left and actions on the right. Desktop Settings content is capped at 900px; its selectors at 380px. Authentication/setup uses a centered container capped at 620px, padded 64px vertically and 32px horizontally.
+Dashboard pairs a 280px runtime column with recent output, separated by 36px. Console uses one full-width panel with a mode toolbar, selectable output and command row. Bundles use a divided list with identity/state on the left and actions on the right. Desktop Settings content is capped at 1000px; its selectors at 380px. Authentication/setup uses a centered container capped at 620px, padded 64px vertically and 32px horizontally.
 
 Between 721px and 1100px, the navigation rail narrows to 190px, workspace padding becomes 20px and Dashboard stacks. Runtime details become a two-column definition list. Users also stacks, with the user list capped at 220px and permissions arranged in two columns. The header retains compact controls and the textual server state; connection text is hidden.
 
@@ -155,6 +155,14 @@ Server and bundle actions disable while busy or when state/connection makes them
 Errors use `role="alert"`; success and progress feedback use `role="status"` where implemented. Setup exposes an ordered Account/Server/Finish sequence with `aria-current="step"`, labelled fields and validation-gated progression. Folder browsing and server confirmations use native dialogs. Installation progress exposes a labelled progressbar with phase text; the indeterminate transfer animation runs for 1.5 seconds per cycle.
 
 Hover background transitions last 140ms with ease-out timing. Under `prefers-reduced-motion: reduce`, animations and transitions are disabled and the indeterminate bar becomes a static full-width indicator; textual phase feedback remains available.
+
+### Panel updates
+
+Settings begins with a square outlined update card, padded 16px by 20px on desktop and 14px on mobile. Its red heading shares a row with Check for updates; the heading wraps on mobile. Installed/latest versions use cyan mono text, and release notes use the existing cyan link treatment. Version metadata wraps with 12px vertical and 24px horizontal gaps. Actions share a row on desktop and become full-width buttons at 720px and below. The card introduces no new color or shape tokens.
+
+Native updates separate Download and verify from Install and restart. Download requires an available update and install permission; installation requires the verified ready state and opens a labelled native confirmation dialog. Busy, active and reconnecting states disable relevant actions. Cancel is offered while downloading, verifying or ready. Hosts that cannot install show explanatory copy instead of installation controls. A labelled native progress element displays download bytes in an eight-pixel cyan bar. Phase and reconnect text use `role="status"`; failures use the existing alert styling. Reconnecting state persists across reloads until polling confirms application has finished. These controls retain the existing focus and reduced-motion behavior.
+
+Bounded visual evidence for this increment is `.impeccable/review/fullhd-updates.png` (1920×1080 Settings) and `mobile-updates.png` (390px). Root-agent layout checks place the Settings bottom at 979px within the 1080px viewport without workspace scrolling; mobile has no horizontal overflow. Captures show the idle/current state, not every download, confirmation or reconnect state. This confirmation preserves the prior accessibility and backend review limits.
 
 ## Do's and Don'ts
 
