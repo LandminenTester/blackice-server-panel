@@ -8,6 +8,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'UI type check failed.' }
   npm --prefix ui run build
   if ($LASTEXITCODE -ne 0) { throw 'UI build failed.' }
+  Copy-Item licenses src/Web/wwwroot/licenses -Recurse -Force
   dotnet publish src/Supervisor -c Release -o artifacts/supervisor
   if ($LASTEXITCODE -ne 0) { throw 'Supervisor build failed.' }
   dotnet publish src/Web -c Release -o artifacts/web
