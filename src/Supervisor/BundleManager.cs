@@ -75,7 +75,11 @@ public sealed partial class BundleManager(PipeClient pipe, PanelConfig config)
                     var failure = response.FirstOrDefault(x => x.Contains("[server_ugc]") && (x.Contains("Failed", StringComparison.OrdinalIgnoreCase) || x.Contains("not found", StringComparison.OrdinalIgnoreCase)));
                     if (failure is not null) return new(false, [], false, DateTimeOffset.UtcNow, "bundle.failed");
                     var header = Array.FindIndex(response, x => x.Trim().TrimStart('>').Trim() == "Loaded bundles:");
-                    if (header < 0) return new(false, [], false, DateTimeOffset.UtcNow, "bundle.output");
+                    if (header < 0) {
+                        if(!TryStructured(response,out var table))return new(false, [], false, DateTimeOffset.UtcNow, "bundle.output");
+                        observedPid=status.Status!.Pid;states.Clear();foreach(var item in table)states[item.Key]=item.Value;
+                        return new(true,known.Union(table.Keys).Order(StringComparer.Ordinal).Select(x=>new BundleInfo(x,table.GetValueOrDefault(x,"unknown"))).ToArray(),true,DateTimeOffset.UtcNow);
+                    }
                     var loaded = response[(header + 1)..].Select(x => x.Trim().TrimStart('>').Trim()).Where(x => Name().IsMatch(x) && x != "bundles").ToHashSet(StringComparer.Ordinal);
                     await Observe(status.Status!.Pid, lines, ct);
                     return new(true, known.Union(loaded).Order(StringComparer.Ordinal).Select(x => new BundleInfo(x, states.GetValueOrDefault(x, loaded.Contains(x) ? "unknown" : "stopped"))).ToArray(), true, DateTimeOffset.UtcNow);
@@ -85,6 +89,20 @@ public sealed partial class BundleManager(PipeClient pipe, PanelConfig config)
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         { return new(false, [], false, DateTimeOffset.UtcNow, "bundle.timeout"); }
+    }
+    public static bool TryStructured(string[] response,out Dictionary<string,string> states) {
+        states=new(StringComparer.Ordinal);var lines=response.Select(x=>x.Trim().TrimStart('>').Trim()).Where(x=>x.Length>0).ToArray();int index=0;
+        foreach(var section in new[]{("Running","running"),("Available, not running","stopped")}) {
+            if(index>=lines.Length)return false;
+            var header=Regex.Match(lines[index++],"^"+Regex.Escape(section.Item1)+@" \(([0-9]+)\):$");
+            if(!header.Success||!int.TryParse(header.Groups[1].Value,out var count)||count>10000)return false;
+            if(index>=lines.Length||!Regex.IsMatch(lines[index++],@"^NAME\s+VERSION\s+CLIENT\s+SERVER\s+UI$"))return false;
+            for(var n=0;n<count;n++) {
+                if(index>=lines.Length)return false;var columns=Regex.Split(lines[index++],@"\s+");
+                if(columns.Length<5||!Name().IsMatch(columns[0])||!states.TryAdd(columns[0],section.Item2))return false;
+            }
+        }
+        return index==lines.Length;
     }
     private async Task ConfirmAction(string name, string action, CancellationToken ct)
     {
