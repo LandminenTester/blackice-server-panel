@@ -28,7 +28,7 @@ export const en = {
  setupPasswordHint:'At least 12 characters. Use a unique password.', setupReady:'Check the directory, then complete setup.',
  mode:'Installation method', bytes:'Downloaded', close:'Close', overviewHint:'Control your server and inspect its current activity.',
  consoleHint:'Live terminal output and Replay commands.', bundlesHint:'Actions wait for a confirmed Replay lifecycle event.',
- settingsHint:'Panel preferences and shutdown behavior.', loginHint:'Sign in to manage your REPLAY.re Cyberpunk 2077 server.',
+ settingsHint:'Panel preferences and shutdown behavior.', loginHint:'Sign in to manage your Replay server.',
  serverActions:'Server controls', navigation:'Main navigation', latestOutput:'Recent activity', openConsole:'Open console',
  setupSuccess:'Setup complete. Sign in with your new account.', failed:'Failed', idle:'Not started',
  directoryHint:'Directories belong to the server host. No browser files are uploaded.',

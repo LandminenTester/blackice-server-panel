@@ -8,6 +8,7 @@
     pid: number | null;
     serverRoot: string;
     shutdownMode: string;
+    autoStartServer: boolean;
     detail?: string;
   };
   type Bundle = { name: string; state: string };
@@ -79,6 +80,10 @@
     locale = value as Locale;
     localStorage.setItem("replay.locale", locale);
     document.documentElement.lang = locale;
+    if (authenticated) run(async () => {
+      const data = await request("/api/settings", { locale });
+      status = data.status;
+    });
   }
   function message(code: string) {
     return (
@@ -237,6 +242,13 @@
   async function settings(value: string) {
     await run(async () => {
       const data = await request("/api/settings", { shutdownMode: value });
+      status = data.status;
+      notice = "saved";
+    });
+  }
+  async function autoStart(value: boolean) {
+    await run(async () => {
+      const data = await request("/api/settings", { autoStartServer: value });
       status = data.status;
       notice = "saved";
     });
@@ -835,6 +847,9 @@
         </section>
       {:else}
         <section class="settings-section">
+          <h2>{t.autoStart}</h2>
+          <Toggle checked={status?.autoStartServer ?? true} label={t.autoStart} disabled={busy || !connected} onchange={autoStart} />
+          <p class="muted">{t.autoStartHint}</p>
           <h2>{t.shutdown}</h2>
           <Select
             value={status?.shutdownMode ?? "keep-running"}
