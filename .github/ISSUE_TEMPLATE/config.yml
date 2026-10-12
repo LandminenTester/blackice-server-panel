@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/LandminenTester/blackice-server-panel/security/advisories/new
+    about: Please report security problems privately, not in a public issue (see SECURITY.md).
+  - name: Questions about BlackICE / REServer itself
+    url: https://docs.replay.re/
+    about: Game and server questions belong to the official docs and the rePLAY.re community, not to this panel.

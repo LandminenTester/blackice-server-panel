@@ -3,6 +3,12 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    # Templates and contribution files never affect the build (tag pushes always run).
+    paths-ignore:
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+      - ".github/CODEOWNERS"
+      - "CONTRIBUTING.md"
   pull_request:
 permissions:
   contents: read
