@@ -79,7 +79,7 @@ components:
 
 The user-pinned direction is a Cyberpunk operating surface. Dark charcoal and plum panels carry sharp red contours, cyan operational information and selective yellow action accents. IBM Plex typography and generous separation keep the expressive palette readable during server administration.
 
-This system replaces the former green, rounded interface. Preserve the approved dark, angular identity across Dashboard, Console, Bundles, Settings, Users, sign-in and first-run setup. English and German share the same visual hierarchy and control behavior; longer translations must wrap without obscuring an action or state.
+This system replaces the former green, rounded interface. Preserve the approved dark, angular identity across Dashboard, Console, Bundles, Settings, Users, sign-in and first-run setup, including diagnostic streams, optional LAN bridge details and RE Server updates. English and German share the same visual hierarchy and control behavior; longer translations must wrap without obscuring an action or state. This increment extends the incumbent implementation without a redesign or a new approved composition.
 
 **Key Characteristics:**
 
@@ -96,7 +96,7 @@ The frontmatter records implemented colors from `ui/src/style.css`; semantic use
 
 - **Primary — Red:** brand, headings, structural accents, ordinary button text and danger contours. Error messages use the brighter error foreground on a dark red surface.
 - **Secondary — Cyan:** console output, selected language display, focus outlines, success feedback and connected/running indicators.
-- **Tertiary — Yellow:** primary progression/start actions, selected navigation and console mode, and the current setup step.
+- **Tertiary — Yellow:** primary progression/start/apply actions, selected navigation and the current setup step.
 - **Neutral:** charcoal background, plum toolbar and surface, a deeper console, pale pink foreground and muted pink secondary copy. The line color separates regions and fields.
 
 **The State Text Rule.** Colored square indicators always accompany readable status text. Cyan is positive operational information; disabled controls and stale or unknown bundle states must not imply confirmed availability.
@@ -114,7 +114,7 @@ Self-hosted IBM Plex Sans (400, 500 and 600) serves the interface; self-hosted I
 
 An opaque toolbar (82px high on desktop) holds the brand, server controls and textual state, language selector and sign-out. The desktop app shell fills the remaining viewport height and pairs a fixed 228px navigation rail with a flexible workspace without a maximum width. Workspace padding is 24px at the top, 32px horizontally and 18px at the bottom, with a 16px gap between regions. The page heading and feedback precede each content region. Console and long lists scroll internally; the workspace can scroll when content exceeds the available height, while the header and sidebar remain visible.
 
-Dashboard pairs a 280px runtime column with recent output, separated by 36px. Console uses one full-width panel with a mode toolbar, selectable output and command row. Bundles use a divided list with identity/state on the left and actions on the right. Desktop Settings content is capped at 1000px; its selectors at 380px. Authentication/setup uses a centered container capped at 620px, padded 64px vertically and 32px horizontally.
+Dashboard pairs a 280px runtime column with recent output, separated by 36px. The runtime column also holds the bridge summary and scrolls internally when needed. Console uses one full-width panel with diagnostic filters, selectable output and command row. Bundles use a divided list with identity/state on the left and actions on the right. Desktop Settings content is capped at 1000px; its selectors at 380px. Bridge configuration and RE Server updates use collapsible outlined regions. Authentication/setup uses a centered container capped at 620px, padded 64px vertically and 32px horizontally. Preserve the fixed 1920×1080 operation shell at default zoom; growing diagnostic content scrolls within its output region.
 
 Between 721px and 1100px, the navigation rail narrows to 190px, workspace padding becomes 20px and Dashboard stacks. Runtime details become a two-column definition list. Users also stacks, with the user list capped at 220px and permissions arranged in two columns. The header retains compact controls and the textual server state; connection text is hidden.
 
@@ -146,7 +146,7 @@ Dashboard and Settings, plus permission-visible Console, Bundles and Users, form
 
 ### Console and operational state
 
-Recent output and Console output are labelled read-only textareas that retain keyboard focus, selection and scrolling. Desktop output regions flex within their panels instead of resizing; Console is also non-resizable on mobile. Live console and Log file are pressed-state buttons in a labelled group. Following live output scrolls to the latest line; log mode offers explicit refresh. The command field has a visually hidden label and a visible placeholder, and sending requires permission, a running connected server and nonempty input.
+Recent output and Console output are labelled read-only textareas that retain keyboard focus, selection and scrolling. Desktop output regions flex within their panels instead of resizing; Console is also non-resizable on mobile. DiagnosticStream replaces the former console modes and manual log refresh. Permission-filtered source and module selectors, a labelled search field, Pause/Resume and Download share a wrapping toolbar. Follow output and Include history reuse the square switches. The cursor stream polls every second while unpaused, keeps up to 2000 received rows and reports dropped lines. History includes retained streams; download exports the currently filtered output, rather than promising arbitrary historical downloads. Following output scrolls to the latest line. Source/module/search fields stack at 720px and below, while Pause and Download share the action row. The command field has a visually hidden label and a visible placeholder, and sending requires permission, a running connected server and nonempty input.
 
 Server and bundle actions disable while busy or when state/connection makes them unavailable. Restart, Stop and forced stop for the server open a native modal dialog with a labelled heading and Cancel/Confirm actions. Bundle rows keep names, textual states and associated actions together; running bundles offer Restart/Stop, stopped bundles offer Start, and unconfirmed state disables control. While Bundles is selected, refresh is attempted every 1500ms, with overlapping/busy requests skipped; manual refresh remains visible.
 
@@ -164,22 +164,29 @@ Native updates separate Download and verify from Install and restart. Download r
 
 Bounded visual evidence for this increment is `.impeccable/review/fullhd-updates.png` (1920×1080 Settings) and `mobile-updates.png` (390px). Root-agent layout checks place the Settings bottom at 979px within the 1080px viewport without workspace scrolling; mobile has no horizontal overflow. Captures show the idle/current state, not every download, confirmation or reconnect state. This confirmation preserves the prior accessibility and backend review limits.
 
+### LAN bridge and RE Server updates
+
+The optional bridge summary separates transport from health and phase, with readable labels for build commit, tick, last reply, start time and last exit/code. Unknown values use an em dash or localized unknown state; empty output does not imply a stopped server. The bridge supports `sv_lan 1` only and preserves PTY/ConPTY fallback when unavailable. Settings places its enable switch and labelled port/retention fields inside a native details region. Fields use three columns on desktop and one on mobile; Save opens a labelled native confirmation dialog. Restart-required and saved feedback use status text. Save failures remain visible independently of background polling failures.
+
+RE Server updates reuse the same collapsible region, red headings, cyan mono version metadata and yellow apply action. The workflow checks available versions, prepares a selected official-alpha release or local backup, and applies only a ready job after native confirmation. Target selection is disabled during an active or ready job; permission and readiness gate preparation/apply. The UI states the official-alpha/local-backup availability boundary and makes no promise of arbitrary historical downloads. Cancel is offered for downloading or ready jobs. Job state and byte count use status text; action failures remain visible after successful background polling. At 720px and below, the hint and Check button stack without allocating spare height, and action buttons occupy the full width in both German and English.
+
+Bounded finish evidence is `.impeccable/review/bridge-desktop-{dashboard,console,settings,server-updates,target,bridge}.png` and `bridge-mobile-{dashboard,console,bridge,server-updates,en-updates}.png`. The latest German and English mobile update captures show the corrected stacked heading. The finish reviewer found no further visual changes needed after that fix; action/polling errors were subsequently separated in `Bridge.svelte` and `ServerUpdates.svelte`. Root-agent validation reports `npm check` with zero errors/warnings; diagnostics 27, server updates 17, core 22, panel updates 14 and integration 68 passing tests, plus successful real Windows/Linux/Docker bridge and update checks on `main` at `3a2dd8e`. This is bounded visual and functional evidence, not an independent security audit or exhaustive accessibility/browser coverage.
+
+### Startup preference
+
+Settings reuses the existing custom Toggle for the persisted auto-start preference, with a localized explanation and disabled state during requests or disconnection. Language selection also persists the native control-terminal language. No visual identity or spacing tokens changed. Native process terminals are functional OS surfaces and do not adopt the web dashboard chrome.
+
+### Fixed dashboard and accounts
+At desktop sizes, the header and sidebar remain visible. The workspace occupies the remaining viewport; the console output and large lists scroll within their own regions. Full HD target: 1920×1080 at default zoom. Server controls and status share the header on every authenticated page. Sidebar footer contains BlackICE, the unofficial designation and the public GitHub link. Users reuses Toggle and existing form tokens for individual permissions; API authorization controls capabilities. The wide layout pairs a bordered user list with an editor separated by a red top contour. Username/password fields share a row, and permissions use a three-column grid. The enabled switch and all thirteen permission switches expose labels and checked state, and disable during requests. Editing preserves the username and permits an optional replacement password; creation requires a password. Save uses the existing yellow primary action, and Delete opens a native confirmation dialog. Editor errors and saved feedback retain alert/status semantics.
+
+Verification of the account/shell change: `.impeccable/review/fullhd-console.png` and `fullhd-users.png` are complete 1920×1080 captures; `mobile-users.png` covers Users at 390px. The bounded finish review disposition is **ship**. Root-agent DOM checks on all five authenticated pages show no body/workspace scrolling at default Full HD zoom; Mobile Users has no horizontal overflow. Dynamic-tab Home/End reaches Users. Finish review resolved keyboard wrapping and permission-sensitive cached logs. Backend permission, password/session revocation and protected-last-manager checks are covered separately by integration/core tests. This increment preserves the Cyberpunk tokens and reduced-motion behavior; its visual confirmation does not constitute an exhaustive accessibility or backend audit.
+
 ## Do's and Don'ts
 
 - **Do** preserve the red/cyan/yellow roles and dark angular surfaces selected by the user.
 - **Do** keep state text, visible labels, keyboard access and cyan focus outlines alongside visual indicators.
 - **Do** preserve wrapping and responsive stacking for both English and German.
-- **Do** keep Console selection/scrolling usable and require confirmed bundle control availability.
+- **Do** keep diagnostic selection/scrolling usable, export only the filtered output and require confirmed bundle control availability.
 - **Don't** restore the former green palette or rounded control language.
 - **Don't** present unrelated settings feedback after navigation or infer stopped state from empty output.
 - **Don't** treat synthetic review fixtures as product defaults or describe this bounded review as a complete accessibility or backend audit.
-
-
-## Startup preference addition
-
-Settings reuses the existing custom Toggle for the persisted auto-start preference, with a localized explanation and disabled state during requests or disconnection. Language selection also persists the native control-terminal language. No visual identity or spacing tokens changed. Native process terminals are functional OS surfaces and do not adopt the web dashboard chrome.
-
-## Fixed dashboard and accounts
-At desktop sizes, the header and sidebar remain visible. The workspace occupies the remaining viewport; the console output and large lists scroll within their own regions. Full HD target: 1920×1080 at default zoom. Server controls and status share the header on every authenticated page. Sidebar footer contains BlackICE, the unofficial designation and the public GitHub link. Users reuses Toggle and existing form tokens for individual permissions; API authorization controls capabilities. The wide layout pairs a bordered user list with an editor separated by a red top contour. Username/password fields share a row, and permissions use a three-column grid. The enabled switch and all thirteen permission switches expose labels and checked state, and disable during requests. Editing preserves the username and permits an optional replacement password; creation requires a password. Save uses the existing yellow primary action, and Delete opens a native confirmation dialog. Editor errors and saved feedback retain alert/status semantics.
-
-Verification of the account/shell change: `.impeccable/review/fullhd-console.png` and `fullhd-users.png` are complete 1920×1080 captures; `mobile-users.png` covers Users at 390px. The bounded finish review disposition is **ship**. Root-agent DOM checks on all five authenticated pages show no body/workspace scrolling at default Full HD zoom; Mobile Users has no horizontal overflow. Dynamic-tab Home/End reaches Users. Finish review resolved keyboard wrapping and permission-sensitive cached logs. Backend permission, password/session revocation and protected-last-manager checks are covered separately by integration/core tests. This increment preserves the Cyberpunk tokens and reduced-motion behavior; its visual confirmation does not constitute an exhaustive accessibility or backend audit.

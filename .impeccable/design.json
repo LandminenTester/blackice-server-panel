@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-11T22:16:41.877Z",
+  "generatedAt": "2026-10-12T10:02:04.935Z",
   "title": "Design System: Unofficial BlackICE - Server Webpanel",
   "extensions": {
     "colorMeta": {
@@ -383,10 +383,10 @@
       "css": ".ds-nav{padding:12px;background:#151319}.ds-nav-tab{display:flex;align-items:center;gap:14px;min-height:44px;padding:10px 20px;font:500 16px 'IBM Plex Sans',sans-serif;color:var(--yellow,#f4e56e);border:1px solid var(--yellow,#f4e56e);border-radius:0;background:#2c2720;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,0 100%);cursor:pointer;transition:background .14s ease-out}.ds-nav-tab svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5}.ds-nav-tab:hover{background:#3b202b}.ds-nav-tab:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}"
     },
     {
-      "name": "Output panel",
+      "name": "Diagnostic output panel",
       "kind": "card",
-      "description": "A bordered surface with red heading and a selectable cyan output region. Desktop output flexes within the viewport-fitting panel; this standalone preview shows its surface treatment.",
-      "html": "<section class=\"ds-panel\"><h2>Latest output</h2><textarea readonly aria-label=\"Latest output\">No console output yet.</textarea></section>",
+      "description": "Selectable cyan cursor-stream output with source/module/search filters, pause/resume, follow and retained history. Download exports the current filtered output; static surface preview.",
+      "html": "<section class=\"ds-panel\"><h2>Diagnostics</h2><textarea readonly aria-label=\"Latest output\">No diagnostic output yet.</textarea></section>",
       "css": ".ds-panel{background:var(--surface,#19171e);border:1px solid var(--line,#834653)}.ds-panel h2{margin:0;padding:20px 24px;border-bottom:1px solid var(--line,#834653);color:var(--red,#ff6477);font:500 20px 'IBM Plex Sans',sans-serif}.ds-panel textarea{display:block;width:100%;min-height:160px;padding:24px;border:0;resize:none;background:#0c1016;color:var(--cyan,#74e7e9);font:13px/1.8 'IBM Plex Mono',monospace}.ds-panel textarea:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}"
     },
     {
@@ -402,27 +402,25 @@
       "description": "Closed custom listbox trigger preview; application supplies focus management and keyboard interaction.",
       "html": "<button class=\"ds-select\" aria-label=\"Language\" aria-haspopup=\"listbox\" aria-expanded=\"false\">English<svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m4 6 4 4 4-4\"/></svg></button>",
       "css": ".ds-select{min-height:44px;padding:10px 20px;font:500 16px 'IBM Plex Sans',sans-serif;border-radius:0;border:1px solid var(--line,#834653);cursor:pointer;transition:background .14s ease-out;display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:120px;background:#211b24;color:var(--cyan,#74e7e9);text-align:left}.ds-select svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5}.ds-select:hover{background:#3b202b;border-color:var(--red,#ff6477)}.ds-select:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}"
-    }
-    ,
+    },
     {
       "name": "User permission switches",
       "kind": "custom",
       "description": "Existing square Toggle reused for individual user permissions; three columns on wide screens, two on compact desktop and one on mobile. Static checked-state previews; the application supplies persistence and request disabling.",
       "html": "<div class=\"ds-permissions\" role=\"group\" aria-label=\"Permissions\"><button type=\"button\" class=\"ds-permission\" role=\"switch\" aria-checked=\"true\"><span aria-hidden=\"true\"><i></i></span>Start server</button><button type=\"button\" class=\"ds-permission\" role=\"switch\" aria-checked=\"false\"><span aria-hidden=\"true\"><i></i></span>Read console</button><button type=\"button\" class=\"ds-permission\" role=\"switch\" aria-checked=\"false\"><span aria-hidden=\"true\"><i></i></span>Manage users</button></div>",
       "css": ".ds-permissions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;border-top:2px solid var(--red,#ff6477);padding-top:18px}.ds-permission{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px;border:0;border-radius:0;background:transparent;font:13px 'IBM Plex Sans',sans-serif;color:var(--muted,#c3abb2);text-align:left;cursor:pointer}.ds-permission>span{display:flex;align-items:center;justify-content:flex-end;flex-shrink:0;width:34px;height:18px;padding:3px;border:1px solid var(--cyan,#74e7e9)}.ds-permission i{display:block;width:10px;height:10px;background:var(--cyan,#74e7e9)}.ds-permission[aria-checked=false]>span{justify-content:flex-start;border-color:var(--line,#834653)}.ds-permission[aria-checked=false] i{background:var(--muted,#c3abb2)}.ds-permission:hover:not(:disabled){background:#3b202b}.ds-permission:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}.ds-permission:disabled{opacity:.45;cursor:not-allowed}@media(max-width:1100px){.ds-permissions{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:720px){.ds-permissions{grid-template-columns:1fr}}"
-    }
-    ,
+    },
     {
       "name": "Panel update card",
       "kind": "card",
-      "description": "Settings update card with wrapping cyan version metadata and separate download/verification and installation actions. Static idle preview; the application supplies permission checks, verified-ready gating, confirmation and reconnect handling.",
+      "description": "Settings panel update card with wrapping cyan version metadata and separate prepare/install actions. RE Server updates reuse this visual vocabulary in a collapsible region for official-alpha/local-backup targets, ready-state confirmation and apply; both locales stack the mobile heading.",
       "html": "<section class=\"ds-update\" aria-label=\"Panel updates\"><div class=\"ds-update-heading\"><h2>Panel updates</h2><button type=\"button\">Check for updates</button></div><div class=\"ds-update-versions\"><span>Installed: <strong>—</strong></span><span>Latest release: <strong>—</strong></span></div><p>Download and verify before installing.</p><div class=\"ds-update-actions\"><button type=\"button\" disabled>Download and verify</button><button type=\"button\" class=\"ds-update-primary\" disabled>Install and restart</button></div><p class=\"ds-update-status\" role=\"status\">No update information yet.</p></section>",
       "css": ".ds-update{border:1px solid var(--line,#834653);padding:16px 20px;margin-bottom:20px;color:#f5d8d9;font-family:'IBM Plex Sans',sans-serif}.ds-update-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}.ds-update h2{margin:0;color:var(--red,#ff6477);font-size:20px;font-weight:500}.ds-update button{min-height:44px;padding:10px 20px;background:#211b24;color:var(--red,#ff6477);border:1px solid var(--line,#834653);border-radius:0;cursor:pointer;font:500 16px 'IBM Plex Sans',sans-serif;transition:background .14s ease-out}.ds-update button:hover:not(:disabled){background:#3b202b;border-color:var(--red,#ff6477)}.ds-update button:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}.ds-update button:disabled{opacity:.45;cursor:not-allowed}.ds-update .ds-update-primary{background:var(--yellow,#f4e56e);border-color:var(--yellow,#f4e56e);color:#17151a}.ds-update .ds-update-primary:hover:not(:disabled){background:#fff393}.ds-update-versions{display:flex;flex-wrap:wrap;gap:12px 24px;font-size:13px;margin-top:12px}.ds-update-versions strong{color:var(--cyan,#74e7e9);font-family:'IBM Plex Mono',monospace}.ds-update p{font-size:13px;line-height:1.5;color:var(--muted,#c3abb2);max-width:70ch}.ds-update-actions{display:flex;gap:12px;flex-wrap:wrap}.ds-update .ds-update-status{margin:10px 0 0;color:var(--cyan,#74e7e9)}@media(max-width:720px){.ds-update{padding:14px}.ds-update-heading{flex-wrap:wrap}.ds-update-actions button{width:100%}}@media(prefers-reduced-motion:reduce){.ds-update button{transition:none}}"
     }
   ],
   "narrative": {
     "northStar": "Cyberpunk server operations",
-    "overview": "The user-pinned direction is a Cyberpunk operating surface. Dark charcoal and plum panels carry sharp red contours, cyan operational information and selective yellow action accents. IBM Plex typography and generous separation keep the expressive palette readable during server administration.\n\nThis system replaces the former green, rounded interface. Preserve the approved dark, angular identity across Dashboard, Console, Bundles, Settings, Users, sign-in and first-run setup. English and German share the same visual hierarchy and control behavior; longer translations must wrap without obscuring an action or state.",
+    "overview": "The user-pinned direction is a Cyberpunk operating surface. Dark charcoal and plum panels carry sharp red contours, cyan operational information and selective yellow action accents. IBM Plex typography and generous separation keep the expressive palette readable during server administration.\n\nThis system replaces the former green, rounded interface. Preserve the approved dark, angular identity across Dashboard, Console, Bundles, Settings, Users, sign-in and first-run setup, including diagnostic streams, optional LAN bridge details and RE Server updates. English and German share the same visual hierarchy and control behavior; longer translations must wrap without obscuring an action or state. This increment extends the incumbent implementation without a redesign or a new approved composition.",
     "keyCharacteristics": [
       "Dark tonal surfaces and angular red contours.",
       "Cyan operational information and visible focus.",
@@ -440,7 +438,7 @@
       "Do preserve the red/cyan/yellow roles and dark angular surfaces selected by the user.",
       "Do keep state text, visible labels, keyboard access and cyan focus outlines alongside visual indicators.",
       "Do preserve wrapping and responsive stacking for both English and German.",
-      "Do keep Console selection/scrolling usable and require confirmed bundle control availability."
+      "Do keep diagnostic selection/scrolling usable, export only the filtered output and require confirmed bundle control availability."
     ],
     "donts": [
       "Don't restore the former green palette or rounded control language.",
