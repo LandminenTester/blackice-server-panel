@@ -4,7 +4,7 @@ let {t,request,installAllowed}=$props<{t:Catalog;request:(url:string,body?:objec
 type Info={current:string|null;latest:string|null;versions:{commit:string;source:string}[];job:{state:string;phase:string;target:string;bytes:number;error?:string}|null};
 let info=$state<Info|null>(null),target=$state(''),busy=$state(false),error=$state(''),dialog=$state<HTMLDialogElement>()!;
 let active=$derived(['downloading','applying'].includes(info?.job?.state??''));let options=$derived((info?.versions??[]).map(v=>({value:v.commit,label:v.commit+' · '+(v.source==='official-alpha'?t.serverOfficial:t.serverBackup)})));
-async function load(){try{info=await request('/api/server-updates');if(!target&&info?.latest)target=info.latest;}catch(e){error=(e as Error).message;}}
+async function load(){try{info=await request('/api/server-updates');error='';if(!target&&info?.latest)target=info.latest;}catch(e){error=(e as Error).message;}}
 async function action(name:string){busy=true;error='';try{info=await request('/api/server-updates/'+name,{target});if(name==='check'&&!target)target=info!.latest??'';}catch(e){error=(e as Error).message;}finally{busy=false;}}
 onMount(()=>{load();const timer=setInterval(load,2000);return()=>clearInterval(timer);});
 </script>

@@ -108,7 +108,7 @@ try {
   check((await request('/api/bundles')).status===200,'bundle-read permission allows list');
   for(const route of ['/api/command','/api/bundles/fixture-bundle/start','/api/bundles/fixture-bundle/stop','/api/bundles/fixture-bundle/restart','/api/server/start','/api/server/stop','/api/server/restart','/api/server/force-stop','/api/settings','/api/users/save','/api/bridge/settings','/api/server-updates/check','/api/server-updates/download','/api/server-updates/apply','/api/updates/check','/api/updates/download','/api/updates/apply'])check((await post(route,{text:'echo forbidden',autoStartServer:true})).status===403,'restricted account denied '+route);
   check((await request('/api/logs')).status===403&&(await request('/api/users')).status===403,'logs and user administration separately restricted');
-  check((await request('/api/diagnostics?source=console')).status===403&&(await request('/api/diagnostics?source=log')).status===403,'diagnostic sources respect separate read permissions');
+  check((await request('/api/diagnostics?source=console')).status===200&&(await request('/api/diagnostics?source=log')).status===403&&(await request('/api/diagnostics?source=all')).status===403,'diagnostic sources respect separate read permissions');
   check((await request('/api/server-updates')).status===403,'server update metadata requires settings permission');
   cookies.clear();for(const [k,v] of adminCookies)cookies.set(k,v);csrf=adminCsrf;
   check((await post('/api/users/save',{username:'reader',permissions:['server.start'],enabled:true})).status===200,'admin can change permissions');
