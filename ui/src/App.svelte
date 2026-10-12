@@ -35,7 +35,10 @@
   let ready = $state(false),
     configured = $state(true),
     authenticated = $state(false),
-    csrf = $state("");
+    csrf = $state(""),
+    setupConsole = $state<string[]>([]),
+    pickerBusy = $state(false),
+    pickerFailed = $state(false);
   let dashboardName = $state("Unofficial BlackICE - Server Webpanel"),
     username = $state("admin"),
     password = $state(""),
@@ -43,7 +46,7 @@
     key = $state("");
   let backend = $state("windows"),
     serverRoot = $state(""),
-    mode = $state("existing"),
+    mode = $state("download"),
     step = $state(0),
     validated = $state(false);
   let busy = $state(false),
@@ -62,12 +65,8 @@
     bundleError = $state(""),
     checked = $state(""),
     bundleLoading = $state(false);
-  let job = $state<Job | null>(null),
-    directories = $state<string[]>([]),
-    folder = $state(""),
-    parent = $state<string | null>(null);
+  let job = $state<Job | null>(null);
   let dialog: HTMLDialogElement;
-  let folderDialog: HTMLDialogElement;
   let output = $state<HTMLTextAreaElement>();
   let pending = $state(""),
     stream: EventSource | undefined;
@@ -147,8 +146,12 @@
     if (!can("console.read")) lines = [];
     const boot = await request("/api/bootstrap");
     configured = boot.configured;
+    if (!configured && !serverRoot) serverRoot = boot.defaultServerRoot ?? "";
     dashboardName = boot.dashboardName;
     backend = boot.backend;
+    if (!configured) {
+      try { setupConsole = await request("/api/setup/console"); } catch { setupConsole = []; }
+    } else setupConsole = [];
   }
   function connect() {
     stream?.close();
@@ -269,17 +272,25 @@
       notice = "saved";
     });
   }
-  async function folders(path: string) {
-    await run(async () => {
-      const data = await request("/api/setup/folders", { key, path });
-      directories = data.directories;
-      folder = data.path;
-      parent = data.parent;
-    });
-  }
-  async function browse() {
-    await folders(serverRoot);
-    folderDialog.showModal();
+  async function pick() {
+    pickerBusy = true;
+    try {
+      await request("/api/setup/pick", { key, path: serverRoot });
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 800));
+        const r = await request("/api/setup/pick-status", { key });
+        if (r.state === "running") continue;
+        if (r.state === "done") {
+          serverRoot = r.path;
+          validated = false;
+        } else if (r.state === "unavailable") pickerFailed = true;
+        break;
+      }
+    } catch {
+      pickerFailed = true;
+    } finally {
+      pickerBusy = false;
+    }
   }
   async function validate() {
     await run(async () => {
@@ -450,6 +461,13 @@
   <main class="auth setup">
     <h1>{t.welcome}</h1>
     <p class="muted">{t.setupIntro}</p>
+    <textarea
+      class="console-output setup-console"
+      readonly
+      rows="3"
+      aria-label={t.setupConsole}
+      value={setupConsole.join("\n")}
+    ></textarea>
     <ol class="steps" aria-label={t.setup}>
       {#each [t.account, t.server, t.finish] as name, index}<li
           class:current={step === index}
@@ -490,7 +508,7 @@
               type="password"
               bind:value={password}
               autocomplete="new-password"
-              minlength="12"
+              minlength="8"
               maxlength="256"
               required
             /><small>{t.setupPasswordHint}</small></label
@@ -500,7 +518,7 @@
               type="password"
               bind:value={confirmation}
               autocomplete="new-password"
-              minlength="12"
+              minlength="8"
               required
             /></label
           >
@@ -511,7 +529,7 @@
           disabled={!key ||
             !dashboardName ||
             username.length < 3 ||
-            password.length < 12 ||
+            password.length < 8 ||
             password !== confirmation}
           onclick={() => (step = 1)}>{t.next}</button
         >
@@ -551,17 +569,18 @@
             >{t.serverRoot}<input
               bind:value={serverRoot}
               oninput={() => (validated = false)}
-              placeholder={backend === "windows"
-                ? "C:\\BlackICE Server"
-                : "/srv/replay"}
+              readonly={!pickerFailed}
               required
-            /><small>{t.directPath}</small></label
+            /><small>{pickerFailed ? t.directPath : t.serverRootHint}</small></label
           >
         </div>
         <div class="actions">
-          <button type="button" onclick={browse} disabled={busy || !key}
-            >{t.browse}</button
-          ><button
+          {#if !pickerFailed}<button
+              type="button"
+              onclick={pick}
+              disabled={busy || pickerBusy || !key}
+              >{pickerBusy ? t.pickerOpen : t.changeFolder}</button
+            >{/if}<button
             type="button"
             onclick={mode === "existing" ? validate : install}
             disabled={busy || !serverRoot || job?.state === "running"}
@@ -893,31 +912,4 @@
       }}>{t.confirm}</button
     >
   </div>
-</dialog>
-<dialog
-  class="folder-dialog"
-  bind:this={folderDialog}
-  aria-labelledby="folder-title"
->
-  <h2 id="folder-title">{t.browse}</h2>
-  <p class="muted">{t.directoryHint}</p>
-  <p class="path">{folder || "/"}</p>
-  <div class="folder-list">
-    {#if parent}<button onclick={() => folders(parent!)}>{t.parent}</button
-      >{/if}{#each directories as directory}<button
-        onclick={() => folders(directory)}>{directory}</button
-      >{/each}
-  </div>
-  <div class="actions">
-    <button onclick={() => folderDialog.close()}>{t.cancel}</button><button
-      class="primary"
-      disabled={!folder}
-      onclick={() => {
-        serverRoot = folder;
-        validated = false;
-        folderDialog.close();
-      }}>{t.chooseFolder}</button
-    >
-  </div>
-  {#if error}<p class="error" role="alert">{message(error)}</p>{/if}
 </dialog>

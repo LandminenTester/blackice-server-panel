@@ -8,12 +8,17 @@ public sealed record InstallInput(string Key, string ServerRoot, string Backend)
 public sealed record InstallJob(string Id, string State, string Phase, long Bytes, string? Error = null);
 public sealed class SetupService(PanelConfig config, string configPath)
 {
-    private readonly string key = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
+    private readonly string key = Convert.ToHexString(RandomNumberGenerator.GetBytes(3));
     private readonly SemaphoreSlim completion = new(1);
     private readonly object sync = new();
     private CancellationTokenSource? cancellation;
     private InstallJob? job;
     public void PrintKey() { if (!config.Configured) Console.WriteLine("Setup key: " + key); }
+    public string[] Banner()
+    {
+        if (config.Configured) throw new InvalidOperationException("setup.completed");
+        return ["BlackICE supervisor ready.", "Setup key: " + key];
+    }
     public void Authorize(string supplied)
     {
         if (config.Configured) throw new InvalidOperationException("setup.completed");
@@ -29,16 +34,27 @@ public sealed class SetupService(PanelConfig config, string configPath)
             throw new InvalidOperationException("path.mount");
         return root;
     }
-    public object Folders(string input)
+    public string DefaultRoot()
     {
-        if (string.IsNullOrWhiteSpace(input)) {
-            var mounts = Environment.GetEnvironmentVariable("REPLAY_PANEL_MOUNTS");
-            return new { path = "", parent = (string?)null, directories = mounts?.Split(';') ?? (OperatingSystem.IsWindows() ? Directory.GetLogicalDrives() : ["/"]) };
-        }
-        var path = Root(input);
-        if (!Directory.Exists(path)) throw new InvalidOperationException("path.missing");
-        return new { path, parent = Environment.GetEnvironmentVariable("REPLAY_PANEL_MOUNTS")?.Split(';').Contains(path)==true ? null : Directory.GetParent(path)?.FullName, directories = Directory.EnumerateDirectories(path).Where(x => { try { return (File.GetAttributes(x) & FileAttributes.ReparsePoint) == 0; } catch { return false; } }).Order().Take(500).ToArray() };
+        var mounts = Environment.GetEnvironmentVariable("REPLAY_PANEL_MOUNTS")?.Split(';', StringSplitOptions.RemoveEmptyEntries);
+        if (mounts is { Length: > 0 }) return Path.GetFullPath(mounts[0]);
+        var directory = Path.GetDirectoryName(configPath)!;
+        var panelRoot = string.Equals(Path.GetFileName(directory), ".local", StringComparison.OrdinalIgnoreCase) ? Path.GetDirectoryName(directory) ?? directory : directory;
+        return Path.Combine(panelRoot, "server");
     }
+    private readonly object pickSync = new();
+    private string pickState = "idle", pickPath = "";
+    public void PickStart(string initial)
+    {
+        lock (pickSync) { if (pickState == "running") return; pickState = "running"; pickPath = ""; }
+        _ = Task.Run(() => {
+            string state = "cancelled", path = "";
+            try { (state, path) = NativePicker.Pick(string.IsNullOrWhiteSpace(initial) || !Path.IsPathFullyQualified(initial) ? DefaultRoot() : initial); }
+            catch { state = "unavailable"; }
+            lock (pickSync) { pickState = state; pickPath = path; }
+        });
+    }
+    public object PickStatus() { lock (pickSync) return new { state = pickState, path = pickPath }; }
     public static void Validate(string path, string backend, bool fresh = false)
     {
         path = Root(path);
@@ -126,7 +142,7 @@ public sealed class SetupService(PanelConfig config, string configPath)
         Authorize(input.Key); await completion.WaitAsync();
         try {
             Authorize(input.Key);
-            if(string.IsNullOrWhiteSpace(input.DashboardName) || input.DashboardName.Length>80 || !System.Text.RegularExpressions.Regex.IsMatch(input.Username,@"\A[A-Za-z0-9_.-]{3,32}\z") || input.Password.Length is <12 or >256 || input.Password!=input.Confirmation || input.Locale is not ("en" or "de")) throw new InvalidOperationException("setup.validation");
+            if(string.IsNullOrWhiteSpace(input.DashboardName) || input.DashboardName.Length>80 || !System.Text.RegularExpressions.Regex.IsMatch(input.Username,@"\A[A-Za-z0-9_.-]{3,32}\z") || input.Password.Length is <8 or >256 || input.Password!=input.Confirmation || input.Locale is not ("en" or "de")) throw new InvalidOperationException("setup.validation");
             if(Status()?.State=="running") throw new InvalidOperationException("install.busy");
             if(input.Backend=="docker" && config.ContainerId.Length==0)throw new InvalidOperationException("docker.identity");
             Validate(input.ServerRoot,input.Backend);

@@ -7,8 +7,8 @@ Windows 10 1809+ x86-64 with ConPTY. BlackICE requires a roughly 2013+ x86-64 CP
 1. Extract the release outside the BlackICE server directory.
 2. Open `Start.exe`. The control terminal stays open.
 3. Open `http://127.0.0.1:20772`. Read the setup key from `.local/supervisor.log`.
-4. Enter dashboard name, username and matching passwords (at least 12 characters).
-5. Browse directories on the host or enter an absolute path. An existing server needs `REServer.exe` and `cfg/server.cfg`; format and write access are checked.
+4. Enter dashboard name, username and matching passwords (at least 8 characters).
+5. The server folder `server` inside the panel folder is created automatically; use "Change folder" to pick another one with the system folder dialog. An existing server needs `REServer.exe` and `cfg/server.cfg`; format and write access are checked.
 6. For installation, select an empty directory. The official ZIP is staged, extracted with path checks and validated. Cancel and retry are available; existing files are preserved.
 7. Finish and sign in. The server starts automatically by default; change this under Settings.
 
@@ -25,8 +25,8 @@ Windows 10 ab 1809, x86-64 und ConPTY verwenden. BlackICE benötigt eine CPU ab 
 1. Paket getrennt vom Server entpacken.
 2. `Start.exe` öffnen. Das Steuerterminal bleibt offen.
 3. `http://127.0.0.1:20772` öffnen, Schlüssel in `.local/supervisor.log` lesen.
-4. Dashboardname, Benutzername und identische Passwörter mit mindestens 12 Zeichen festlegen.
-5. Hostordner durchsuchen oder absoluten Pfad eingeben. Vorhandene Server benötigen `REServer.exe` und `cfg/server.cfg`. Dateiformat und Schreibrechte werden geprüft.
+4. Dashboardname, Benutzername und identische Passwörter mit mindestens 8 Zeichen festlegen.
+5. Der Ordner `server` im Panel-Ordner wird automatisch angelegt; „Ordner ändern“ öffnet den System-Ordnerdialog. Vorhandene Server benötigen `REServer.exe` und `cfg/server.cfg`. Dateiformat und Schreibrechte werden geprüft.
 6. Für den offiziellen Download einen leeren Ordner wählen. Der Installer arbeitet in einem temporären Verzeichnis mit Pfad- und Dateiprüfung. Abbruch und Wiederholung sind möglich; vorhandene Dateien bleiben erhalten.
 7. Einrichtung abschließen und anmelden. Standardmäßig startet der Server automatisch; dies lässt sich unter Einstellungen ändern.
 

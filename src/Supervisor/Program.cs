@@ -58,8 +58,10 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
         if(serverUpdates.Applying&&request.Action is "start" or "stop" or "restart" or "force-stop" or "command" or "bundle-action" or "bridge-settings" or "update-apply" or "shutdown")throw new InvalidOperationException("serverUpdate.busy");
         string Enc(object value)=>JsonSerializer.Serialize(value,PanelConfig.Json);
         switch(request.Action) {
-            case "bootstrap":reply=new(true,Lines:[Enc(new {configured=config.Configured,dashboardName=config.DashboardName,backend=config.Backend,locale=config.Locale,version=PanelUpdates.RunningVersion})]);break;
-            case "setup-folders": {var input=JsonSerializer.Deserialize<Dictionary<string,string>>(request.Command!)!;setup.Authorize(input["key"]);reply=new(true,Lines:[Enc(setup.Folders(input["path"]))]);break;}
+            case "bootstrap":reply=new(true,Lines:[Enc(new {configured=config.Configured,dashboardName=config.DashboardName,backend=config.Backend,locale=config.Locale,version=PanelUpdates.RunningVersion,defaultServerRoot=config.Configured?null:setup.DefaultRoot()})]);break;
+            case "setup-banner":reply=new(true,Lines:[Enc(setup.Banner())]);break;
+            case "setup-pick": {var input=JsonSerializer.Deserialize<Dictionary<string,string>>(request.Command!)!;setup.Authorize(input["key"]);setup.PickStart(input.GetValueOrDefault("path")??"");reply=new(true);break;}
+            case "setup-pick-status":setup.Authorize(request.Command!);reply=new(true,Lines:[Enc(setup.PickStatus())]);break;
             case "setup-validate": {var input=JsonSerializer.Deserialize<InstallInput>(request.Command!,PanelConfig.Json)!;setup.Authorize(input.Key);SetupService.Validate(input.ServerRoot,input.Backend);reply=new(true);break;}
             case "setup-install":reply=new(true,Lines:[Enc(setup.Start(JsonSerializer.Deserialize<InstallInput>(request.Command!,PanelConfig.Json)!))]);break;
             case "setup-job":setup.Authorize(request.Command!);reply=new(true,Lines:[Enc(setup.Status()??new InstallJob("","idle","idle",0))]);break;

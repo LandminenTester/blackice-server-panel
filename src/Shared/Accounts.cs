@@ -26,7 +26,7 @@ public static class Accounts {
  public static UserView[] List(PanelConfig c){lock(c){return Current(c).Select(u=>u.View()).ToArray();}}
  public static void Save(PanelConfig c,string path,UserChange input){lock(c){
   if(!Regex.IsMatch(input.Username,"^[A-Za-z0-9][A-Za-z0-9_.-]{2,31}$")||input.Permissions is null||input.Permissions.Any(p=>!Permissions.All.Contains(p)))throw new InvalidOperationException("users.invalid");
-  if(input.Password is not null&&input.Password.Length is <12 or >256)throw new InvalidOperationException("users.password");
+  if(input.Password is not null&&input.Password.Length is <8 or >256)throw new InvalidOperationException("users.password");
   var users=Current(c).Select(u=>JsonSerializer.Deserialize<PanelUser>(JsonSerializer.Serialize(u))!).ToList();
   var user=users.FirstOrDefault(u=>u.Username.Equals(input.Username,StringComparison.OrdinalIgnoreCase));
   if(input.Create&&user is not null)throw new InvalidOperationException("users.exists");

@@ -77,10 +77,13 @@ app.UseDefaultFiles(); app.UseStaticFiles();
 app.MapGet("/api/session", (HttpContext c, IAntiforgery antiforgery) =>
     Results.Ok(new { authenticated = c.User.Identity?.IsAuthenticated == true, username=c.User.Identity?.Name, permissions=c.User.FindAll("permission").Select(x=>x.Value), csrf = antiforgery.GetAndStoreTokens(c).RequestToken }));
 app.MapGet("/api/bootstrap", async (PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bootstrap"), ct)));
-foreach(var route in new[]{"folders","validate","install","finish"}) {
+app.MapGet("/api/setup/console", async (PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("setup-banner"), ct)));
+foreach(var route in new[]{"validate","install","finish"}) {
     var action=route;
     app.MapPost("/api/setup/"+route,async (JsonElement body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("setup-"+action,body.GetRawText()),ct)));
 }
+app.MapPost("/api/setup/pick",async (JsonElement body,HttpContext c,PipeClient pipe,CancellationToken ct)=>System.Net.IPAddress.IsLoopback(c.Connection.RemoteIpAddress??System.Net.IPAddress.None)?Data(await pipe.Call(new("setup-pick",body.GetRawText()),ct)):Results.Json(new Reply(false,"pick.unavailable"),statusCode:409));
+app.MapPost("/api/setup/pick-status",async (SetupKey body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("setup-pick-status",body.Key),ct)));
 app.MapPost("/api/setup/job",async (SetupKey body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("setup-job",body.Key),ct)));
 app.MapPost("/api/setup/cancel",async (SetupKey body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("setup-cancel",body.Key),ct)));
 app.MapPost("/api/login", async (Login body, HttpContext c, PipeClient pipe) =>

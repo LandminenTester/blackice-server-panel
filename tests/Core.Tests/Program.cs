@@ -22,6 +22,7 @@ try {
  var reader=Accounts.Authenticate(config,"reader","first-reader-password")!;
  Check(PanelConfig.Load(configPath).Users!.Any(u=>u.Username=="reader"),"accounts persist across configuration reload");
  Check(!File.ReadAllText(configPath).Contains("first-reader-password"),"account password never persisted in clear text");
+ Reject(()=>Accounts.Save(config,configPath,new("reader","short7!",["console.read"])),"password below 8 characters rejected");
  Reject(()=>Accounts.Save(config,configPath,new("reader",null,["invalid.permission"])),"unknown permission rejected");
  Reject(()=>Accounts.Save(config,configPath,new("admin",null,[],false)),"last user manager cannot be disabled");
  Accounts.Save(config,configPath,new("reader","changed-reader-password",["bundles.read"]));
