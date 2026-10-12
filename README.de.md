@@ -43,7 +43,7 @@ sudo chmod 700 /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blacki
 stat -c %g /var/run/docker.sock
 ```
 
-In `.env` eintragen: `PANEL_STATE=/srv/blackice-panel/state`, `PANEL_RUNTIME=/srv/blackice-panel/runtime`, `SERVER_PATH=/srv/blackice-server`, `DOCKER_GID` mit der ausgegebenen Socket-Gruppen-ID und `PANEL_VERSION=1.0.0`. Dann:
+In `.env` eintragen: `PANEL_STATE=/srv/blackice-panel/state`, `PANEL_RUNTIME=/srv/blackice-panel/runtime`, `SERVER_PATH=/srv/blackice-server`, `DOCKER_GID` mit der ausgegebenen Socket-Gruppen-ID und `PANEL_VERSION=1.1.0`. Dann:
 
 ```sh
 docker compose --env-file .env -f deploy/compose.yaml up -d
@@ -61,11 +61,9 @@ Unter localhost:20772 den ausgegebenen Einrichtungsschlüssel verwenden, Docker 
 - Ports: Spiel/Bundle-Download 20770 TCP/UDP, Voice 20771 TCP/UDP, Dashboard 20772 TCP auf localhost. Fernzugriff über dokumentierten [HTTPS-Reverse-Proxy](docs/operations.md).
 - `.local/` und Spielserverordner sichern. Neue Downloads verwenden LAN-Modus und deaktivierte automatische Serverupdates. Öffentliche Server benötigen die [offizielle Registrierung](https://docs.replay.re/servers/registering/).
 
-## Bridge-Diagnose
+## Server-Updates und Bridge-Diagnose
 
 REServer-Updates stehen jetzt unter Einstellungen bereit: offizielles Alpha prüfen, Dateien verifizieren und mit Laufzeitsicherung sowie Start-Rollback installieren. Aktuelles Alpha oder zuvor lokal gesicherten Build auswählen. [Serverupdate-Anleitung](docs/server-updates.md).
-
-
 
 Die optionale LAN-Bridge ergänzt Health, Serverphase, Commit/Tick, zugeordnete Konsolenausgabe und cursorbasierte Modullogs. In Einstellungen aktivieren und ausdrücklich neu starten. **--mcp erzwingt sv_lan 1; öffentliche Server behalten PTY.** Historie bleibt lokal, standardmäßig sieben Tage / 100 MB, konfigurierbar. [Einrichtung und Kompatibilität](docs/bridge.md).
 

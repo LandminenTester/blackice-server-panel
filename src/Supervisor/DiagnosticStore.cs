@@ -7,10 +7,12 @@ public sealed class DiagnosticStore {
  long sequence,totalBytes;int segment;string? active;DateTimeOffset cleaned=DateTimeOffset.MinValue;
  public DiagnosticStore(string directory,Func<BridgeSettings> settings){this.directory=Path.GetFullPath(directory);this.settings=settings;Directory.CreateDirectory(directory);
   if(!OperatingSystem.IsWindows())File.SetUnixFileMode(directory,UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
+  var checkpoint=Path.Combine(directory,"cursor");if(File.Exists(checkpoint)&&long.TryParse(File.ReadAllText(checkpoint),out var saved))sequence=Math.Max(0,saved);
   Cleanup();foreach(var file in Files()){foreach(var text in File.ReadLines(file)){try{var item=JsonSerializer.Deserialize<DiagnosticLine>(text,PanelConfig.Json);if(item is not null){sequence=Math.Max(sequence,item.Seq);recent.Enqueue(item);while(recent.Count>8192)recent.Dequeue();}}catch(JsonException){}}}
  }
  string[] Files()=>Directory.GetFiles(directory,"diagnostic-*.jsonl").Order(StringComparer.Ordinal).ToArray();
  public long Cursor {get{lock(gate)return sequence;}}
+ public DiagnosticLine? LastExit {get{lock(gate)return recent.LastOrDefault(x=>x.Source=="panel"&&x.Module=="process"&&x.Text.StartsWith("exited",StringComparison.Ordinal));}}
  public DiagnosticLine Append(string session,long? sourceSeq,string source,string module,string text){lock(gate){
   var item=new DiagnosticLine(++sequence,session,sourceSeq,source,module[..Math.Min(module.Length,256)],text[..Math.Min(text.Length,16384)],DateTimeOffset.UtcNow);recent.Enqueue(item);while(recent.Count>8192)recent.Dequeue();
   if(active is null||!File.Exists(active)||new FileInfo(active).Length>4*1024*1024||!Path.GetFileName(active).Contains(DateTime.UtcNow.ToString("yyyyMMdd")))active=Path.Combine(directory,$"diagnostic-{DateTime.UtcNow:yyyyMMdd-HHmmss-fffffff}-{segment++:D4}.jsonl");
@@ -30,6 +32,11 @@ public sealed class DiagnosticStore {
  public string[] Snapshot(string source,string? session=null){lock(gate)return recent.Where(x=>x.Source==source&&(session is null||x.StreamId==session)).TakeLast(1500).Select(x=>x.Text).ToArray();}
  public void Cleanup(){lock(gate){var config=settings();var files=Files();long total=files.Sum(x=>new FileInfo(x).Length);foreach(var file in files){
    if(File.GetLastWriteTimeUtc(file)>=DateTime.UtcNow.AddDays(-config.RetentionDays)&&total<=config.MaxMegabytes*1024L*1024L)continue;
+   foreach(var line in File.ReadLines(file)){try{var item=JsonSerializer.Deserialize<DiagnosticLine>(line,PanelConfig.Json);if(item is not null)sequence=Math.Max(sequence,item.Seq);}catch(JsonException){}}
    var length=new FileInfo(file).Length;File.Delete(file);total-=length;if(file==active)active=null;
-  }totalBytes=total;cleaned=DateTimeOffset.UtcNow;}}
+  }totalBytes=total;cleaned=DateTimeOffset.UtcNow;
+  var remaining=Files();long first=long.MaxValue;foreach(var file in remaining){foreach(var line in File.ReadLines(file)){try{var item=JsonSerializer.Deserialize<DiagnosticLine>(line,PanelConfig.Json);if(item is not null){first=Math.Min(first,item.Seq);break;}}catch(JsonException){}}}
+  var kept=recent.Where(x=>x.Seq>=first&&x.ReceivedAt>=DateTimeOffset.UtcNow.AddDays(-config.RetentionDays)).ToArray();recent.Clear();foreach(var item in kept)recent.Enqueue(item);
+  var checkpoint=Path.Combine(directory,"cursor");var temp=checkpoint+".tmp";File.WriteAllText(temp,sequence.ToString(System.Globalization.CultureInfo.InvariantCulture));File.Move(temp,checkpoint,true);if(!OperatingSystem.IsWindows())File.SetUnixFileMode(checkpoint,UnixFileMode.UserRead|UnixFileMode.UserWrite);
+ }}
 }

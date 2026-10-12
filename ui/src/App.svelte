@@ -844,7 +844,7 @@
       {:else}
         <section class="settings-section">
           {#if can("settings.write")}<Updates {t} {request} installAllowed={can("users.manage")} />{/if}
-          {#if can("settings.write")}<ServerUpdates {t} {request} installAllowed={can("users.manage")} /><Bridge {t} {locale} {request} settings {backend} />{/if}
+          {#if can("settings.write")}<ServerUpdates {t} {locale} {request} installAllowed={can("users.manage")} /><Bridge {t} {locale} {request} settings {backend} />{/if}
           <h2>{t.autoStart}</h2>
           <Toggle checked={status?.autoStartServer ?? true} label={t.autoStart} disabled={busy || !connected || !can("settings.write")} onchange={autoStart} />
           <p class="muted">{t.autoStartHint}</p>

@@ -33,3 +33,7 @@ dialog{color:#f5d8d9;background:#19171e;border:1px solid var(--red);padding:32px
 @media(max-width:720px){.bridge-fields{grid-template-columns:1fr}.diagnostic-controls .select-wrap,.diagnostic-controls .log-search{min-width:0;flex-basis:100%}.diagnostic-controls{gap:8px}.diagnostic-controls>button{flex:1}.bridge-summary dl{grid-template-columns:1fr 1fr}.runtime{overflow:visible}}
 
 .server-updates .actions{margin-top:14px}.server-updates .update-status{color:var(--cyan);font-size:13px}.server-updates .update-heading p{flex:1}.server-updates .select-wrap{max-width:420px}
+
+.bridge-fields input[type=number]{appearance:textfield}.bridge-fields input::-webkit-inner-spin-button,.bridge-fields input::-webkit-outer-spin-button{appearance:none;margin:0}
+
+@media(max-width:720px){.server-updates .update-heading{flex-direction:column;align-items:stretch;gap:8px}.server-updates .update-heading p{flex:auto;margin-bottom:0}.server-updates .actions button{width:100%}}

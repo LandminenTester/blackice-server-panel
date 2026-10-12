@@ -18,6 +18,7 @@ public sealed class BridgeBackend : IServerBackend {
  string[] oldConsole=[];string[] oldLogs=[];readonly object captureGate=new();
  public BridgeBackend(PanelConfig config,string configPath){this.config=config;this.configPath=Path.GetFullPath(configPath);statePath=Path.GetDirectoryName(this.configPath)!;active=config.Bridge;
   store=new(Path.Combine(statePath,"diagnostics"),()=>config.Bridge);
+  if(store.LastExit is {} exit){lastExit=exit.ReceivedAt.ToString("O");if(int.TryParse(exit.Text.Split(':').Last().Trim(),out var code))lastExitCode=code;}
   inner=config.Backend=="windows"?new WindowsServerBackend(config,LaunchArguments):new PosixServerBackend(config,LaunchArguments);
   if(inner is WindowsServerBackend windows)windows.BeginMonitoring();collecting=Collect();
  }
