@@ -6,6 +6,7 @@
   import Users from "./Users.svelte";
   import Updates from "./Updates.svelte";
   import ServerUpdates from "./ServerUpdates.svelte";
+  import ServerConfig from "./ServerConfig.svelte";
   import Bridge from "./Bridge.svelte";
   import DiagnosticStream from "./DiagnosticStream.svelte";
   let permissions = $state<string[]>([]);
@@ -60,6 +61,30 @@
     command = $state(""),
     follow = $state(true),
     logView = $state(false);
+  let settingsTab = $state("general"),
+    panelVersion = $state(""),
+    serverBuild = $state(""),
+    panelUpdate = $state(false),
+    serverUpdate = $state(false);
+  let settingsTabs = $derived(can("settings.write") ? ["general", "updates", "bridge", "server"] : ["general"]);
+  async function loadVersions() {
+    if (!can("settings.write")) return;
+    try {
+      let p = await request("/api/updates");
+      if (!p.latest) p = await request("/api/updates/check", {});
+      panelUpdate = !!p.available;
+      let v = await request("/api/server-updates");
+      if (!v.latest) v = await request("/api/server-updates/check", {});
+      serverBuild = v.current ?? "";
+      serverUpdate = !!(v.current && v.latest && v.current !== v.latest);
+    } catch {
+      /* update info is optional */
+    }
+  }
+  function openUpdates() {
+    settingsTab = "updates";
+    navigate("settings");
+  }
   let bundles = $state<Bundle[]>([]),
     bundleControl = $state(false),
     bundleError = $state(""),
@@ -146,6 +171,8 @@
     if (!can("console.read")) lines = [];
     const boot = await request("/api/bootstrap");
     configured = boot.configured;
+    panelVersion = boot.version ?? "";
+    if (configured && authenticated) loadVersions();
     if (!configured && !serverRoot) serverRoot = boot.defaultServerRoot ?? "";
     dashboardName = boot.dashboardName;
     backend = boot.backend;
@@ -364,7 +391,6 @@
       .catch((e) => (error = e.message))
       .finally(() => (ready = true));
     const timer = setInterval(async () => {
-      if (authenticated && view === "bundles") loadBundles();
       if (job?.state === "running") {
         try {
           job = await request("/api/setup/job", { key });
@@ -706,7 +732,7 @@
             ]}</button
           >{/each}
       </div>
-      <div class="nav-foot"><strong>BlackICE</strong><span>{t.unofficial}</span><a href="https://github.com/LandminenTester/blackice-server-panel" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div>
+      <div class="nav-foot"><strong>BlackICE</strong><span>{t.unofficial}</span>{#if panelVersion}<button type="button" class="build" onclick={openUpdates} title={panelUpdate ? t.updateBadge : ""}>{t.panelBuild} {panelVersion}{#if panelUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}{#if serverBuild}<button type="button" class="build" onclick={openUpdates} title={serverUpdate ? t.updateBadge : ""}>{t.serverBuild} {serverBuild.slice(0, 8)}{#if serverUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}<a href="https://github.com/LandminenTester/blackice-server-panel" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div>
     </nav>
     <div
       class="workspace"
@@ -862,8 +888,24 @@
         <Users {t} {request} onchanged={session} />
       {:else}
         <section class="settings-section">
-          {#if can("settings.write")}<Updates {t} {request} installAllowed={can("users.manage")} />{/if}
-          {#if can("settings.write")}<ServerUpdates {t} {locale} {request} installAllowed={can("users.manage")} /><Bridge {t} {locale} {request} settings {backend} />{/if}
+          <div class="subtabs" role="tablist" aria-label={t.settings}>
+            {#each settingsTabs as name}<button
+                role="tab"
+                id={"stab-" + name}
+                aria-selected={settingsTab === name}
+                class:active={settingsTab === name}
+                onclick={() => (settingsTab = name)}
+                >{t[("set" + name[0].toUpperCase() + name.slice(1)) as "setGeneral"]}{#if name === "updates" && (panelUpdate || serverUpdate)}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button
+              >{/each}
+          </div>
+          {#if settingsTab === "updates" && can("settings.write")}
+            <Updates {t} {request} installAllowed={can("users.manage")} />
+            <ServerUpdates {t} {locale} {request} installAllowed={can("users.manage")} />
+          {:else if settingsTab === "bridge" && can("settings.write")}
+            <Bridge {t} {locale} {request} settings {backend} />
+          {:else if settingsTab === "server" && can("settings.write")}
+            <ServerConfig {t} {locale} {request} />
+          {:else}
           <h2>{t.autoStart}</h2>
           <Toggle checked={status?.autoStartServer ?? true} label={t.autoStart} disabled={busy || !connected || !can("settings.write")} onchange={autoStart} />
           <p class="muted">{t.autoStartHint}</p>
@@ -894,6 +936,7 @@
             disabled={busy || !connected || !can("server.force-stop") || serverState !== "running"}
             >{t.forceStop}</button
           >
+          {/if}
         </section>
       {/if}
 

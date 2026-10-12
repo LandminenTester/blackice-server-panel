@@ -126,6 +126,8 @@ app.MapPost("/api/settings", async (Settings body, HttpContext c, PipeClient pip
     if((body.ShutdownMode is not null||body.AutoStartServer is not null)&&!Can(c,"settings.write"))return Results.Forbid();
     return Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode,AutoStartServer:body.AutoStartServer,Locale:body.Locale), ct));
 }).RequireAuthorization();
+app.MapGet("/api/server-config",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("server-config"),ct))).RequireAuthorization("settings.write");
+app.MapPost("/api/server-config",async(JsonElement body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("server-config-save",body.GetRawText()),ct))).RequireAuthorization("settings.write");
 app.MapGet("/api/updates",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("update-status"),ct))).RequireAuthorization("settings.write");
 app.MapGet("/api/server-updates",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("server-update-status"),ct))).RequireAuthorization("settings.write");
 foreach(var serverAction in new[]{"check","download","cancel","apply"}){var action=serverAction;var endpoint=app.MapPost("/api/server-updates/"+action,async(JsonElement body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("server-update-"+action,body.TryGetProperty("target",out var target)?target.GetString():null),ct))).RequireAuthorization("settings.write");if(action is "apply" or "download")endpoint.RequireAuthorization("users.manage");}

@@ -92,6 +92,8 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
             case "update-download":reply=new(true,Lines:[Enc(await updates.Download(timeout.Token))]);break;
             case "update-cancel":await updates.Cancel();reply=new(true,Lines:[Enc(updates.Status())]);break;
             case "update-apply":reply=new(true,Lines:[Enc(await updates.Apply())]);break;
+            case "server-config":if(!config.Configured)throw new InvalidOperationException("setup.required");reply=new(true,Lines:[Enc(ServerConfig.Read(config.ServerRoot,backend?.Status().State=="running"))]);break;
+            case "server-config-save":{if(!config.Configured)throw new InvalidOperationException("setup.required");ServerConfig.Write(config.ServerRoot,JsonSerializer.Deserialize<ServerConfigValues>(request.Command!,PanelConfig.Json)!);reply=new(true,Lines:[Enc(ServerConfig.Read(config.ServerRoot,backend?.Status().State=="running"))]);break;}
             case "settings": { lock(config) {
                 if(request.Locale is not null && request.Locale is not ("de" or "en"))throw new InvalidOperationException("settings.invalid");
                 if(request.ShutdownMode is not null && request.ShutdownMode is not ("keep-running" or "stop-server"))throw new InvalidOperationException("settings.invalid");
