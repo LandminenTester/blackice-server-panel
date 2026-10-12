@@ -37,7 +37,7 @@ public sealed partial class WindowsServerBackend(PanelConfig config,Func<string[
     }
     public ServerStatus Status()
     {
-        if (session is not null && !session.Process.HasExited) return new("running", session.Process.Id, config.ServerRoot, config.ShutdownMode, detail);
+        var current=session;try{if(current is not null&&!current.Process.HasExited)return new("running",current.Process.Id,config.ServerRoot,config.ShutdownMode,detail);}catch(InvalidOperationException){}
         using var external = FindExternal();
         return external is not null ? new("external", external.Id, config.ServerRoot, config.ShutdownMode, "server.external")
             : new("stopped", null, config.ServerRoot, config.ShutdownMode, detail);

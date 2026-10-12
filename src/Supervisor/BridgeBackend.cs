@@ -28,7 +28,7 @@ public sealed class BridgeBackend : IServerBackend {
  public BridgeDiagnosis Diagnosis(){var agent=hub?.Current;return new(config.Bridge.Enabled,active.Enabled,Connected,Connected?"bridge":"pty",agent?.Health??(inner.Status().State=="stopped"?"dead":"unknown"),agent?.Phase??"unknown",Redact(error??agent?.Detail??""),agent?.Identity.BuildCommit,agent?.Tick,agent?.LastSeen,started,lastExit,lastExitCode,config.Bridge,config.Bridge.Enabled!=active.Enabled||config.Bridge.Port!=active.Port);}
  public DiagnosticPage Read(long cursor,string source,string? module,string? search,int limit,bool history)=>store.Read(cursor,source,module,search,limit,history);
  public async Task<BridgeStream> Execute(string command,CancellationToken ct=default){ValidateCommand(command);var agent=hub?.Current;if(agent is null||agent.Closed)throw new InvalidOperationException("bridge.disconnected");
-  return BridgeConnection.ParseStream(await agent.Call("console.exec",new{command,wait_ms=1500},ct));
+  var result=BridgeConnection.ParseStream(await agent.Call("console.exec",new{command,wait_ms=1500},ct));return result with{Lines=result.Lines.Select(x=>x with{Text=Redact(x.Text)}).ToArray()};
  }
  public Task<BridgeStream> Stream(long cursor,CancellationToken ct)=>StreamCore(cursor,ct);
  async Task<BridgeStream> StreamCore(long cursor,CancellationToken ct){var agent=hub?.Current??throw new InvalidOperationException("bridge.disconnected");return BridgeConnection.ParseStream(await agent.Call("stream.read",new{cursor},ct));}
@@ -53,8 +53,8 @@ public sealed class BridgeBackend : IServerBackend {
   }await Task.Delay(100,ct);}return false;
  }
  public Task StopAsync(bool force=false)=>inner.StopAsync(force);
- public string[] ConsoleSnapshot()=>Connected?store.Snapshot("console",hub!.Current!.SessionId):inner.ConsoleSnapshot();
- public string[] LogSnapshot()=>Connected?store.Snapshot("log",hub!.Current!.SessionId):inner.LogSnapshot();
+ public string[] ConsoleSnapshot()=>Connected?store.Snapshot("console",hub!.Current!.SessionId):inner.ConsoleSnapshot().Select(Redact).ToArray();
+ public string[] LogSnapshot()=>Connected?store.Snapshot("log",hub!.Current!.SessionId):inner.LogSnapshot().Select(Redact).ToArray();
  string Redact(string text)=>text.Replace(token,"[redacted]",StringComparison.Ordinal);
  void Capture(BridgeConnection agent,BridgeStream result){lock(captureGate){if(bridgeEpoch!=agent.SessionId){bridgeEpoch=agent.SessionId;sourceCursor=0;}
   if(result.Dropped>0)store.Append(agent.SessionId,null,"panel","bridge",$"stream gap: {result.Dropped}");

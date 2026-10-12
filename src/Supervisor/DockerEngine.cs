@@ -104,4 +104,24 @@ public sealed class DockerEngine
         var data=await Inspect(ct);if(!data.GetProperty("State").GetProperty("Running").GetBoolean()||identity.Pid!=1||identity.Workdir!="/srv")return false;
         return data.GetProperty("NetworkSettings").GetProperty("Networks").TryGetProperty(BridgeNetwork,out var net)&&net.GetProperty("IPAddress").GetString()==remote.ToString();
     }
+    public async Task InstallRuntime(Dictionary<string,string> files,string privateDirectory,CancellationToken ct=default) {
+        if(OperatingSystem.IsWindows())throw new PlatformNotSupportedException("Docker runtime updates require Linux Supervisor");
+        var owned=await Inspect(ct);if(owned.GetProperty("State").GetProperty("Running").GetBoolean())throw new InvalidOperationException("server.running");
+        if(files.Keys.Any(x=>!ServerUpdates.ManagedPath(x)))throw new InvalidOperationException("serverUpdate.path");
+        var archive=Path.Combine(privateDirectory,"runtime-"+Guid.NewGuid().ToString("N")+".tar");
+        try {
+            await using(var output=File.Create(archive)){using var tar=new System.Formats.Tar.TarWriter(output,leaveOpen:true);foreach(var file in files){await using var input=File.OpenRead(file.Value);var entry=new System.Formats.Tar.PaxTarEntry(System.Formats.Tar.TarEntryType.RegularFile,file.Key){DataStream=input,Uid=10001,Gid=10001,Mode=File.GetUnixFileMode(file.Value)&(UnixFileMode)511};await tar.WriteEntryAsync(entry,ct);}}
+            await using var stream=File.OpenRead(archive);using var content=new StreamContent(stream);content.Headers.ContentType=new System.Net.Http.Headers.MediaTypeHeaderValue("application/x-tar");
+            using var reply=await http.PutAsync("containers/"+config.ContainerId+"/archive?path=%2Fsrv&noOverwriteDirNonDir=true",content,ct);reply.EnsureSuccessStatusCode();
+        }finally{File.Delete(archive);}
+    }
+    public async Task RemoveRuntime(string[] files,CancellationToken ct=default) {
+        if(files.Length==0)return;if(files.Any(x=>!ServerUpdates.ManagedPath(x)))throw new InvalidOperationException("serverUpdate.path");var owned=await Inspect(ct);
+        if(owned.GetProperty("State").GetProperty("Running").GetBoolean())throw new InvalidOperationException("server.running");
+        var mount=owned.GetProperty("Mounts").EnumerateArray().Single(x=>x.GetProperty("Destination").GetString()=="/srv");
+        var body=new{Image=owned.GetProperty("Image").GetString(),User="0",Entrypoint=new[]{"/bin/rm"},Cmd=new[]{"-f","--"}.Concat(files.Select(x=>"/srv/"+x)).ToArray(),Labels=new Dictionary<string,string>{{"replay.panel.instance",config.InstanceId},{"replay.panel.update-helper","true"}},HostConfig=new{NetworkMode="none",Binds=new[]{mount.GetProperty("Source").GetString()+":/srv"}}};
+        using var create=await http.PostAsJsonAsync("containers/create",body,ct);create.EnsureSuccessStatusCode();var id=(await create.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("Id").GetString()!;
+        try {using var start=await http.PostAsync("containers/"+id+"/start",null,ct);start.EnsureSuccessStatusCode();using var wait=await http.PostAsync("containers/"+id+"/wait?condition=not-running",null,ct);wait.EnsureSuccessStatusCode();if((await wait.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("StatusCode").GetInt32()!=0)throw new InvalidOperationException("serverUpdate.recovery");}
+        finally{using var remove=await http.DeleteAsync("containers/"+id+"?force=true",CancellationToken.None);remove.EnsureSuccessStatusCode();}
+    }
 }

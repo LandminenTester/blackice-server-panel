@@ -57,12 +57,12 @@ public sealed class BridgeConnection : IAsyncDisposable {
 }
 public sealed class BridgeHub : IAsyncDisposable {
  readonly string token;readonly Func<BridgeIdentity,IPAddress,CancellationToken,Task<bool>> validate;
- readonly CancellationTokenSource stop=new();readonly ConcurrentBag<Task> peers=new();TcpListener? listener;Task? accepting;
+ readonly CancellationTokenSource stop=new();readonly ConcurrentDictionary<long,Task> peers=new();readonly SemaphoreSlim slots=new(8);long peerId;TcpListener? listener;Task? accepting;
  public BridgeConnection? Current {get;private set;}
  public int Port=>((IPEndPoint)listener!.LocalEndpoint).Port;
  public BridgeHub(string token,Func<BridgeIdentity,IPAddress,CancellationToken,Task<bool>> validate){this.token=token;this.validate=validate;}
  public void Start(IPAddress address,int port){listener=new(address,port);listener.Start(8);accepting=Accept();}
- async Task Accept(){try {while(!stop.IsCancellationRequested){var client=await listener!.AcceptTcpClientAsync(stop.Token);peers.Add(Register(client));}}catch(Exception e) when(e is OperationCanceledException or SocketException){} }
+ async Task Accept(){try {while(!stop.IsCancellationRequested){await slots.WaitAsync(stop.Token);TcpClient client;try{client=await listener!.AcceptTcpClientAsync(stop.Token);}catch{slots.Release();throw;}var id=Interlocked.Increment(ref peerId);var task=Task.Run(async()=>{try{await Register(client);}finally{slots.Release();}});peers[id]=task;_=task.ContinueWith(_=>peers.TryRemove(id,out var ignored),TaskScheduler.Default);}}catch(Exception e) when(e is OperationCanceledException or SocketException){} }
  async Task Register(TcpClient client){IAsyncEnumerator<string>? frames=null;Task<bool>? first=null;bool handed=false;
   using var deadline=CancellationTokenSource.CreateLinkedTokenSource(stop.Token);deadline.CancelAfter(TimeSpan.FromSeconds(5));
   try {frames=Frames(client.GetStream(),stop.Token).GetAsyncEnumerator();
@@ -83,5 +83,5 @@ public sealed class BridgeHub : IAsyncDisposable {
    else{if(line.Length>=limit)throw new InvalidOperationException("bridge.frame");line.WriteByte(buffer[i]);}
   }}if(line.Length>0)throw new InvalidOperationException("bridge.protocol");
  }
- public async ValueTask DisposeAsync(){stop.Cancel();listener?.Stop();if(accepting is not null)await accepting;if(Current is not null)await Current.DisposeAsync();await Task.WhenAll(peers);stop.Dispose();}
+ public async ValueTask DisposeAsync(){stop.Cancel();listener?.Stop();if(accepting is not null)await accepting;if(Current is not null)await Current.DisposeAsync();await Task.WhenAll(peers.Values);stop.Dispose();slots.Dispose();}
 }

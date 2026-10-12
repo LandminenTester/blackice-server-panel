@@ -10,7 +10,7 @@ public sealed record ServerUpdateInfo(string? Current,string? Latest,string Chan
 public sealed record ServerManifest(string Commit,Dictionary<string,string> Files);
 public sealed class ServerUpdates : IAsyncDisposable {
  readonly PanelConfig config;readonly Func<IServerBackend?> backend;readonly string state,record;readonly HttpClient http;readonly SemaphoreSlim gate=new(1);
- readonly CancellationTokenSource stopped=new();CancellationTokenSource? cancel;Task? work;ServerManifest? latest;ServerManifest? staged;string? stage;ServerUpdateJob? job;
+ readonly CancellationTokenSource stopped=new();CancellationTokenSource? cancel;Task? work;ServerManifest? latest;ServerManifest? staged;string? stage;volatile ServerUpdateJob? job;readonly object saving=new();
  int disposed;
  public bool Applying=>job?.State=="applying";
  string Platform=>config.Backend=="windows"?"server_windows":"server_linux";
@@ -39,7 +39,7 @@ public sealed class ServerUpdates : IAsyncDisposable {
   var exe=config.Backend=="windows"?"REServer.exe":"REServer";if(File.Exists(Safe(config.ServerRoot,exe))&&Hash(Safe(config.ServerRoot,exe))==latest.Files[exe])await WriteInstalled(latest);
   return Status();
  }catch(HttpRequestException){throw new InvalidOperationException("serverUpdate.network");}finally{gate.Release();}}
- void SaveJob(ServerUpdateJob value){job=value;var temp=record+".tmp";File.WriteAllText(temp,JsonSerializer.Serialize(job,PanelConfig.Json));File.Move(temp,record,true);}
+ void SaveJob(ServerUpdateJob value){lock(saving){var temp=record+"."+Guid.NewGuid().ToString("N")+".tmp";File.WriteAllText(temp,JsonSerializer.Serialize(value,PanelConfig.Json));File.Move(temp,record,true);job=value;}}
  async Task WriteInstalled(ServerManifest value){await File.WriteAllTextAsync(Path.Combine(state,"installed.json"),JsonSerializer.Serialize(value,PanelConfig.Json));}
  public async Task<ServerUpdateInfo> Download(string? target,CancellationToken ct){await gate.WaitAsync(ct);try{
   if(job?.State is "downloading" or "applying" or "ready")throw new InvalidOperationException("serverUpdate.busy");if(latest is null)throw new InvalidOperationException("serverUpdate.check");
@@ -77,11 +77,17 @@ public sealed class ServerUpdates : IAsyncDisposable {
    foreach(var name in names.Union(target.Files.Keys).Union(["contents.json","version.json"])){var path=Safe(config.ServerRoot,name);if(File.Exists(path)){var backup=Safe(backupDir,name);Directory.CreateDirectory(Path.GetDirectoryName(backup)!);File.Copy(path,backup,false);oldFiles[name]=Hash(backup);}}
    if(previous is not null)await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(directory)!,"backup.json"),JsonSerializer.Serialize(new ServerManifest(previous,oldFiles),PanelConfig.Json));
    SaveJob(job! with{Phase="installing"});
-   foreach(var file in target.Files){var path=Safe(config.ServerRoot,file.Key);Directory.CreateDirectory(Path.GetDirectoryName(path)!);changed.Add((path,Safe(backupDir,file.Key),File.Exists(path)));File.Copy(Safe(directory,file.Key),path,true);if(!OperatingSystem.IsWindows()&&(file.Key=="REServer"||file.Key.Contains(".so")))File.SetUnixFileMode(path,File.GetUnixFileMode(Safe(directory,file.Key)));}
-   foreach(var metadata in new[]{("contents.json",JsonSerializer.Serialize(target.Files)),("version.json",JsonSerializer.Serialize(new{commit=target.Commit}))})if(!target.Files.ContainsKey(metadata.Item1)){var path=Safe(config.ServerRoot,metadata.Item1);changed.Add((path,Safe(backupDir,metadata.Item1),File.Exists(path)));await File.WriteAllTextAsync(path,metadata.Item2);}
+   var replacements=target.Files.Keys.ToDictionary(x=>x,x=>Safe(directory,x));
+   foreach(var metadata in new[]{("contents.json",JsonSerializer.Serialize(target.Files)),("version.json",JsonSerializer.Serialize(new{commit=target.Commit}))})if(!replacements.ContainsKey(metadata.Item1)){var generated=Safe(directory,metadata.Item1);await File.WriteAllTextAsync(generated,metadata.Item2);replacements[metadata.Item1]=generated;}
+   foreach(var file in replacements){var path=Safe(config.ServerRoot,file.Key);changed.Add((path,Safe(backupDir,file.Key),File.Exists(path)));}
+   if(config.Backend=="docker")await new DockerEngine(config).InstallRuntime(replacements,Path.GetDirectoryName(directory)!);
+   else foreach(var file in replacements){var path=Safe(config.ServerRoot,file.Key);Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.Copy(file.Value,path,true);if(!OperatingSystem.IsWindows())File.SetUnixFileMode(path,File.GetUnixFileMode(file.Value));}
    if(wasRunning){await engine.StartAsync();await Task.Delay(2500);if(engine.Status().State!="running")throw new InvalidOperationException("serverUpdate.startup");var actual=(engine as BridgeBackend)?.BuildVersion();if(actual is not null&&!actual.StartsWith(target.Commit,StringComparison.Ordinal)&&!target.Commit.StartsWith(actual,StringComparison.Ordinal))throw new InvalidOperationException("serverUpdate.startup");}
    await WriteInstalled(target);SaveJob(job! with{State="completed",Phase="completed"});
-  }catch(Exception e){try{if(engine.Status().State=="running")await engine.StopAsync();foreach(var file in changed.AsEnumerable().Reverse()){if(file.Item3)File.Copy(file.Item2,file.Item1,true);else File.Delete(file.Item1);}if(wasRunning&&engine.Status().State=="stopped")await engine.StartAsync();SaveJob(job! with{State="failed",Phase="rolled-back",Error=e.Message.StartsWith("serverUpdate.")?e.Message:"serverUpdate.failed"});}catch{SaveJob(job! with{State="failed",Phase="recovery",Error="serverUpdate.recovery"});}}
+  }catch(Exception e){try{if(engine.Status().State=="running")await engine.StopAsync();
+   if(config.Backend=="docker"&&changed.Count>0){var docker=new DockerEngine(config);await docker.InstallRuntime(changed.Where(x=>x.Item3).ToDictionary(x=>Path.GetRelativePath(config.ServerRoot,x.Item1).Replace('\\','/'),x=>x.Item2),Path.GetDirectoryName(directory)!);await docker.RemoveRuntime(changed.Where(x=>!x.Item3).Select(x=>Path.GetRelativePath(config.ServerRoot,x.Item1).Replace('\\','/')).ToArray());}
+   else foreach(var file in changed.AsEnumerable().Reverse()){if(file.Item3)File.Copy(file.Item2,file.Item1,true);else File.Delete(file.Item1);}
+   if(wasRunning&&engine.Status().State=="stopped")await engine.StartAsync();SaveJob(job! with{State="failed",Phase="rolled-back",Error=e.Message.StartsWith("serverUpdate.")?e.Message:"serverUpdate.failed"});}catch{SaveJob(job! with{State="failed",Phase="recovery",Error="serverUpdate.recovery"});}}
  }
  public async ValueTask DisposeAsync(){if(Interlocked.Exchange(ref disposed,1)!=0)return;stopped.Cancel();cancel?.Cancel();if(work is not null)await work;http.Dispose();gate.Dispose();stopped.Dispose();cancel?.Dispose();}
 }
