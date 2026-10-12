@@ -32,7 +32,7 @@ if(backend==='windows') {
  execFileSync('docker',['run','-d','--name',name+'-web',...env,'-v',volume+':/test','-p','127.0.0.1:20776:20772','replay-panel:next']);
  stopWeb=()=>execFileSync('docker',['stop',name+'-web'],{stdio:'ignore'});
  restartWeb=()=>execFileSync('docker',['start',name+'-web'],{stdio:'ignore'});
- supervisor={kill(){if(backend==='docker'){try{const data=JSON.parse(execFileSync('docker',['exec',name+'-supervisor','cat','/test/state/panel.json'],{encoding:'utf8'}));if(/^[a-f0-9]{64}$/.test(data.containerId))execFileSync('docker',['rm','-f',data.containerId]);}catch{}}execFileSync('docker',['rm','-f',name+'-supervisor']);}};
+ supervisor={kill(){if(backend==='docker'){try{const data=JSON.parse(execFileSync('docker',['exec',name+'-supervisor','cat','/test/state/panel.json'],{encoding:'utf8'}));if(/^[a-f0-9]{64}$/.test(data.containerId))execFileSync('docker',['rm','-f',data.containerId]);if(/^[a-f0-9]{32}$/.test(data.instanceId)){const ids=execFileSync('docker',['ps','-aq','--filter','label=replay.panel.instance='+data.instanceId],{encoding:'utf8'}).trim().split(/\s+/).filter(x=>/^[a-f0-9]{12,64}$/.test(x));if(ids.length)execFileSync('docker',['rm','-f',...ids]);try{execFileSync('docker',['network','disconnect','-f','blackice-bridge-'+data.instanceId,name+'-supervisor']);execFileSync('docker',['network','rm','blackice-bridge-'+data.instanceId]);}catch{}} }catch{}}execFileSync('docker',['rm','-f',name+'-supervisor']);}};
  web={kill(){execFileSync('docker',['rm','-f',name+'-web']);execFileSync('docker',['volume','rm',volume]);}};
  for(let i=0;i<30&&!key;i++){key=execFileSync('docker',['logs',name+'-supervisor'],{encoding:'utf8'}).match(/Setup key: ([A-F0-9]+)/)?.[1]??'';await new Promise(r=>setTimeout(r,200));}
 }
@@ -65,5 +65,13 @@ try{
  await req('/api/server/start',{});await new Promise(r=>setTimeout(r,1500));
  await req('/api/server/restart',{});await new Promise(r=>setTimeout(r,1500));assert.equal((await req('/api/status')).status.state,'running');console.log('PASS '+backend+' restart');
 
+
+ const version=await req('/api/server-updates/check',{});await req('/api/server-updates/download',{target:version.latest});let serverJob;
+ for(let n=0;n<1800;n++){serverJob=await req('/api/server-updates');if(serverJob.job.state!=='downloading')break;await new Promise(r=>setTimeout(r,500));}assert.equal(serverJob.job.state,'ready',JSON.stringify(serverJob));await req('/api/server-updates/apply',{});
+ for(let n=0;n<160;n++){serverJob=await req('/api/server-updates');if(serverJob.job.state!=='applying')break;await new Promise(r=>setTimeout(r,250));}assert.equal(serverJob.job.state,'completed',JSON.stringify(serverJob));console.log('PASS '+backend+' official server update through dashboard API');
+ await req('/api/bridge/settings',{enabled:true,port:30774,retentionDays:7,maxMegabytes:100});await req('/api/server/restart',{});let bridge;
+ for(let n=0;n<150;n++){bridge=await req('/api/bridge');if(bridge.connected)break;await new Promise(r=>setTimeout(r,200));}assert.equal(bridge.connected,true,JSON.stringify(bridge));console.log('PASS '+backend+' authenticated owned LAN bridge');
+ await req('/api/command',{text:'echo actual-bridge-stream'});await new Promise(r=>setTimeout(r,1200));const diagnostic=await req('/api/diagnostics?source=all');assert(diagnostic.lines.some(x=>x.sourceSeq!==null&&x.text.includes('actual-bridge-stream')));assert((await req('/api/bundles')).ok);console.log('PASS '+backend+' real bridge console, logs and bundle query');
+ await req('/api/bridge/settings',{enabled:false,port:30774,retentionDays:7,maxMegabytes:100});await req('/api/server/restart',{});await new Promise(r=>setTimeout(r,1800));assert.equal((await req('/api/bridge')).connected,false);assert((await req('/api/bundles')).ok);console.log('PASS '+backend+' bridge disable restores PTY');
  await req('/api/server/stop',{});console.log('PASS downloaded Replay stops gracefully');
 }catch(error){try{console.log(JSON.stringify(await req('/api/logs')));}catch{}throw error;}finally{supervisor?.kill();web?.kill();}

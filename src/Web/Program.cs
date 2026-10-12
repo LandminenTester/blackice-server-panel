@@ -95,6 +95,14 @@ app.MapPost("/api/login", async (Login body, HttpContext c, PipeClient pipe) =>
 app.MapPost("/api/logout", async (HttpContext c) => { await c.SignOutAsync(); return Results.Ok(new { ok = true }); }).RequireAuthorization();
 app.MapGet("/api/status", async (PipeClient pipe, CancellationToken ct) => Result(await pipe.Call(new("status"), ct))).RequireAuthorization();
 app.MapGet("/api/logs", async (PipeClient pipe, CancellationToken ct) => Result(await pipe.Call(new("logs"), ct))).RequireAuthorization("logs.read");
+app.MapGet("/api/bridge",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("bridge-status"),ct))).RequireAuthorization();
+app.MapPost("/api/bridge/settings",async(BridgeSettings body,PipeClient pipe,CancellationToken ct)=>Result(await pipe.Call(new("bridge-settings",JsonSerializer.Serialize(body,PanelConfig.Json)),ct))).RequireAuthorization("settings.write");
+app.MapGet("/api/diagnostics",async(HttpContext context,PipeClient pipe,CancellationToken ct)=>{
+    var q=context.Request.Query;var source=q["source"].FirstOrDefault()??"all";
+    if(source=="console"?!Can(context,"console.read"):source is "log" or "panel"?!Can(context,"logs.read"):!Can(context,"console.read")||!Can(context,"logs.read"))return Results.Forbid();
+    if(!long.TryParse(q["cursor"].FirstOrDefault()??"0",out var cursor)||!int.TryParse(q["limit"].FirstOrDefault()??"500",out var limit))return Results.BadRequest(new{error="diagnostics.invalid"});
+    return Data(await pipe.Call(new("diagnostics",JsonSerializer.Serialize(new DiagnosticQuery(cursor,source,q["module"].FirstOrDefault(),q["search"].FirstOrDefault(),limit,q["history"]=="true"),PanelConfig.Json)),ct));
+}).RequireAuthorization();
 app.MapGet("/api/bundles", async (BundleManager bundles, CancellationToken ct) => Results.Ok(await bundles.List(ct))).RequireAuthorization("bundles.read");
 app.MapPost("/api/bundles/{name}/{action}", async (string name, string action, HttpContext c, BundleManager bundles, CancellationToken ct) =>
 {
@@ -116,6 +124,8 @@ app.MapPost("/api/settings", async (Settings body, HttpContext c, PipeClient pip
     return Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode,AutoStartServer:body.AutoStartServer,Locale:body.Locale), ct));
 }).RequireAuthorization();
 app.MapGet("/api/updates",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("update-status"),ct))).RequireAuthorization("settings.write");
+app.MapGet("/api/server-updates",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("server-update-status"),ct))).RequireAuthorization("settings.write");
+foreach(var serverAction in new[]{"check","download","cancel","apply"}){var action=serverAction;var endpoint=app.MapPost("/api/server-updates/"+action,async(JsonElement body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("server-update-"+action,body.TryGetProperty("target",out var target)?target.GetString():null),ct))).RequireAuthorization("settings.write");if(action is "apply" or "download")endpoint.RequireAuthorization("users.manage");}
 foreach(var updateAction in new[]{"check","download","cancel","apply"}){var action=updateAction;var endpoint=app.MapPost("/api/updates/"+action,async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("update-"+action),ct))).RequireAuthorization("settings.write");if(action is "apply" or "download")endpoint.RequireAuthorization("users.manage");}
 app.MapGet("/api/users",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("users"),ct))).RequireAuthorization("users.manage");
 app.MapPost("/api/users/save",async(UserChange body,PipeClient pipe,CancellationToken ct)=>Result(await pipe.Call(new("user-save",JsonSerializer.Serialize(body,PanelConfig.Json)),ct))).RequireAuthorization("users.manage");

@@ -3,7 +3,7 @@ public static class ErrorCodes
 {
     public static string From(Exception error)
     {
-        if(System.Text.RegularExpressions.Regex.IsMatch(error.Message,@"\A[a-z]+\.[a-zA-Z]+\z"))return error.Message;
+        if(System.Text.RegularExpressions.Regex.IsMatch(error.Message,@"\A[a-z][a-zA-Z]+\.[a-zA-Z]+\z"))return error.Message;
         if(error is UnauthorizedAccessException)return "path.readonly";
         if(error is OperationCanceledException or TimeoutException)return "request.timeout";
         if(error.Message.Contains("bereits"))return "server.running";

@@ -1,3 +1,7 @@
 # Third-party notices
 
 Project code is MIT licensed. IBM Plex Sans and IBM Plex Mono are redistributed under SIL Open Font License 1.1; full notices are in licenses/. Svelte and Vite retain their upstream licenses. Self-contained .NET releases include Microsoft runtime components under their respective licenses and third-party notices.
+
+## blackice-mcp / REPLAY.re
+
+Bridge transport, request correlation, stream cursors, liveness rules and bundle confirmation are adapted in C# from https://github.com/replayre/blackice-mcp at commit 7515a36f1d34d774f36dd00241b666bce8d1d1cf. Copyright (c) 2026 rePLAY.re. MIT license: [licenses/blackice-mcp-MIT.txt](licenses/blackice-mcp-MIT.txt). Adaptations add async .NET I/O, limits, mandatory authentication/process ownership checks, local history and panel permissions.

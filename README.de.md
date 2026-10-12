@@ -1,8 +1,10 @@
 # BlackICE Server Panel
 
+Dieses Projekt wurde überwiegend mit KI-Werkzeugen entwickelt und von seinem menschlichen Maintainer geprüft und getestet. Es begann als privates Projekt und wurde später für die Community geöffnet. Eine unabhängige Sicherheitsprüfung wurde nicht durchgeführt. Betreiber bleiben für ihren Einsatz verantwortlich; Code-Reviews, Verbesserungen und Fehlerberichte sind willkommen. Sicherheitsprobleme bitte über [private GitHub-Sicherheitsmeldungen](https://github.com/LandminenTester/blackice-server-panel/security/advisories/new), normale Fehler über Issues melden.
+
 Inoffizielles Dashboard für eine **BlackICE-/REServer-Instanz**: Serversteuerung, Live-Konsole, Logs, Bundle-Verwaltung, mehrere Benutzer mit einzelnen Berechtigungen, Deutsch/Englisch, geschützte Ersteinrichtung, offizieller Serverdownload und Cyberpunk-inspiriertes Design.
 
-[English](README.md) · [Release 1.0](https://github.com/LandminenTester/blackice-server-panel/releases/tag/v1.0.0)
+[English](README.md) · [Release 1.1](https://github.com/LandminenTester/blackice-server-panel/releases/tag/v1.1.0)
 
 ## Windows
 
@@ -59,9 +61,17 @@ Unter localhost:20772 den ausgegebenen Einrichtungsschlüssel verwenden, Docker 
 - Ports: Spiel/Bundle-Download 20770 TCP/UDP, Voice 20771 TCP/UDP, Dashboard 20772 TCP auf localhost. Fernzugriff über dokumentierten [HTTPS-Reverse-Proxy](docs/operations.md).
 - `.local/` und Spielserverordner sichern. Neue Downloads verwenden LAN-Modus und deaktivierte automatische Serverupdates. Öffentliche Server benötigen die [offizielle Registrierung](https://docs.replay.re/servers/registering/).
 
+## Bridge-Diagnose
+
+REServer-Updates stehen jetzt unter Einstellungen bereit: offizielles Alpha prüfen, Dateien verifizieren und mit Laufzeitsicherung sowie Start-Rollback installieren. Aktuelles Alpha oder zuvor lokal gesicherten Build auswählen. [Serverupdate-Anleitung](docs/server-updates.md).
+
+
+
+Die optionale LAN-Bridge ergänzt Health, Serverphase, Commit/Tick, zugeordnete Konsolenausgabe und cursorbasierte Modullogs. In Einstellungen aktivieren und ausdrücklich neu starten. **--mcp erzwingt sv_lan 1; öffentliche Server behalten PTY.** Historie bleibt lokal, standardmäßig sieben Tage / 100 MB, konfigurierbar. [Einrichtung und Kompatibilität](docs/bridge.md).
+
 ## Entwicklung
 
-.NET SDK 10 und Node.js 24; Linux zusätzlich C-Compiler und tmux. [Buildbefehle und Fehlerdiagnose](docs/building.md) · [Architektur](docs/development.md) · [Berechtigungen](docs/users.md). Windows/Linux-CI prüft Backends, Anmeldung, Einrichtung, Bundles, Launcher und Update-Rollback. Docker-CI prüft echte Serverinstallationen.
+.NET SDK 10 und Node.js 24; Linux zusätzlich C-Compiler und tmux. [Buildbefehle und Fehlerdiagnose](docs/building.md) · [Architektur](docs/development.md) · [Berechtigungen](docs/users.md). Bridge-Protokoll und adaptierte Komponenten: [blackice-mcp von REPLAY.re](https://github.com/replayre/blackice-mcp), MIT; siehe [Drittanbieterhinweise](THIRD_PARTY_NOTICES.md). Windows/Linux-CI prüft Backends, Anmeldung, Einrichtung, Bundles, Launcher und Update-Rollback. Docker-CI prüft echte Serverinstallationen.
 
 ## Links und Hinweise
 

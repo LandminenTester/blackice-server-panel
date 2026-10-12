@@ -7,6 +7,7 @@ public sealed record ServerStatus(string State, int? Pid, string ServerRoot, str
 public sealed class PanelConfig
 {
     public List<PanelUser>? Users { get; set; }
+    public BridgeSettings Bridge { get; set; } = new();
     public int SchemaVersion { get; set; } = 2;
     public string DashboardName { get; set; } = "Unofficial BlackICE Server Webpanel";
     public string Username { get; set; } = "admin";
@@ -38,6 +39,8 @@ public sealed class PanelConfig
         if (!File.Exists(file)) { var fresh = new PanelConfig(); Save(file, fresh); return fresh; }
         var text = File.ReadAllText(file);
         var c = JsonSerializer.Deserialize<PanelConfig>(text, Json) ?? throw new InvalidOperationException("config.invalid");
+        c.Bridge ??= new();
+        if(c.Bridge.Port is <1024 or >65535||c.Bridge.RetentionDays is <1 or >30||c.Bridge.MaxMegabytes is <10 or >1000)throw new InvalidOperationException("config.invalid");
         if (!text.Contains("schemaVersion")) { if(!File.Exists(file+".v1.bak")) {try { File.Copy(file,file+".v1.bak",false); } catch(IOException) when(File.Exists(file+".v1.bak")) {} } c.SchemaVersion = 2; Save(file, c); }
         if (c.ServerRoot.Length > 0) c.ServerRoot = Path.GetFullPath(c.ServerRoot);
         if (c.ShutdownMode is not ("keep-running" or "stop-server") || c.StopTimeoutSeconds is < 1 or > 120) throw new InvalidOperationException("config.invalid");
@@ -59,3 +62,7 @@ public sealed class PanelConfig
     public bool VerifyPassword(string password) => Configured && CryptographicOperations.FixedTimeEquals(
         Rfc2898DeriveBytes.Pbkdf2(password, Convert.FromBase64String(PasswordSalt), 210000, HashAlgorithmName.SHA256, 32), Convert.FromBase64String(PasswordHash));
 }
+public sealed record BridgeSettings(bool Enabled=false,int Port=20774,int RetentionDays=7,int MaxMegabytes=100);
+public sealed record DiagnosticLine(long Seq,string StreamId,long? SourceSeq,string Source,string Module,string Text,DateTimeOffset ReceivedAt);
+public sealed record DiagnosticPage(long Cursor,long Dropped,DiagnosticLine[] Lines);
+public sealed record DiagnosticQuery(long Cursor=0,string Source="all",string? Module=null,string? Search=null,int Limit=500,bool History=false);

@@ -46,11 +46,16 @@ try {
   await startWeb();
   check((await request('/api/status')).status===401,'anonymous status denied');
   check((await request('/api/bundles')).status===401,'anonymous bundle list denied');
+  check((await request('/api/bridge')).status===401,'anonymous bridge diagnostics denied');
+  check((await request('/api/diagnostics?source=all')).status===401,'anonymous diagnostic history denied');
   check((await request('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status===400,'missing CSRF rejected');
   check((await post('/api/login',{password:'wrong'})).status===401,'wrong password rejected');
   check((await post('/api/login',{password})).status===200,'login accepted');
   csrf=(await(await request('/api/session')).json()).csrf;
   check((await post('/api/server/start')).status===200,'fixture started through web API');
+  const bridgeStatus=await (await request('/api/bridge')).json();check(!bridgeStatus.enabled&&!JSON.stringify(bridgeStatus).includes('token'),'bridge defaults off and does not expose token');
+  check((await post('/api/bridge/settings',{enabled:true,port:80,retentionDays:7,maxMegabytes:100})).status===409,'invalid bridge settings rejected');
+  check((await request('/api/diagnostics?cursor=-1&source=all')).status===409,'invalid diagnostic cursor rejected');
   check((await post('/api/server/start')).status===409,'duplicate start rejected through web API');
   const initialBundles = await (await request('/api/bundles')).json();
   check(initialBundles.ok && initialBundles.canControl && initialBundles.bundles.some(x=>x.name==='fixture-bundle' && x.state==='running') && initialBundles.bundles.some(x=>x.name==='parked-bundle' && x.state==='stopped'),'native loaded list merged with installed stopped bundles');
@@ -101,8 +106,10 @@ try {
   check((await post('/api/login',{username:'reader',password:restrictedPassword})).status===200,'restricted user login accepted');csrf=(await(await request('/api/session')).json()).csrf;
   const readerCookies=new Map(cookies);const readerCsrf=csrf;
   check((await request('/api/bundles')).status===200,'bundle-read permission allows list');
-  for(const route of ['/api/command','/api/bundles/fixture-bundle/start','/api/bundles/fixture-bundle/stop','/api/bundles/fixture-bundle/restart','/api/server/start','/api/server/stop','/api/server/restart','/api/server/force-stop','/api/settings','/api/users/save','/api/updates/check','/api/updates/download','/api/updates/apply'])check((await post(route,{text:'echo forbidden',autoStartServer:true})).status===403,'restricted account denied '+route);
+  for(const route of ['/api/command','/api/bundles/fixture-bundle/start','/api/bundles/fixture-bundle/stop','/api/bundles/fixture-bundle/restart','/api/server/start','/api/server/stop','/api/server/restart','/api/server/force-stop','/api/settings','/api/users/save','/api/bridge/settings','/api/server-updates/check','/api/server-updates/download','/api/server-updates/apply','/api/updates/check','/api/updates/download','/api/updates/apply'])check((await post(route,{text:'echo forbidden',autoStartServer:true})).status===403,'restricted account denied '+route);
   check((await request('/api/logs')).status===403&&(await request('/api/users')).status===403,'logs and user administration separately restricted');
+  check((await request('/api/diagnostics?source=console')).status===403&&(await request('/api/diagnostics?source=log')).status===403,'diagnostic sources respect separate read permissions');
+  check((await request('/api/server-updates')).status===403,'server update metadata requires settings permission');
   cookies.clear();for(const [k,v] of adminCookies)cookies.set(k,v);csrf=adminCsrf;
   check((await post('/api/users/save',{username:'reader',permissions:['server.start'],enabled:true})).status===200,'admin can change permissions');
   cookies.clear();for(const [k,v] of readerCookies)cookies.set(k,v);csrf=readerCsrf;

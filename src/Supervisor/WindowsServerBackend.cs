@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 using ReplayPanel.Shared;
 namespace ReplayPanel.Supervisor;
-public sealed partial class WindowsServerBackend(PanelConfig config) : IServerBackend
+public sealed partial class WindowsServerBackend(PanelConfig config,Func<string[]>? launchArguments=null) : IServerBackend
 {
     private readonly SemaphoreSlim gate = new(1);
     private readonly object outputLock = new();
@@ -12,6 +12,8 @@ public sealed partial class WindowsServerBackend(PanelConfig config) : IServerBa
     private string? detail;
     private bool desiredRunning;
     private DateTimeOffset lastRestart;
+    private int? lastExitCode;
+    public int? ExitCode()=>session?.ExitCode()??lastExitCode;
     private readonly CancellationTokenSource monitorStop = new();
     private Task? monitor;
     private string Exe => Path.Combine(config.ServerRoot, "REServer.exe");
@@ -49,7 +51,7 @@ public sealed partial class WindowsServerBackend(PanelConfig config) : IServerBa
             if (!File.Exists(Exe)) throw new FileNotFoundException("server.files");
             session?.Dispose(); session = null;
             var next = new ConPtySession();
-            try { next.Start(Exe, config.ServerRoot, Append, config.ServerArguments); session = next; }
+            try { next.Start(Exe, config.ServerRoot, Append, launchArguments?.Invoke()??config.ServerArguments); session = next; }
             catch { next.Dispose(); throw; }
             desiredRunning = true; detail = null;NativeConsole.Server(config);
         }
@@ -73,7 +75,7 @@ public sealed partial class WindowsServerBackend(PanelConfig config) : IServerBa
             else await session.SendAsync("exit");
             try { await session.Process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(config.StopTimeoutSeconds)); detail = null; }
             catch (TimeoutException) { detail = "server.stopTimeout"; throw new InvalidOperationException(detail); }
-            session.Dispose(); session = null;
+            lastExitCode=session.ExitCode();session.Dispose(); session = null;
         }
         finally { gate.Release(); }
     }

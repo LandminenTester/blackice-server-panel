@@ -50,6 +50,12 @@ public sealed partial class BundleManager(PipeClient pipe, PanelConfig config)
         if (!status.Ok || status.Status?.State != "running")
             return new(status.Ok, known.Select(x => new BundleInfo(x, status.Status?.State == "stopped" ? "stopped" : "unknown")).ToArray(), false, DateTimeOffset.UtcNow,
                 status.Error ?? (status.Status?.State == "external" ? "server.external" : "bundle.startServer"));
+        if(pipe.BridgeConnected){
+            try {var result=await pipe.Execute("bundles",ct);var response=result.Lines.Where(x=>x.Source=="console").Select(x=>x.Text).ToArray();
+                if(!TryStructured(response,out var table))return new(false,[],false,DateTimeOffset.UtcNow,"bundle.output");
+                return new(true,known.Union(table.Keys).Order(StringComparer.Ordinal).Select(x=>new BundleInfo(x,table.GetValueOrDefault(x,"unknown"))).ToArray(),true,DateTimeOffset.UtcNow);
+            }catch(InvalidOperationException e){return new(false,[],false,DateTimeOffset.UtcNow,e.Message);}
+        }
         var token = Guid.NewGuid().ToString("N")[..12];
         var begin = "panel-query-" + token + "-begin";
         var end = "panel-query-" + token + "-end";
@@ -106,6 +112,7 @@ public sealed partial class BundleManager(PipeClient pipe, PanelConfig config)
     }
     private async Task ConfirmAction(string name, string action, CancellationToken ct)
     {
+        if(pipe.BridgeConnected){await ConfirmBridge(name,action,ct);return;}
         var marker = "panel-query-" + Guid.NewGuid().ToString("N")[..12] + "-begin";
         var reply = await pipe.Call(new("command", "echo " + marker), ct);
         if (!reply.Ok) throw new InvalidOperationException(reply.Error);
@@ -129,6 +136,18 @@ public sealed partial class BundleManager(PipeClient pipe, PanelConfig config)
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         { throw new InvalidOperationException("bundle.timeout"); }
+    }
+    private async Task ConfirmBridge(string name,string action,CancellationToken ct){
+        var cursor=(await pipe.Stream(0,ct)).Cursor;
+        // Send exactly once. A dropped reply leaves the action unconfirmed rather than triggering a PTY retry.
+        await pipe.Execute(action+" "+name,ct);
+        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);timeout.CancelAfter(TimeSpan.FromSeconds(15));
+        try{while(true){var result=await pipe.Stream(cursor,timeout.Token);cursor=result.Cursor;
+            foreach(var line in result.Lines){var text=line.Module=="server_ugc"&&!line.Text.Contains("[server_ugc]")?"[server_ugc] "+line.Text:line.Text;
+                if(text.Contains("[server_ugc]")&&text.Contains("Failed",StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("bundle.failed");
+                var match=Lifecycle().Match(text);if(match.Success&&match.Groups[2].Value==name&&(match.Groups[1].Value==(action=="stop"?"Stopped":action=="start"?"Started":"Restarted")||action=="restart"&&match.Groups[1].Value=="Started"))return;
+            }if(result.Dropped>0)throw new InvalidOperationException("bridge.unconfirmed");await Task.Delay(250,timeout.Token);
+        }}catch(OperationCanceledException) when(!ct.IsCancellationRequested){throw new InvalidOperationException("bundle.timeout");}
     }
     private async Task<string[]> WaitLines(string marker, CancellationToken ct)
     {

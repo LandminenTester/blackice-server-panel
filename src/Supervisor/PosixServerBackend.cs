@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using ReplayPanel.Shared;
 namespace ReplayPanel.Supervisor;
-public sealed class PosixServerBackend(PanelConfig config) : IServerBackend
+public sealed class PosixServerBackend(PanelConfig config,Func<string[]>? launchArguments=null) : IServerBackend
 {
     private readonly SemaphoreSlim gate=new(1);
     private readonly object outputLock=new();
@@ -15,6 +15,7 @@ public sealed class PosixServerBackend(PanelConfig config) : IServerBackend
     private Task? reader;
     private readonly DockerEngine? docker=config.Backend=="docker"?new(config):null;
     private readonly HashSet<string> bundleStates=new();
+    public int? ExitCode(){if(docker is not null){try{return docker.Inspect().GetAwaiter().GetResult().GetProperty("State").GetProperty("ExitCode").GetInt32();}catch{return null;}}return process?.HasExited==true?process.ExitCode:null;}
     public ServerStatus Status()
     {
         if(docker is not null) {
@@ -36,7 +37,7 @@ public sealed class PosixServerBackend(PanelConfig config) : IServerBackend
             var helper=Path.Combine(AppContext.BaseDirectory,"replay-terminal");
             if(!File.Exists(helper))throw new InvalidOperationException("server.helper");
             var info=new ProcessStartInfo(helper){WorkingDirectory=config.ServerRoot,RedirectStandardInput=true,RedirectStandardOutput=true,UseShellExecute=false};
-            info.Environment["LD_LIBRARY_PATH"]=config.ServerRoot; info.ArgumentList.Add(Path.Combine(config.ServerRoot,"REServer"));foreach(var arg in config.ServerArguments)info.ArgumentList.Add(arg);
+            info.Environment["LD_LIBRARY_PATH"]=config.ServerRoot; info.ArgumentList.Add(Path.Combine(config.ServerRoot,"REServer"));foreach(var arg in launchArguments?.Invoke()??config.ServerArguments)info.ArgumentList.Add(arg);
             process?.Dispose();process=Process.Start(info)!;terminal=process.StandardInput.BaseStream;reading=new();
             reader=Read(process.StandardOutput.BaseStream,reading.Token);NativeConsole.Server(config);
         } finally {gate.Release();}

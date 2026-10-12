@@ -5,6 +5,9 @@
   import Toggle from "./components/Toggle.svelte";
   import Users from "./Users.svelte";
   import Updates from "./Updates.svelte";
+  import ServerUpdates from "./ServerUpdates.svelte";
+  import Bridge from "./Bridge.svelte";
+  import DiagnosticStream from "./DiagnosticStream.svelte";
   let permissions = $state<string[]>([]);
   const can = (permission: string) => permissions.includes(permission);
   let navItems = $derived(["dashboard", ...(can("console.read") || can("console.write") || can("logs.read") ? ["console"] : []), ...(can("bundles.read") ? ["bundles"] : []), "settings", ...(can("users.manage") ? ["users"] : [])]);
@@ -725,6 +728,7 @@
               <dt>{t.serverRoot}</dt>
               <dd class="path">{status?.serverRoot ?? "—"}</dd>
             </dl>
+            <Bridge {t} {locale} {request} />
             {#if status?.detail}<p class="muted">
                 {message(status.detail)}
               </p>{/if}
@@ -749,32 +753,7 @@
         </div>
       {:else if view === "console"}
         <section class="console">
-          <div class="console-toolbar">
-            <div class="segmented" role="group" aria-label={t.console}>
-              <button
-                aria-pressed={!logView}
-                class:active={!logView}
-                onclick={() => (logView = false)} disabled={!can("console.read")}>{t.live}</button
-              ><button
-                aria-pressed={logView}
-                class:active={logView}
-                onclick={loadLogs} disabled={!can("logs.read")}>{t.logs}</button
-              >
-            </div>
-            {#if logView}<button onclick={loadLogs}>{t.refresh}</button
-              >{:else}<Toggle
-                checked={follow}
-                label={t.follow}
-                onchange={(value) => (follow = value)}
-              />{/if}
-          </div>
-          <textarea
-            class="console-output"
-            bind:this={output}
-            readonly
-            aria-label={logView ? t.logs : t.console}
-            value={(logView ? !can("logs.read") : !can("console.read")) ? t.noAccess : text}
-          ></textarea>
+          <DiagnosticStream {t} {locale} {request} consoleAllowed={can("console.read")} logsAllowed={can("logs.read")} />
           <form class="command-form" onsubmit={send}>
             <label class="sr-only" for="command">{t.command}</label><svg
               viewBox="0 0 16 16"
@@ -865,6 +844,7 @@
       {:else}
         <section class="settings-section">
           {#if can("settings.write")}<Updates {t} {request} installAllowed={can("users.manage")} />{/if}
+          {#if can("settings.write")}<ServerUpdates {t} {request} installAllowed={can("users.manage")} /><Bridge {t} {locale} {request} settings {backend} />{/if}
           <h2>{t.autoStart}</h2>
           <Toggle checked={status?.autoStartServer ?? true} label={t.autoStart} disabled={busy || !connected || !can("settings.write")} onchange={autoStart} />
           <p class="muted">{t.autoStartHint}</p>

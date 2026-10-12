@@ -37,9 +37,9 @@ using var updates=new PanelUpdates(configPath);
 using var single=new FileStream(Path.Combine(Path.GetDirectoryName(configPath)!,"supervisor.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
 var setup=new SetupService(config,configPath);setup.PrintKey();
 IServerBackend? backend=null;BundleManager? bundles=null;PipeClient? adapter=null;
+await using var serverUpdates=new ServerUpdates(config,configPath,()=>backend);
 void Activate(){
-    backend=config.Backend=="windows"?new WindowsServerBackend(config):new PosixServerBackend(config);
-    if(backend is WindowsServerBackend windows)windows.BeginMonitoring();
+    backend=new BridgeBackend(config,configPath);
     adapter=new PipeClient(backend);bundles=new BundleManager(adapter,config);
 }
 if(config.Configured){Activate();if(config.AutoStartServer&&backend!.Status().State=="stopped"){try{await backend.StartAsync();}catch(Exception e){Console.Error.WriteLine(e);}}}
@@ -55,6 +55,7 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
         var line=await reader.ReadLineAsync(timeout.Token);if(line is null||line.Length>16384)throw new InvalidOperationException("request.invalid");
         var request=JsonSerializer.Deserialize<Request>(line,PanelConfig.Json)??throw new InvalidOperationException("request.invalid");
         requestAction=request.Action;
+        if(serverUpdates.Applying&&request.Action is "start" or "stop" or "restart" or "force-stop" or "command" or "bundle-action" or "bridge-settings" or "update-apply" or "shutdown")throw new InvalidOperationException("serverUpdate.busy");
         string Enc(object value)=>JsonSerializer.Serialize(value,PanelConfig.Json);
         switch(request.Action) {
             case "bootstrap":reply=new(true,Lines:[Enc(new {configured=config.Configured,dashboardName=config.DashboardName,backend=config.Backend,locale=config.Locale,version=PanelUpdates.RunningVersion})]);break;
@@ -70,6 +71,21 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
             case "user-save":Accounts.Save(config,configPath,JsonSerializer.Deserialize<UserChange>(request.Command!,PanelConfig.Json)!);reply=new(true);break;
             case "user-delete":Accounts.Delete(config,configPath,request.Command!);reply=new(true);break;
             case "update-status":reply=new(true,Lines:[Enc(updates.Status())]);break;
+            case "server-update-status":reply=new(true,Lines:[Enc(serverUpdates.Status())]);break;
+            case "server-update-check":reply=new(true,Lines:[Enc(await serverUpdates.Check(timeout.Token))]);break;
+            case "server-update-download":reply=new(true,Lines:[Enc(await serverUpdates.Download(request.Command,timeout.Token))]);break;
+            case "server-update-cancel":await serverUpdates.Cancel();reply=new(true,Lines:[Enc(serverUpdates.Status())]);break;
+            case "server-update-apply":reply=new(true,Lines:[Enc(await serverUpdates.Apply())]);break;
+            case "bridge-status":reply=new(true,Lines:[Enc((backend as BridgeBackend)?.Diagnosis()??throw new InvalidOperationException("setup.required"))]);break;
+            case "bridge-settings": {
+                var value=JsonSerializer.Deserialize<BridgeSettings>(request.Command!,PanelConfig.Json)??throw new InvalidOperationException("bridge.settings");BridgeBackend.ValidateSettings(value);
+                if(value.Port==config.GamePort||value.Port==config.VoicePort||value.Port==new Uri(config.Url).Port)throw new InvalidOperationException("bridge.settings");
+                var previous=config.Bridge;config.Bridge=value;try{PanelConfig.Save(configPath,config);}catch{config.Bridge=previous;throw;}reply=new(true);break;
+            }
+            case "diagnostics": {
+                var query=JsonSerializer.Deserialize<DiagnosticQuery>(request.Command!,PanelConfig.Json)!;
+                reply=new(true,Lines:[Enc((backend as BridgeBackend)?.Read(query.Cursor,query.Source,query.Module,query.Search,query.Limit,query.History)??throw new InvalidOperationException("setup.required"))]);break;
+            }
             case "update-check":reply=new(true,Lines:[Enc(await updates.Check(timeout.Token))]);break;
             case "update-download":reply=new(true,Lines:[Enc(await updates.Download(timeout.Token))]);break;
             case "update-cancel":await updates.Cancel();reply=new(true,Lines:[Enc(updates.Status())]);break;
@@ -84,9 +100,9 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
             case "bundle-action":if(bundles is null)throw new InvalidOperationException("setup.required");var action=JsonSerializer.Deserialize<string[]>(request.Command!)!;reply=new(true,Lines:[Enc(await bundles.Action(action[0],action[1],timeout.Token))]);break;
             default:if(adapter is null){reply=new(true,Status:new("unconfigured",null,"",config.ShutdownMode));break;}reply=await adapter.Call(request,timeout.Token);break;
         }
-    }catch(Exception e){reply=new(false,Error:ErrorCodes.From(e));}
+    }catch(Exception e){Console.Error.WriteLine($"{requestAction}: {e.GetType().Name}: {ErrorCodes.From(e)}");if(Environment.GetEnvironmentVariable("REPLAY_PANEL_TRACE_ERRORS")=="1")Console.Error.WriteLine(e);reply=new(false,Error:ErrorCodes.From(e));}
     if(reply.Ok && requestAction is "stop" or "force-stop")await NativeConsole.CloseServer(config);
     if(reply.Status is {} status)reply=reply with{Status=status with{AutoStartServer=config.AutoStartServer}};
     await writer.WriteLineAsync(JsonSerializer.Serialize(reply,PanelConfig.Json));
 },shutdown.Token);}catch(OperationCanceledException){}
-if(backend is not null)await backend.DisposeAsync();
+await serverUpdates.DisposeAsync();if(backend is not null)await backend.DisposeAsync();

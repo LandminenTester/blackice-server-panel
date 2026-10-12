@@ -34,6 +34,8 @@ jobs:
         run: cp -R licenses src/Web/wwwroot/
       - run: dotnet run --project tests/Core.Tests
       - run: dotnet run --project tests/Updates.Tests
+      - run: dotnet run --project tests/Bridge.Tests
+      - run: dotnet run --project tests/ServerUpdates.Tests
       - run: dotnet publish tests/ConsoleFixture -c Release -o .local/fixture
       - run: dotnet build tests/Backend.Tests -c Release
       - if: runner.os == 'Linux'
@@ -45,6 +47,8 @@ jobs:
         run: cc -O2 native/terminal.c -lutil -o artifacts/supervisor/replay-terminal
       - run: node scripts/test-panel.mjs
       - run: node scripts/test-setup.mjs
+      - if: runner.os == 'Windows'
+        run: node scripts/test-install.mjs
       - run: dotnet publish src/Web -c Release -r ${{ matrix.rid }} --self-contained true -o artifacts/web
       - run: dotnet publish src/Supervisor -c Release -r ${{ matrix.rid }} --self-contained true -o artifacts/supervisor
       - name: Build direct Start entry
@@ -78,6 +82,7 @@ jobs:
             deploy/
             docs/
             README*.md
+            SECURITY.md
             LICENSE
             licenses/
             THIRD_PARTY_NOTICES.md

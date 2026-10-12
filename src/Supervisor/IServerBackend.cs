@@ -8,4 +8,5 @@ public interface IServerBackend : IAsyncDisposable
     Task SendAsync(string command);
     string[] ConsoleSnapshot();
     string[] LogSnapshot();
+    int? ExitCode() => null;
 }

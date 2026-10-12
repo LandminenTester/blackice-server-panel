@@ -13,6 +13,7 @@ public sealed class ConPtySession : IDisposable
     private FileStream? output;
     private Task? reader;
     public Process Process { get; private set; } = null!;
+    public int? ExitCode() => processHandle!=IntPtr.Zero&&GetExitCodeProcess(processHandle,out var code)&&code!=259?unchecked((int)code):null;
     public string ImagePath()
     {
         var name = new System.Text.StringBuilder(32768);
@@ -112,4 +113,5 @@ public sealed class ConPtySession : IDisposable
     [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CloseHandle(IntPtr handle);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool QueryFullProcessImageName(IntPtr process, uint flags, System.Text.StringBuilder name, ref int size);
+    [DllImport("kernel32.dll")] [return:MarshalAs(UnmanagedType.Bool)] private static extern bool GetExitCodeProcess(IntPtr process,out uint code);
 }

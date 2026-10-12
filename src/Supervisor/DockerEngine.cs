@@ -69,4 +69,39 @@ public sealed class DockerEngine
         await Inspect(ct);
         return (await http.GetStringAsync("containers/"+config.ContainerId+"/logs?stdout=1&stderr=1&tail=1500",ct)).Split('\n');
     }
+    string BridgeNetwork=>"blackice-bridge-"+config.InstanceId;
+    public async Task<string> PrepareBridgeNetwork(string configPath,CancellationToken ct=default) {
+        var self=Environment.GetEnvironmentVariable("HOSTNAME")??"";
+        if(!System.Text.RegularExpressions.Regex.IsMatch(self,"^[a-f0-9]{12,64}$"))throw new InvalidOperationException("bridge.dockerHost");
+        using(var check=await http.GetAsync("networks/"+BridgeNetwork,ct)) {
+            if(check.StatusCode==System.Net.HttpStatusCode.NotFound) {using var create=await http.PostAsJsonAsync("networks/create",new{Name=BridgeNetwork,Driver="bridge",Internal=true,Labels=new Dictionary<string,string>{{"replay.panel.instance",config.InstanceId}}},ct);create.EnsureSuccessStatusCode();}
+            else {check.EnsureSuccessStatusCode();var net=await check.Content.ReadFromJsonAsync<JsonElement>(ct);if(!net.GetProperty("Internal").GetBoolean()||!net.GetProperty("Labels").TryGetProperty("replay.panel.instance",out var label)||label.GetString()!=config.InstanceId)throw new InvalidOperationException("docker.identity");}
+        }
+        using var own=await http.GetAsync("containers/"+self+"/json",ct);own.EnsureSuccessStatusCode();var data=await own.Content.ReadFromJsonAsync<JsonElement>(ct);
+        // Inspect/connect only this Supervisor container, never arbitrary containers.
+        if(data.GetProperty("Config").GetProperty("Env").EnumerateArray().All(x=>x.GetString()!="REPLAY_PANEL_CONFIG="+configPath))throw new InvalidOperationException("docker.identity");
+        if(!data.GetProperty("NetworkSettings").GetProperty("Networks").TryGetProperty(BridgeNetwork,out _)) {using var connect=await http.PostAsJsonAsync("networks/"+BridgeNetwork+"/connect",new{Container=data.GetProperty("Id").GetString()},ct);connect.EnsureSuccessStatusCode();}
+        using var again=await http.GetAsync("containers/"+self+"/json",ct);again.EnsureSuccessStatusCode();data=await again.Content.ReadFromJsonAsync<JsonElement>(ct);
+        return data.GetProperty("NetworkSettings").GetProperty("Networks").GetProperty(BridgeNetwork).GetProperty("IPAddress").GetString()!;
+    }
+    public async Task ConfigureBridge(bool enabled,string endpoint,string token,string statePath,CancellationToken ct=default) {
+        var old=await Inspect(ct);if(old.GetProperty("State").GetProperty("Running").GetBoolean())throw new InvalidOperationException("server.running");
+        var oldConfig=old.GetProperty("Config");var previous=oldConfig.TryGetProperty("Cmd",out var cmd)&&cmd.ValueKind==JsonValueKind.Array?cmd.EnumerateArray().Select(x=>x.GetString()!).ToArray():[];
+        var clean=new List<string>();for(var i=0;i<previous.Length;i++){if(previous[i]=="--mcp")continue;if(previous[i] is "--mcp-addr" or "--mcp-token"){i++;continue;}clean.Add(previous[i]);}
+        var desired=enabled?clean.Concat(new LanBridgeLaunchPolicy().Arguments(endpoint,token)).ToArray():clean.ToArray();
+        if(desired.SequenceEqual(previous))return;
+        var body=System.Text.Json.Nodes.JsonNode.Parse(oldConfig.GetRawText())!.AsObject();body["Cmd"]=JsonSerializer.SerializeToNode(desired);body.Remove("Hostname");
+        body["HostConfig"]=System.Text.Json.Nodes.JsonNode.Parse(old.GetProperty("HostConfig").GetRawText());
+        if(enabled){body["HostConfig"]!["NetworkMode"]=BridgeNetwork;body["NetworkingConfig"]=JsonSerializer.SerializeToNode(new{EndpointsConfig=new Dictionary<string,object>{{BridgeNetwork,new{}}}});}
+        else body["HostConfig"]!["NetworkMode"]="bridge";
+        var backup=Path.Combine(statePath,"docker-before-bridge-"+DateTime.UtcNow.ToString("yyyyMMddHHmmssfffffff")+".json");await File.WriteAllTextAsync(backup,old.GetRawText(),ct);if(!OperatingSystem.IsWindows())File.SetUnixFileMode(backup,UnixFileMode.UserRead|UnixFileMode.UserWrite);
+        var oldId=config.ContainerId;var name=old.GetProperty("Name").GetString()!.TrimStart('/');
+        using var rename=await http.PostAsync("containers/"+oldId+"/rename?name="+Uri.EscapeDataString(name+"-previous-"+Guid.NewGuid().ToString("N")[..8]),null,ct);rename.EnsureSuccessStatusCode();
+        try {using var create=await http.PostAsJsonAsync("containers/create?name="+Uri.EscapeDataString(name),body,ct);create.EnsureSuccessStatusCode();config.ContainerId=(await create.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("Id").GetString()!;}
+        catch {using var restore=await http.PostAsync("containers/"+oldId+"/rename?name="+Uri.EscapeDataString(name),null,CancellationToken.None);restore.EnsureSuccessStatusCode();throw;}
+    }
+    public async Task<bool> OwnsBridge(BridgeIdentity identity,System.Net.IPAddress remote,CancellationToken ct) {
+        var data=await Inspect(ct);if(!data.GetProperty("State").GetProperty("Running").GetBoolean()||identity.Pid!=1||identity.Workdir!="/srv")return false;
+        return data.GetProperty("NetworkSettings").GetProperty("Networks").TryGetProperty(BridgeNetwork,out var net)&&net.GetProperty("IPAddress").GetString()==remote.ToString();
+    }
 }
