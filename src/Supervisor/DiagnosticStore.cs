@@ -17,11 +17,11 @@ public sealed class DiagnosticStore {
   var encoded=JsonSerializer.Serialize(item,PanelConfig.Json)+"\n";File.AppendAllText(active,encoded);totalBytes+=System.Text.Encoding.UTF8.GetByteCount(encoded);if(!OperatingSystem.IsWindows())File.SetUnixFileMode(active,UnixFileMode.UserRead|UnixFileMode.UserWrite);
   if(DateTimeOffset.UtcNow-cleaned>TimeSpan.FromSeconds(10)||totalBytes>settings().MaxMegabytes*1024L*1024L)Cleanup();return item;
  }}
- public DiagnosticPage Read(long cursor,string source="all",string? module=null,string? search=null,int limit=500,bool history=false){lock(gate){
+ public DiagnosticPage Read(long cursor,string source="all",string? module=null,string? search=null,int limit=500,bool history=false,string[]? sessions=null){lock(gate){
   if(cursor<0||source is not ("all" or "console" or "log" or "panel")||limit is <1 or >500||module?.Length>256||search?.Length>256)throw new InvalidOperationException("diagnostics.invalid");
   var items=history?History():recent.ToArray().AsEnumerable();long scanned=cursor;long first=0;var result=new List<DiagnosticLine>();
   foreach(var item in items){if(first==0)first=item.Seq;if(item.Seq<=cursor)continue;scanned=item.Seq;
-   if((source=="all"||item.Source==source)&&(string.IsNullOrEmpty(module)||item.Module==module)&&(string.IsNullOrEmpty(search)||item.Text.Contains(search,StringComparison.OrdinalIgnoreCase)))result.Add(item);
+   if((sessions is null||sessions.Contains(item.StreamId))&&(source=="all"||item.Source==source)&&(string.IsNullOrEmpty(module)||item.Module==module)&&(string.IsNullOrEmpty(search)||item.Text.Contains(search,StringComparison.OrdinalIgnoreCase)))result.Add(item);
    if(result.Count>=limit)break;
   }
   return new(scanned, cursor>0&&first>cursor+1?first-cursor-1:0,result.ToArray());

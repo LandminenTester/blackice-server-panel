@@ -64,5 +64,5 @@ public sealed class PanelConfig
 }
 public sealed record BridgeSettings(bool Enabled=false,int Port=20774,int RetentionDays=7,int MaxMegabytes=100);
 public sealed record DiagnosticLine(long Seq,string StreamId,long? SourceSeq,string Source,string Module,string Text,DateTimeOffset ReceivedAt);
-public sealed record DiagnosticPage(long Cursor,long Dropped,DiagnosticLine[] Lines);
+public sealed record DiagnosticPage(long Cursor,long Dropped,DiagnosticLine[] Lines,string? StreamId=null);
 public sealed record DiagnosticQuery(long Cursor=0,string Source="all",string? Module=null,string? Search=null,int Limit=500,bool History=false);

@@ -26,7 +26,7 @@ public sealed class BridgeBackend : IServerBackend {
  public bool Connected=>hub?.Current is {Closed:false};
  public string? BuildVersion(){if(Connected)return hub!.Current!.Identity.BuildCommit;return inner.ConsoleSnapshot().Select(x=>System.Text.RegularExpressions.Regex.Match(x,@"Running version ([a-f0-9]{8,40})")).LastOrDefault(x=>x.Success)?.Groups[1].Value;}
  public BridgeDiagnosis Diagnosis(){var agent=hub?.Current;return new(config.Bridge.Enabled,active.Enabled,Connected,Connected?"bridge":"pty",agent?.Health??(inner.Status().State=="stopped"?"dead":"unknown"),agent?.Phase??"unknown",Redact(error??agent?.Detail??""),agent?.Identity.BuildCommit,agent?.Tick,agent?.LastSeen,started,lastExit,lastExitCode,config.Bridge,config.Bridge.Enabled!=active.Enabled||config.Bridge.Port!=active.Port);}
- public DiagnosticPage Read(long cursor,string source,string? module,string? search,int limit,bool history)=>store.Read(cursor,source,module,search,limit,history);
+ public DiagnosticPage Read(long cursor,string source,string? module,string? search,int limit,bool history){var scope=Connected?new[]{epoch,hub!.Current!.SessionId}:new[]{epoch};return store.Read(cursor,source,module,search,limit,history,history?null:scope) with{StreamId=history?"history":string.Join(':',scope)};}
  public async Task<BridgeStream> Execute(string command,CancellationToken ct=default){ValidateCommand(command);var agent=hub?.Current;if(agent is null||agent.Closed)throw new InvalidOperationException("bridge.disconnected");
   var result=BridgeConnection.ParseStream(await agent.Call("console.exec",new{command,wait_ms=1500},ct));return result with{Lines=result.Lines.Select(x=>x with{Text=Redact(x.Text)}).ToArray()};
  }
