@@ -42,9 +42,25 @@ dialog{color:#f5d8d9;background:#19171e;border:1px solid var(--red);padding:32px
 .subtabs button.active{color:var(--cyan);border-bottom-color:var(--cyan)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--yellow);flex:none}
 .nav-foot .build{display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--muted);padding:0;min-height:24px;font-size:12px;text-align:left;cursor:pointer}
-.nav-foot .build:hover{color:var(--cyan)}
 select{background:#121118;color:#f9e5e6;border:1px solid var(--line);border-radius:0;padding:12px;min-height:44px;width:100%}
 .config-grid{display:grid;gap:16px;max-width:620px}
 .config-grid label{display:grid;gap:6px}
 .config-grid small{color:var(--muted)}
 .config-grid textarea{resize:vertical}
+.toast{position:fixed;top:72px;left:50%;z-index:60;transform:translate(-50%,-140%);margin:0;padding:10px 20px;background:#19171e;border:1px solid var(--cyan);color:var(--cyan);box-shadow:0 12px 24px #0008;animation:toast 3.4s ease forwards;pointer-events:none}
+@keyframes toast{0%{transform:translate(-50%,-140%);opacity:0}10%,85%{transform:translate(-50%,0);opacity:1}100%{transform:translate(-50%,-140%);opacity:0}}
+@media(prefers-reduced-motion:reduce){.toast{animation-name:toast-fade;transform:translate(-50%,0)}@keyframes toast-fade{0%,90%{opacity:1}100%{opacity:0}}}
+.console-wrap{position:relative;display:flex;flex:1;min-height:0}.console-wrap .console-output{flex:1}
+.jump-latest{position:absolute;right:24px;bottom:16px;background:var(--cyan);color:#101116;border:0;padding:8px 14px;box-shadow:0 6px 16px #0008}
+.users-list li{display:flex;align-items:stretch;gap:8px}
+.users-list .user-row{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:1px solid transparent;background:transparent;color:inherit;padding:10px 12px;cursor:pointer}
+.users-list .user-row:hover:not(:disabled){border-color:var(--line)}
+.users-list li.selected .user-row{border-color:var(--cyan)}
+.log-archive{display:grid;gap:12px;min-height:0;flex:1}
+.log-archive-head{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.log-archive a.button{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;background:var(--cyan);color:#101116;text-decoration:none}
+.log-archive-body{display:grid;grid-template-columns:minmax(220px,320px) 1fr;gap:16px;min-height:360px}
+.log-list{overflow:auto;max-height:60vh;border:1px solid var(--line);padding:8px}.log-list h3{font-size:13px;color:var(--muted);margin:12px 4px 6px}.log-list ul{list-style:none;margin:0;padding:0}
+.log-list button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;border:1px solid transparent;background:transparent;color:inherit;padding:8px;cursor:pointer}.log-list button small{color:var(--muted);font-size:11px;word-break:break-all}.log-list button.active,.log-list button:hover{border-color:var(--cyan)}
+.log-view{display:flex;flex-direction:column;gap:8px;min-width:0}.log-view .console-output{flex:1;min-height:320px}.log-view-head{display:flex;justify-content:space-between;gap:12px;align-items:center}
+@media(max-width:800px){.log-archive-body{grid-template-columns:1fr}}

@@ -35,6 +35,12 @@ check((await request('/api/setup/console')).status===409,'web terminal key hidde
 check((await request('/api/setup/validate',{key,serverRoot:fixture,backend:config.backend})).status===409,'setup endpoints locked after completion');
 check((await request('/api/login',{username:'other',password:account.password})).status===401,'wrong username rejected');
 check((await request('/api/login',{username:account.username,password:account.password})).ok,'new admin can sign in');
+await mkdir(resolve(fixture,'logs'),{recursive:true});await writeFile(resolve(fixture,'logs/server_2026-10-12T09-03-05Z_cl0.txt'),'hello log');
+const listed=await(await request('/api/log-files')).json();check(listed.length===1&&listed[0].started?.startsWith('2026-10-12T09:03:05'),'log archive lists server starts');
+check((await(await request('/api/log-files/server_2026-10-12T09-03-05Z_cl0.txt')).text())==='hello log','log file readable');
+check((await request('/api/log-files/..%2Fpanel.json')).status===404,'log path traversal rejected');
+const zip=Buffer.from(await(await request('/api/log-files.zip')).arrayBuffer());check(zip.subarray(0,2).toString()==='PK'&&zip.includes('server_2026-10-12T09-03-05Z_cl0.txt'),'all logs download as ZIP');
+const cfgBefore=await(await request('/api/server-config')).json();check(cfgBefore.exists&&cfgBefore.values.autoUpdate===false,'server config readable after setup');
 const saved=JSON.parse(await readFile(configPath));check(saved.passwordHash&&saved.passwordSalt&&!JSON.stringify(saved).includes(account.password),'password is stored only as salted hash');
 console.log(count+' setup checks passed');
 }finally{web.kill();supervisor.kill();}

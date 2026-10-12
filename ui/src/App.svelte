@@ -81,6 +81,15 @@
       /* update info is optional */
     }
   }
+  async function refreshVersions() {
+    try {
+      const boot = await request("/api/bootstrap");
+      panelVersion = boot.version ?? panelVersion;
+    } catch {
+      /* keep previous */
+    }
+    await loadVersions();
+  }
   function openUpdates() {
     settingsTab = "updates";
     navigate("settings");
@@ -718,12 +727,14 @@
             class:active={view === name}
             onclick={() => navigate(name)}
             ><svg viewBox="0 0 24 24" aria-hidden="true"
-              >{#if index === 0}<path
+              >{#if name === "dashboard"}<path
                   d="M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z"
-                />{:else if index === 1}<path
+                />{:else if name === "console"}<path
                   d="m4 6 6 6-6 6m9 0h7"
-                />{:else if index === 2}<path
+                />{:else if name === "bundles"}<path
                   d="m12 3 9 5-9 5-9-5zm-9 9 9 5 9-5m-18 5 9 5 9-5"
+                />{:else if name === "users"}<path
+                  d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0"
                 />{:else}<path
                   d="M3 6h18M3 12h18M3 18h18M8 3v6m8 0v6m-7 0v6"
                 />{/if}</svg
@@ -758,9 +769,9 @@
       </section>
       {#if error}<p class="error banner" role="alert">
           {message(error)}
-        </p>{/if}{#if notice}<p class="notice" role="status">
+        </p>{/if}{#if notice}{#key notice}<p class="toast" role="status" onanimationend={() => (notice = "")}>
           {t[notice as keyof typeof t] as string}
-        </p>{/if}
+        </p>{/key}{/if}
       {#if view === "dashboard"}
         <div class="dashboard-grid">
           <section class="runtime">
@@ -899,12 +910,12 @@
               >{/each}
           </div>
           {#if settingsTab === "updates" && can("settings.write")}
-            <Updates {t} {request} installAllowed={can("users.manage")} />
-            <ServerUpdates {t} {locale} {request} installAllowed={can("users.manage")} />
+            <Updates {t} {request} installAllowed={can("users.manage")} onchanged={refreshVersions} />
+            <ServerUpdates {t} {locale} {request} installAllowed={can("users.manage")} onchanged={refreshVersions} />
           {:else if settingsTab === "bridge" && can("settings.write")}
             <Bridge {t} {locale} {request} settings {backend} />
           {:else if settingsTab === "server" && can("settings.write")}
-            <ServerConfig {t} {locale} {request} />
+            <ServerConfig {t} {locale} {request} {backend} />
           {:else}
           <h2>{t.autoStart}</h2>
           <Toggle checked={status?.autoStartServer ?? true} label={t.autoStart} disabled={busy || !connected || !can("settings.write")} onchange={autoStart} />

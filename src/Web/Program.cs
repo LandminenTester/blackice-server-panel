@@ -106,6 +106,27 @@ app.MapGet("/api/diagnostics",async(HttpContext context,PipeClient pipe,Cancella
     if(!long.TryParse(q["cursor"].FirstOrDefault()??"0",out var cursor)||!int.TryParse(q["limit"].FirstOrDefault()??"500",out var limit))return Results.BadRequest(new{error="diagnostics.invalid"});
     return Data(await pipe.Call(new("diagnostics",JsonSerializer.Serialize(new DiagnosticQuery(cursor,source,q["module"].FirstOrDefault(),q["search"].FirstOrDefault(),limit,q["history"]=="true"),PanelConfig.Json)),ct));
 }).RequireAuthorization();
+app.MapGet("/api/log-files",(HttpContext c)=>{
+    var dir=LogsDirectory(configPath);
+    var files=Directory.Exists(dir)?new DirectoryInfo(dir).EnumerateFiles().OrderByDescending(f=>f.LastWriteTimeUtc).Select(f=>new{name=f.Name,size=f.Length,modified=f.LastWriteTimeUtc,started=LogStart(f)}).ToArray():[];
+    return Results.Json(files);
+}).RequireAuthorization("logs.read");
+app.MapGet("/api/log-files/{name}",(string name)=>{
+    var file=SafeLog(configPath,name);if(file is null)return Results.NotFound();
+    using var stream=new FileStream(file,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete);
+    const int limit=2*1024*1024;if(stream.Length>limit)stream.Seek(-limit,SeekOrigin.End);
+    using var reader=new StreamReader(stream);return Results.Text(reader.ReadToEnd(),"text/plain; charset=utf-8");
+}).RequireAuthorization("logs.read");
+app.MapGet("/api/log-files.zip",async(HttpContext c,CancellationToken ct)=>{
+    var dir=LogsDirectory(configPath);if(!Directory.Exists(dir))return Results.NotFound();
+    c.Response.ContentType="application/zip";c.Response.Headers.ContentDisposition="attachment; filename=\"blackice-server-logs-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+".zip\"";
+    using var zip=new System.IO.Compression.ZipArchive(c.Response.BodyWriter.AsStream(),System.IO.Compression.ZipArchiveMode.Create,true);
+    foreach(var f in new DirectoryInfo(dir).EnumerateFiles().OrderBy(f=>f.Name)){
+        ct.ThrowIfCancellationRequested();
+        try{using var input=new FileStream(f.FullName,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete);var entry=zip.CreateEntry(f.Name,System.IO.Compression.CompressionLevel.Optimal);entry.LastWriteTime=f.LastWriteTimeUtc;using var output=entry.Open();await input.CopyToAsync(output,ct);}catch(IOException){}
+    }
+    return Results.Empty;
+}).RequireAuthorization("logs.read");
 app.MapGet("/api/bundles", async (BundleManager bundles, CancellationToken ct) => Results.Ok(await bundles.List(ct))).RequireAuthorization("bundles.read");
 app.MapPost("/api/bundles/{name}/{action}", async (string name, string action, HttpContext c, BundleManager bundles, CancellationToken ct) =>
 {
@@ -159,6 +180,15 @@ app.Lifetime.ApplicationStopping.Register(() =>
     catch (Exception) { app.Logger.LogWarning("Supervisor could not be notified during webhost shutdown."); }
 });
 await app.RunAsync();
+static string LogsDirectory(string configPath)=>Path.Combine(PanelConfig.Load(configPath).ServerRoot,"logs");
+static string? SafeLog(string configPath,string name){
+    if(!System.Text.RegularExpressions.Regex.IsMatch(name,@"\A[A-Za-z0-9._-]{1,128}\z"))return null;
+    var path=Path.Combine(LogsDirectory(configPath),name);return File.Exists(path)?path:null;
+}
+static DateTime? LogStart(FileInfo f){
+    var m=System.Text.RegularExpressions.Regex.Match(f.Name,@"(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})Z");
+    return m.Success&&DateTime.TryParse($"{m.Groups[1].Value}T{m.Groups[2].Value}:{m.Groups[3].Value}:{m.Groups[4].Value}Z",null,System.Globalization.DateTimeStyles.AdjustToUniversal|System.Globalization.DateTimeStyles.AssumeUniversal,out var d)?d:null;
+}
 static IResult Data(Reply reply) => reply.Ok ? Results.Ok(reply.Lines is {Length:>0} ? JsonSerializer.Deserialize<JsonElement>(reply.Lines[0]) : JsonSerializer.SerializeToElement(new{ok=true})) : Results.Json(reply,statusCode:409);
 static IResult Result(Reply reply) => reply.Ok ? Results.Ok(reply) : Results.Json(reply, statusCode: 409);
 static bool Can(HttpContext c,string permission)=>c.User.HasClaim("permission",permission);
