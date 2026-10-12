@@ -92,7 +92,7 @@ app.MapPost("/api/login", async (Login body, HttpContext c, PipeClient pipe) =>
     var reply = await pipe.Call(new("authenticate", JsonSerializer.Serialize(new[]{body.Username??"admin",body.Password})));
     if(!reply.Ok)return Results.Unauthorized();
     var user=JsonSerializer.Deserialize<UserView>(reply.Lines![0],PanelConfig.Json)!;
-    await c.SignInAsync(Principal(user));
+    await c.SignInAsync(Principal(user),body.Remember==true?new AuthenticationProperties{IsPersistent=true,ExpiresUtc=DateTimeOffset.UtcNow.AddDays(30)}:new AuthenticationProperties());
     return Results.Ok(new { ok = true });
 }).RequireRateLimiting("login");
 app.MapPost("/api/logout", async (HttpContext c) => { await c.SignOutAsync(); return Results.Ok(new { ok = true }); }).RequireAuthorization();
@@ -147,6 +147,12 @@ app.MapPost("/api/settings", async (Settings body, HttpContext c, PipeClient pip
     if((body.ShutdownMode is not null||body.AutoStartServer is not null)&&!Can(c,"settings.write"))return Results.Forbid();
     return Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode,AutoStartServer:body.AutoStartServer,Locale:body.Locale), ct));
 }).RequireAuthorization();
+app.MapGet("/api/server-name",async(PipeClient pipe,CancellationToken ct)=>{
+    var reply=await pipe.Call(new("server-config"),ct);
+    if(!reply.Ok||reply.Lines is not {Length:>0})return Results.Ok(new{name=""});
+    using var doc=JsonDocument.Parse(reply.Lines[0]);
+    return Results.Ok(new{name=doc.RootElement.GetProperty("values").GetProperty("name").GetString()??""});
+}).RequireAuthorization();
 app.MapGet("/api/server-config",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("server-config"),ct))).RequireAuthorization("settings.write");
 app.MapPost("/api/server-config",async(JsonElement body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("server-config-save",body.GetRawText()),ct))).RequireAuthorization("settings.write");
 app.MapGet("/api/updates",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("update-status"),ct))).RequireAuthorization("settings.write");
@@ -197,7 +203,7 @@ static async Task<UserView?> CurrentUser(ClaimsPrincipal principal,PipeClient pi
     try{var reply=await pipe.Call(new("account-session",JsonSerializer.Serialize(new[]{principal.Identity?.Name??"",principal.FindFirst("stamp")?.Value??""})),ct);return reply.Ok?JsonSerializer.Deserialize<UserView>(reply.Lines![0],PanelConfig.Json):null;}catch(IOException){return null;}
 }
 record UserDelete(string Username);
-record Login(string? Password, string? Username);
+record Login(string? Password, string? Username, bool? Remember);
 record Command(string? Text);
 record Settings(string? ShutdownMode, bool? AutoStartServer, string? Locale);
 public partial class Program { }

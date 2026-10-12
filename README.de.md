@@ -4,7 +4,22 @@ Dieses Projekt wurde überwiegend mit KI-Werkzeugen entwickelt und von seinem me
 
 Inoffizielles Dashboard für eine **BlackICE-/REServer-Instanz**: Serversteuerung, Live-Konsole, Logs, Bundle-Verwaltung, mehrere Benutzer mit einzelnen Berechtigungen, Deutsch/Englisch, geschützte Ersteinrichtung, offizieller Serverdownload und Cyberpunk-inspiriertes Design.
 
-[English](README.md) · [Release 1.1](https://github.com/LandminenTester/blackice-server-panel/releases/tag/v1.1.0)
+[English](README.md) · [Neuestes Release](https://github.com/LandminenTester/blackice-server-panel/releases/latest)
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Dashboard](docs/screenshots/03-dashboard.png) | ![Live-Konsole](docs/screenshots/04-console.png) |
+| **Dashboard**: Status, Steuerung und letzte Aktivität | **Live-Konsole**: Ausgabe, Filter und Befehle |
+| ![Log-Archiv](docs/screenshots/05-log-archive.png) | ![Settings](docs/screenshots/07-settings-general.png) |
+| **Log-Archiv**: ein Log pro Serverstart, ZIP-Download | **Einstellungen**: Autostart, Abschaltverhalten und Sprache |
+| ![Serverkonfiguration](docs/screenshots/09-settings-server-config.png) | ![Benutzer](docs/screenshots/11-users.png) |
+| **Serverkonfiguration**: `server.cfg` bearbeiten inkl. Regionsliste | **Benutzer**: Zugänge und einzelne Berechtigungen |
+| ![Einrichtungsassistent](docs/screenshots/02-setup-server.png) | ![Updates](docs/screenshots/08-settings-updates.png) |
+| **Einrichtungsassistent**: geführte Ersteinrichtung | **Updates**: Panel- und REServer-Builds |
+
+(Die Screenshots zeigen die englische Oberfläche.)
 
 ## Windows
 
@@ -13,6 +28,14 @@ Inoffizielles Dashboard für eine **BlackICE-/REServer-Instanz**: Serversteuerun
 3. http://127.0.0.1:20772 öffnen. Einrichtungsschlüssel aus dem Terminal oder `.local/supervisor.log` verwenden, Administrator anlegen und vorhandenen Server oder einen leeren Downloadordner auswählen.
 
 Windows x86-64 erforderlich; .NET ist enthalten. SDK und Node.js sind nicht nötig. Der Spielserver öffnet eine eigene Konsole. Diese schließen stoppt das Spiel; Start schließen, Strg+C oder Q beendet den gesamten Stack. Autostart lässt sich unter Einstellungen aktivieren.
+
+### Nicht signierter Download (Windows)
+
+`Start.exe` und die übrigen Programmdateien sind **nicht code-signiert**, da dies ein freies Community-Projekt ohne bezahltes Signaturzertifikat ist. Windows kann deshalb Warnungen anzeigen; das ist zu erwarten und für sich allein kein Hinweis auf Schadsoftware:
+
+- **SmartScreen: „Der Computer wurde durch Windows geschützt“**: auf **Weitere Informationen** und dann auf **Trotzdem ausführen** klicken.
+- **Heruntergeladene ZIP wird blockiert**: Rechtsklick auf die ZIP, **Eigenschaften** öffnen, **Zulassen** anhaken und mit OK bestätigen, *bevor* entpackt wird. Sonst tragen alle entpackten Dateien die Markierung „aus dem Internet heruntergeladen“.
+- **Fehlalarme von Virenscannern** sind bei unsignierten, eigenständigen Programmen möglich. Lade nur von der offiziellen [Releases-Seite](https://github.com/LandminenTester/blackice-server-panel/releases) dieses Repositories herunter und baue das Projekt im Zweifel selbst aus dem Quellcode ([docs/building.md](docs/building.md)); der gesamte Code ist offen.
 
 ## Natives Linux
 

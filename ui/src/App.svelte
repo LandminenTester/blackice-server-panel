@@ -8,6 +8,7 @@
   import ServerUpdates from "./ServerUpdates.svelte";
   import ServerConfig from "./ServerConfig.svelte";
   import Bridge from "./Bridge.svelte";
+  import HexBackground from "./HexBackground.svelte";
   import DiagnosticStream from "./DiagnosticStream.svelte";
   let permissions = $state<string[]>([]);
   const can = (permission: string) => permissions.includes(permission);
@@ -61,6 +62,20 @@
     command = $state(""),
     follow = $state(true),
     logView = $state(false);
+  let logArchiveOpen = $state(false),
+    showKey = $state(false),
+    loginUser = $state(""),
+    remember = $state(false),
+    serverName = $state("");
+  const mb = (n: number) => new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(n / 1048576) + " MB";
+  async function loadServerName() {
+    try {
+      const data = await request("/api/server-name");
+      serverName = data.name ?? "";
+    } catch {
+      serverName = "";
+    }
+  }
   let settingsTab = $state("general"),
     panelVersion = $state(""),
     serverBuild = $state(""),
@@ -181,7 +196,7 @@
     const boot = await request("/api/bootstrap");
     configured = boot.configured;
     panelVersion = boot.version ?? "";
-    if (configured && authenticated) loadVersions();
+    if (configured && authenticated) { loadVersions(); loadServerName(); }
     if (!configured && !serverRoot) serverRoot = boot.defaultServerRoot ?? "";
     dashboardName = boot.dashboardName;
     backend = boot.backend;
@@ -207,7 +222,7 @@
   async function login(e: SubmitEvent) {
     e.preventDefault();
     await run(async () => {
-      await request("/api/login", { username, password });
+      await request("/api/login", { username: loginUser, password, remember });
       password = "";
       await session();
       connect();
@@ -227,7 +242,7 @@
     await run(async () => {
       const data = await request("/api/server/" + name, {});
       status = data.status;
-      notice = "actionDone";
+      notice = ({ start: "noticeStart", stop: "noticeStop", restart: "noticeRestart", "force-stop": "noticeForce" } as Record<string, string>)[name] ?? "actionDone";
     });
   }
   function confirm(name: string) {
@@ -284,7 +299,7 @@
         ),
       );
       if (bundleError) error = bundleError;
-      else notice = "actionDone";
+      else notice = (name === "start" ? t.bundleStarted : name === "stop" ? t.bundleStopped : t.bundleRestarted).replace("{name}", bundle.name);
     });
     if (!bundleControl) await loadBundles();
   }
@@ -354,10 +369,12 @@
         serverRoot,
         backend,
       });
+      await request("/api/login", { username, password, remember: false });
       password = "";
       confirmation = "";
       key = "";
       await session();
+      connect();
       notice = "setupSuccess";
     });
   }
@@ -431,11 +448,12 @@
     content="#101116"
   /></svelte:head
 >
+<HexBackground />
 <header class="toolbar">
   <a href="/" class="brand" aria-label={t.app}
     ><svg viewBox="0 0 28 28" aria-hidden="true"
       ><path d="M5 23V5h11l7 7-7 7H5m9 0 8 4M5 12h11" /></svg
-    ><span>{t.app}</span></a
+    ><span class="brand-text"><span>{t.app}</span>{#if authenticated && serverName}<small>{serverName}</small>{/if}</span></a
   >
   <div class="header-server">      {#if authenticated}
         <div
@@ -499,7 +517,7 @@
     <textarea
       class="console-output setup-console"
       readonly
-      rows="3"
+      rows="2"
       aria-label={t.setupConsole}
       value={setupConsole.join("\n")}
     ></textarea>
@@ -514,13 +532,19 @@
     <form onsubmit={finish}>
       {#if step === 0}
         <div class="fields">
-          <label
-            >{t.setupKey}<input
-              bind:value={key}
-              autocomplete="off"
-              required
-            /><small>{t.setupKeyHint}</small></label
-          >
+          <div class="field key-field">
+            <label
+              >{t.setupKey}<input
+                type={showKey ? "text" : "password"}
+                bind:value={key}
+                autocomplete="off"
+                spellcheck="false"
+                required
+              /></label
+            ><button type="button" class="reveal" onclick={() => (showKey = !showKey)}
+              >{showKey ? t.setupKeyHide : t.setupKeyReveal}</button
+            >
+          </div>
           <label
             >{t.dashboardName}<input
               bind:value={dashboardName}
@@ -636,7 +660,7 @@
               <span></span>
             </div>
             <p class="muted">
-              {t.bytes}: {new Intl.NumberFormat(locale).format(job.bytes)} B
+              {t.bytes}: {mb(job.bytes)}
             </p>
             {#if job.state === "running"}<button
                 type="button"
@@ -687,7 +711,7 @@
     <form onsubmit={login} class="fields">
       <label
         >{t.username}<input
-          bind:value={username}
+          bind:value={loginUser}
           autocomplete="username"
           required
         /></label
@@ -699,7 +723,7 @@
           maxlength="256"
           required
         /></label
-      ><button class="primary" disabled={busy}
+      ><Toggle checked={remember} label={t.stayLoggedIn} onchange={(v) => (remember = v)} /><button class="primary" disabled={busy}
         >{busy ? t.loading : t.login}</button
       >
     </form>
@@ -743,7 +767,7 @@
             ]}</button
           >{/each}
       </div>
-      <div class="nav-foot"><strong>BlackICE</strong><span>{t.unofficial}</span>{#if panelVersion}<button type="button" class="build" onclick={openUpdates} title={panelUpdate ? t.updateBadge : ""}>{t.panelBuild} {panelVersion}{#if panelUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}{#if serverBuild}<button type="button" class="build" onclick={openUpdates} title={serverUpdate ? t.updateBadge : ""}>{t.serverBuild} {serverBuild.slice(0, 8)}{#if serverUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}<a href="https://github.com/LandminenTester/blackice-server-panel" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div>
+      <div class="nav-foot"><strong>BlackICE</strong><span>{t.unofficial}</span>{#if panelVersion}<button type="button" class="build" onclick={openUpdates} title={panelUpdate ? t.updateBadge : ""}>{t.panelBuild} {panelVersion}{#if panelUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}{#if serverBuild}<button type="button" class="build" onclick={openUpdates} title={serverUpdate ? t.updateBadge : ""}>{t.serverBuild} {serverBuild.slice(0, 8)}{#if serverUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}<span class="links"><a href="https://github.com/LandminenTester/blackice-server-panel" target="_blank" rel="noopener noreferrer">GitHub ↗</a><a href="https://discord.gg/k6ttXWdAyP" target="_blank" rel="noopener noreferrer">Discord ↗</a></span></div>
     </nav>
     <div
       class="workspace"
@@ -770,7 +794,7 @@
       {#if error}<p class="error banner" role="alert">
           {message(error)}
         </p>{/if}{#if notice}{#key notice}<p class="toast" role="status" onanimationend={() => (notice = "")}>
-          {t[notice as keyof typeof t] as string}
+          {(t as Record<string, any>)[notice] ?? notice}
         </p>{/key}{/if}
       {#if view === "dashboard"}
         <div class="dashboard-grid">
@@ -809,8 +833,8 @@
         </div>
       {:else if view === "console"}
         <section class="console">
-          <DiagnosticStream {t} {locale} {request} consoleAllowed={can("console.read")} logsAllowed={can("logs.read")} />
-          <form class="command-form" onsubmit={send}>
+          <DiagnosticStream {t} {locale} {request} consoleAllowed={can("console.read")} logsAllowed={can("logs.read")} bind:archive={logArchiveOpen} />
+          {#if !logArchiveOpen}<form class="command-form" onsubmit={send}>
             <label class="sr-only" for="command">{t.command}</label><svg
               viewBox="0 0 16 16"
               aria-hidden="true"><path d="m4 3 5 5-5 5" /></svg
@@ -827,7 +851,7 @@
                 serverState !== "running" ||
                 !can("console.write") || !command.trim()}>{t.send}</button
             >
-          </form>
+          </form>{/if}
         </section>
       {:else if view === "bundles"}
         <section class="bundle-panel" aria-busy={bundleLoading}>
@@ -915,11 +939,14 @@
           {:else if settingsTab === "bridge" && can("settings.write")}
             <Bridge {t} {locale} {request} settings {backend} />
           {:else if settingsTab === "server" && can("settings.write")}
-            <ServerConfig {t} {locale} {request} {backend} />
+            <ServerConfig {t} {locale} {request} {backend} onsaved={loadServerName} />
           {:else}
+          <section class="update-panel general-panel">
           <h2>{t.autoStart}</h2>
           <Toggle checked={status?.autoStartServer ?? true} label={t.autoStart} disabled={busy || !connected || !can("settings.write")} onchange={autoStart} />
           <p class="muted">{t.autoStartHint}</p>
+          </section>
+          <section class="update-panel general-panel">
           <h2>{t.shutdown}</h2>
           <Select
             value={status?.shutdownMode ?? "keep-running"}
@@ -932,6 +959,8 @@
             onchange={settings}
           />
           <p class="muted">{t.shutdownHint}</p>
+          </section>
+          <section class="update-panel general-panel">
           <h2>{t.language}</h2>
           <Select
             value={locale}
@@ -939,14 +968,17 @@
             options={languageOptions}
             onchange={setLocale}
           />
-          <h2>{t.forceStop}</h2>
-          <p class="muted">{t.forceHint}</p>
+          </section>
+          <section class="update-panel general-panel force-panel">
+          <div><h2>{t.forceStop}</h2>
+          <p class="muted">{t.forceHint}</p></div>
           <button
             class="danger"
             onclick={() => confirm("force-stop")}
             disabled={busy || !connected || !can("server.force-stop") || serverState !== "running"}
             >{t.forceStop}</button
           >
+          </section>
           {/if}
         </section>
       {/if}

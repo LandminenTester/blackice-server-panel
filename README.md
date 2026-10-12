@@ -4,7 +4,20 @@ This project was developed primarily with AI tools and reviewed and tested by it
 
 Unofficial dashboard for one **BlackICE / REServer** instance: server controls, live console and logs, bundle management, multiple users with individual permissions, English/German localization, protected setup, official server installation and a Cyberpunk-inspired interface.
 
-[Deutsch](README.de.md) · [Release 1.1](https://github.com/LandminenTester/blackice-server-panel/releases/tag/v1.1.0)
+[Deutsch](README.de.md) · [Latest release](https://github.com/LandminenTester/blackice-server-panel/releases/latest)
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Dashboard](docs/screenshots/03-dashboard.png) | ![Live console](docs/screenshots/04-console.png) |
+| **Dashboard**: status, controls and recent activity | **Live console**: output, filters and commands |
+| ![Log archive](docs/screenshots/05-log-archive.png) | ![Settings](docs/screenshots/07-settings-general.png) |
+| **Log archive**: one log per server start, ZIP download | **Settings**: autostart, shutdown behavior and language |
+| ![Server configuration](docs/screenshots/09-settings-server-config.png) | ![Users](docs/screenshots/11-users.png) |
+| **Server configuration**: edit `server.cfg` incl. region list | **Users**: accounts and individual permissions |
+| ![Setup wizard](docs/screenshots/02-setup-server.png) | ![Updates](docs/screenshots/08-settings-updates.png) |
+| **Setup wizard**: guided first-time setup | **Updates**: panel and REServer builds |
 
 ## Windows
 
@@ -13,6 +26,14 @@ Unofficial dashboard for one **BlackICE / REServer** instance: server controls, 
 3. Open http://127.0.0.1:20772. Read the setup key from the terminal or `.local/supervisor.log`, create your administrator and choose an existing server or an empty directory for the official download.
 
 Windows x86-64 is required; the .NET runtime is included. No SDK or Node.js is needed. The game opens a separate console. Closing it stops the game; closing Start, Ctrl+C or Q stops the whole stack. Automatic game startup is configurable under Settings.
+
+### Unsigned download (Windows)
+
+`Start.exe` and the other binaries are **not code-signed**, because this is a free community project without a paid signing certificate. Windows can therefore show warnings; this is expected and not a sign of malware by itself:
+
+- **SmartScreen: "Windows protected your PC"**: click **More info**, then **Run anyway**.
+- **Downloaded ZIP is blocked**: right-click the ZIP, open **Properties**, tick **Unblock** and press OK *before* extracting. Otherwise every extracted file carries the "downloaded from the internet" mark.
+- **Antivirus false positives** can happen with unsigned, self-contained executables. Only download from the official [Releases page](https://github.com/LandminenTester/blackice-server-panel/releases) of this repository and, if you are unsure, build it yourself from source ([docs/building.md](docs/building.md)); the whole code is open.
 
 ## Native Linux
 

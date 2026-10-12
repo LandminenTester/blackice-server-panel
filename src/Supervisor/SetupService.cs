@@ -126,16 +126,34 @@ public sealed class SetupService(PanelConfig config, string configPath)
     public InstallJob? Status() { lock(sync) return job; }
     public void Cancel() { lock(sync) cancellation?.Cancel(); }
     public async Task StopInstallation(){Cancel();while(Status()?.State=="running")await Task.Delay(100);}
+    // Installs the current official build from the same alpha manifest the update check uses, so a fresh install is never older than "latest".
     private async Task DownloadWindows(string staging,CancellationToken ct)
     {
+        const string prefix = "https://artifacts.replay.re/server_windows/alpha/";
         using var client = new HttpClient { Timeout=TimeSpan.FromMinutes(30) };
-        using var response=await client.GetAsync("https://artifacts.replay.re/server_windows/reserver.zip",HttpCompletionOption.ResponseHeadersRead,ct); response.EnsureSuccessStatusCode();
-        var zip=staging+".zip";
-        try {
-            await using(var output=File.Create(zip)) { await using var input=await response.Content.ReadAsStreamAsync(ct); var buffer=new byte[65536]; long bytes=0; int count;
-                while((count=await input.ReadAsync(buffer,ct))>0) { bytes+=count; if(bytes>4L*1024*1024*1024) throw new InvalidOperationException("install.size"); await output.WriteAsync(buffer.AsMemory(0,count),ct); Update("download",bytes); } }
-            Update("extract",0); ArchiveInstaller.Extract(zip,staging,ct);
-        } finally { if(File.Exists(zip)) File.Delete(zip); }
+        using var version = JsonDocument.Parse(await client.GetStringAsync(prefix + "version.json", ct));
+        var commit = version.RootElement.GetProperty("commit").GetString()!;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(commit, "^[a-f0-9]{8,40}$")) throw new InvalidOperationException("install.failed");
+        var files = JsonSerializer.Deserialize<Dictionary<string,string>>(await client.GetStringAsync(prefix + "contents.json", ct))!;
+        files.Remove("data/ugc/.gitkeep"); // Official empty-directory marker; the user's bundle directory is created empty.
+        if (!files.ContainsKey("REServer.exe")) throw new InvalidOperationException("install.failed");
+        long total = 0;
+        foreach (var (name, digest) in files)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (name.Length == 0 || name.StartsWith('/') || name.Contains('\\') || name.Contains(':') || name.Split('/').Any(x => x is "" or "." or "..")) throw new InvalidOperationException("install.failed");
+            var path = Path.GetFullPath(Path.Combine(staging, name));
+            if (!path.StartsWith(Path.GetFullPath(staging) + Path.DirectorySeparatorChar, StringComparison.Ordinal)) throw new InvalidOperationException("install.failed");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var response = await client.GetAsync(prefix + string.Join('/', name.Split('/').Select(Uri.EscapeDataString)), HttpCompletionOption.ResponseHeadersRead, ct); response.EnsureSuccessStatusCode();
+            await using (var output = File.Create(path)) { await using var input = await response.Content.ReadAsStreamAsync(ct); var buffer = new byte[65536]; long bytes = 0; int count;
+                while ((count = await input.ReadAsync(buffer, ct)) > 0) { bytes += count; total += count; if (bytes > 512L*1024*1024 || total > 4L*1024*1024*1024) throw new InvalidOperationException("install.size"); await output.WriteAsync(buffer.AsMemory(0, count), ct); Update("download", total); } }
+            await using (var check = File.OpenRead(path)) if (!string.Equals(Convert.ToHexString(await SHA256.HashDataAsync(check, ct)), digest, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("install.failed");
+        }
+        Update("extract", 0);
+        foreach (var dir in new[] { "logs", "cache", Path.Combine("data", "ugc") }) Directory.CreateDirectory(Path.Combine(staging, dir));
+        await File.WriteAllTextAsync(Path.Combine(staging, "contents.json"), JsonSerializer.Serialize(files), ct);
+        await File.WriteAllTextAsync(Path.Combine(staging, "version.json"), JsonSerializer.Serialize(new { commit }), ct);
     }
     public async Task Finish(SetupInput input)
     {
