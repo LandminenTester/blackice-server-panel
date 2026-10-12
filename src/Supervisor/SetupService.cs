@@ -85,6 +85,9 @@ public sealed class SetupService(PanelConfig config, string configPath)
                         var cfg = Path.Combine(staging,"cfg"); Directory.CreateDirectory(cfg);
                         File.Copy(Path.Combine(cfg,"server.cfg.example"), Path.Combine(cfg,"server.cfg"), false);
                         await File.AppendAllTextAsync(Path.Combine(cfg,"server.cfg"),"\nsv_lan true\n",token);
+                        if(config.GamePort is <1 or >65535||config.VoicePort is <1 or >65535||config.GamePort==config.VoicePort)throw new InvalidOperationException("setup.validation");
+                        if(config.GamePort!=20770)await File.AppendAllTextAsync(Path.Combine(cfg,"server.cfg"),$"\nsv_bindaddr \"0.0.0.0:{config.GamePort}\"\n",token);
+                        if(config.VoicePort!=20771)await File.AppendAllTextAsync(Path.Combine(cfg,"server.cfg"),$"\nsv_voip_addr \"0.0.0.0:{config.VoicePort}\"\n",token);
                         Directory.CreateDirectory(Path.Combine(staging,"settings"));
                         await File.WriteAllTextAsync(Path.Combine(staging,"settings","server.settings.json"), "{\"auto_update\":false,\"channel\":\"alpha\",\"restart_after_update\":\"auto\"}", token);
                         Validate(staging,input.Backend);

@@ -11,7 +11,7 @@ const configPath=resolve(folder,'panel.json'),url='http://127.0.0.1:20776';
 let key='',output='',csrf='',cookies=new Map(),supervisor,web,restartWeb,stopWeb;
 const target=backend==='windows'?resolve(folder,'Replay Download'):'/server/download';
 if(backend==='windows') {
- await writeFile(configPath,JSON.stringify({schemaVersion:2,autoStartServer:false,pipeName:'panel-install-'+process.pid,url}));
+ await writeFile(configPath,JSON.stringify({schemaVersion:2,autoStartServer:false,gamePort:30770,voicePort:30771,pipeName:'panel-install-'+process.pid,url}));
  supervisor=spawn(resolve(root,build,'supervisor/Supervisor.exe'),[configPath],{env:{...process.env,REPLAY_PANEL_NO_TERMINAL:'1'},stdio:['ignore','pipe','inherit']});
  supervisor.stdout.on('data',chunk=>{output+=chunk;key=output.match(/Setup key: ([A-F0-9]+)/)?.[1]??'';});
  restartWeb=()=>{web=spawn(resolve(root,build,'web/Web.exe'),[],{cwd:resolve(root,build,'web'),env:{...process.env,REPLAY_PANEL_CONFIG:configPath},stdio:'ignore'});};restartWeb();
@@ -46,7 +46,7 @@ try{
  await req('/api/setup/install',{key,serverRoot:target,backend});
  for(let i=0;i<1800;i++){job=await req('/api/setup/job',{key});if(job.state!=='running')break;await new Promise(r=>setTimeout(r,500));}
  assert.equal(job.state,'completed',JSON.stringify(job));console.log('PASS official '+backend+' download, extraction and validation');
- if(backend==='windows')await writeFile(resolve(target,'cfg/server.cfg'),(await readFile(resolve(target,'cfg/server.cfg'),'utf8'))+'\nsv_bindaddr \"127.0.0.1:30770\"\nsv_voip_addr \"127.0.0.1:30771\"\n');
+ if(backend!=='docker'){const nativeCfg=await readFile(resolve(target,'cfg/server.cfg'),'utf8');assert(nativeCfg.includes(backend==='windows'?'0.0.0.0:30770':'0.0.0.0:30780'));console.log('PASS native installer respects configured game port');}
  await req('/api/setup/finish',{key,serverRoot:target,backend,dashboardName:'Installer test',username:'test-admin',password:'test-long-password',confirmation:'test-long-password',locale:'en'});
  await req('/api/login',{username:'test-admin',password:'test-long-password'});
  csrf=(await req('/api/session')).csrf;
