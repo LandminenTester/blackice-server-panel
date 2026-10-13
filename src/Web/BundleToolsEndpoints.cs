@@ -80,6 +80,19 @@ public static class BundleToolsEndpoints
         app.MapGet("/api/bundle-tools/tools/latest", async (PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-tool-latest"), ct))).RequireAuthorization("settings.write");
         app.MapGet("/api/bundle-tools/projects", async (PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-projects"), ct))).RequireAuthorization("bundles.build");
         app.MapPost("/api/bundle-tools/projects/create", async (JsonElement body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-project-create", body.GetRawText()), ct))).RequireAuthorization("bundles.build");
+        foreach (var action in new[] { "import", "pull", "checkout" })
+        {
+            var name = action;
+            app.MapPost("/api/bundle-tools/projects/" + name, async (JsonElement body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-project-" + name, body.GetRawText()), ct))).RequireAuthorization("bundles.build");
+        }
+        foreach (var action in new[] { "check", "refs" })
+        {
+            var name = action;
+            app.MapPost("/api/bundle-tools/projects/" + name, async (NameBody body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-project-" + name, body.Name), ct))).RequireAuthorization("bundles.build");
+        }
+        app.MapPost("/api/bundle-tools/accounts/save", async (JsonElement body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-account-save", body.GetRawText()), ct))).RequireAuthorization("settings.write");
+        app.MapPost("/api/bundle-tools/accounts/delete", async (NameBody body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-account-delete", body.Name), ct))).RequireAuthorization("settings.write");
+        app.MapPost("/api/bundle-tools/accounts/test", async (NameBody body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-account-test", body.Name), ct))).RequireAuthorization("settings.write");
         foreach (var action in new[] { "build", "rollback", "remove" })
         {
             var name = action;

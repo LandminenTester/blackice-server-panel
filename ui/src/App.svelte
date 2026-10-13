@@ -932,7 +932,7 @@
           </div>
         {/if}
         {#if bundleView === "projects" && btState?.enabled}
-          <BundleProjects {t} {locale} {request} tools={btState.toolchain} onChanged={loadBundles} />
+          <BundleProjects {t} {locale} {request} tools={btState.toolchain} accounts={btState.accounts} onChanged={loadBundles} />
         {:else if bundleView === "upload" && btState?.enabled}
           <BundleUpload {t} {locale} {request} upload={uploadBundle} maxMb={btState.uploadMaxMb} onInstalled={loadBundles} />
         {:else}

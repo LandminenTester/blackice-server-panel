@@ -122,6 +122,9 @@ public static class BundleZip
                 checks.Add(new("bundle.empty", "warn", "The manifest names no server blob, client blob or UI files."));
             if (relative.Any(r => r.StartsWith(BundleLayout.SourceFolder + "/", StringComparison.Ordinal)))
                 checks.Add(new("bundle.sources", "warn", $"The ZIP contains a {BundleLayout.SourceFolder} folder; it is ignored (sources are managed as projects)."));
+            var nested = relative.Where(r => r.EndsWith("/config.toml", StringComparison.Ordinal) && !r.StartsWith(BundleLayout.SourceFolder + "/", StringComparison.Ordinal)).Take(3).ToArray();
+            if (nested.Length > 0)
+                checks.Add(new("bundle.nested", "fail", "The ZIP contains config.toml files in subfolders (" + string.Join(", ", nested) + "). REServer refuses a bundle that contains another bundle manifest below it (\"Invalid bundle nesting\")."));
 
             var meta = new ZipMeta(doc.String("General", "author"), doc.String("General", "description"), doc.String("General", "version"), serverBlob, clientBlob,
                 uiFiles.Length > 0, relative.Any(r => r.StartsWith("vfs/", StringComparison.Ordinal)));

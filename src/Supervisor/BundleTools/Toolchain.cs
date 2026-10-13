@@ -42,6 +42,8 @@ public sealed class Toolchain(string directory, HttpClient http)
         {
             var managed = Existing(Path.Combine(Dir("git"), "cmd", Windows ? "git.exe" : "git"));
             if (managed is not null) return managed;
+            // Developer/test override: use an explicitly named git program (never set by the panel itself).
+            if (Environment.GetEnvironmentVariable("PANEL_GIT_EXE") is { Length: > 0 } custom && File.Exists(custom)) return custom;
             if (Windows) return null;
             if (DateTime.UtcNow - systemGitChecked < TimeSpan.FromSeconds(30)) return systemGit;
             systemGitChecked = DateTime.UtcNow;
@@ -124,6 +126,9 @@ public sealed class Toolchain(string directory, HttpClient http)
             ["npm_config_audit"] = "false",
             ["CI"] = "1",
         };
+        // Harmless system variables that Windows tooling needs (NuGet, MSBuild and git resolve well-known folders from them). Nothing else is inherited.
+        foreach (var name in new[] { "SystemDrive", "ProgramData", "ALLUSERSPROFILE", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "CommonProgramFiles", "CommonProgramFiles(x86)", "CommonProgramW6432", "PUBLIC", "OS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER", "PROCESSOR_LEVEL", "PROCESSOR_REVISION", "NUMBER_OF_PROCESSORS", "COMPUTERNAME" })
+            if (Environment.GetEnvironmentVariable(name) is { Length: > 0 } value) env[name] = value;
         if (Windows)
         {
             env["USERPROFILE"] = Home;

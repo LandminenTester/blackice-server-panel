@@ -7,8 +7,10 @@ import JobLog from './components/JobLog.svelte';
 let {t,request,onchanged=()=>{}}=$props<{t:Catalog;request:(url:string,body?:object)=>Promise<any>;onchanged?:()=>void}>();
 type Settings={uploadEnabled:boolean;sourcesEnabled:boolean;restartAfterBuild:boolean;buildUi:boolean;keepBackups:number;maxUploadMb:number;commitName:string;commitEmail:string};
 type Tool={id:string;installed:boolean;version:string|null;source:string;sizeMb:number;installable:boolean;note:string|null};
-type State={enabled:boolean;settings:Settings;sourceFolder:string;toolchain:Tool[];job?:{id:string;state:string}|null};
+type Account={id:string;type:string;baseUrl:string;label:string;username:string;hasToken:boolean};
+type State={enabled:boolean;settings:Settings;sourceFolder:string;toolchain:Tool[];accounts:Account[];job?:{id:string;state:string}|null};
 let st=$state<State|null>(null),busy=$state(false),error=$state(''),saved=$state(false),keep=$state(3),max=$state(512),name=$state(''),email=$state('');
+let account=$state({id:'',type:'github',baseUrl:'',label:'',username:'',token:''}),accountMessage=$state(''),accountOpen=$state(false);
 let dialog=$state<HTMLDialogElement>()!,toolJob=$state(''),latest=$state<Record<string,string|null>>({}),checking=$state(false);
 function adopt(s:State){st=s;keep=s.settings.keepBackups;max=s.settings.maxUploadMb;name=s.settings.commitName;email=s.settings.commitEmail;}
 async function load(){try{adopt(await request('/api/bundle-tools'));}catch(e){error=(e as Error).message;}}
@@ -16,6 +18,10 @@ async function patch(body:object){busy=true;error='';saved=false;try{adopt(await
 async function toolAction(kind:'install'|'remove',id:string){error='';try{const r=await request('/api/bundle-tools/tools/'+kind,{id});if(kind==='install')toolJob=r.id;else adopt(r);}catch(e){error=(e as Error).message;}}
 async function checkLatest(){checking=true;error='';try{latest=await request('/api/bundle-tools/tools/latest');}catch(e){error=(e as Error).message;}finally{checking=false;}}
 function toolDone(){toolJob='';load();}
+async function saveAccount(e:SubmitEvent){e.preventDefault();error='';accountMessage='';try{await request('/api/bundle-tools/accounts/save',{id:account.id||null,type:account.type,baseUrl:account.baseUrl||null,label:account.label,username:account.username,token:account.token||null});account={id:'',type:'github',baseUrl:'',label:'',username:'',token:''};accountOpen=false;await load();}catch(err){error=(err as Error).message;}}
+async function removeAccount(id:string){error='';try{await request('/api/bundle-tools/accounts/delete',{name:id});await load();}catch(err){error=(err as Error).message;}}
+async function testAccount(id:string){error='';accountMessage='';try{const r=await request('/api/bundle-tools/accounts/test',{name:id});accountMessage=t.gaTestOk.replace('{user}',r.user||'?');}catch(err){error=(err as Error).message;}}
+function editAccount(a:Account){account={id:a.id,type:a.type,baseUrl:a.baseUrl,label:a.label,username:a.username,token:''};accountOpen=true;}
 function toggleMaster(value:boolean){if(value)dialog.showModal();else patch({enabled:false});}
 onMount(load);
 </script>
@@ -48,6 +54,19 @@ onMount(load);
 </li>{/each}</ul>
 <div class="actions"><button disabled={checking||!!toolJob} onclick={checkLatest}>{checking?t.toolBusy:t.toolCheck}</button></div>
 {#if toolJob}<JobLog {t} {request} jobId={toolJob} ondone={toolDone}/>{/if}
+<h3>{t.gaTitle}</h3>
+<p class="muted">{t.gaHint}</p>
+{#if !st.accounts.length}<p class="muted">{t.gaNone}</p>{/if}
+<ul class="tool-list">{#each st.accounts as a (a.id)}<li><div><strong>{a.label}</strong> <span class="job-badge">{t['gaType_'+a.type as keyof typeof t]}</span>{#if a.hasToken}<span class="job-badge succeeded">{t.gaHasToken}</span>{/if}<br/><small class="muted">{a.baseUrl}{a.username?' · '+a.username:''}</small></div><div class="actions"><button onclick={()=>testAccount(a.id)}>{t.gaTest}</button><button onclick={()=>editAccount(a)}>{t.btSave}…</button><button onclick={()=>removeAccount(a.id)}>{t.gaDelete}</button></div></li>{/each}</ul>
+{#if accountMessage}<p class="notice" role="status">{accountMessage}</p>{/if}
+{#if accountOpen}<form class="config-grid" onsubmit={saveAccount}>
+<label>{t.gaType}<select bind:value={account.type} disabled={!!account.id}><option value="github">{t.gaType_github}</option><option value="gitlab">{t.gaType_gitlab}</option><option value="gitea">{t.gaType_gitea}</option></select></label>
+<label>{t.gaBase}<input type="url" bind:value={account.baseUrl} placeholder={account.type==='github'?'https://github.com':account.type==='gitlab'?'https://gitlab.com':'https://codeberg.org'}/></label>
+<label>{t.gaLabel}<input bind:value={account.label} maxlength="60"/></label>
+<label>{t.gaUser}<input bind:value={account.username} maxlength="100" autocomplete="off"/></label>
+<label>{t.gaToken}<input type="password" bind:value={account.token} autocomplete="new-password" required={!account.id} placeholder={account.id?t.gaTokenKeep:''}/></label>
+<div class="actions"><button type="button" onclick={()=>{accountOpen=false;account={id:'',type:'github',baseUrl:'',label:'',username:'',token:''};}}>{t.cancel}</button><button class="primary">{t.gaSave}</button></div></form>
+{:else}<div class="actions"><button onclick={()=>accountOpen=true}>{t.gaNew}</button></div>{/if}
 </div>
 {/if}
 {#if saved}<p class="notice" role="status">{t.btSaved}</p>{/if}

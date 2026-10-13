@@ -71,7 +71,7 @@ try {
  Check(BundleLayout.ValidName("my-bundle_1.0")&&!BundleLayout.ValidName("../x")&&!BundleLayout.ValidName(".hidden")&&!BundleLayout.ValidName("a b")&&!BundleLayout.ValidName("x/y")&&!BundleLayout.ValidName(""),"bundle names follow the same rules as the bundle manager");
  var btRoot=Path.Combine(root,"bundle-tools");Directory.CreateDirectory(btRoot);
  var btConfig=new PanelConfig{ServerRoot=Path.Combine(btRoot,"server"),PasswordHash="x"};Directory.CreateDirectory(Path.Combine(btConfig.ServerRoot,"data","ugc"));
- Check(BundleLayout.BundleDir(btConfig,"demo")==Path.Combine(Path.GetFullPath(btConfig.ServerRoot),"data","ugc","demo")&&BundleLayout.SourceDir(btConfig,"demo").EndsWith("demo"+Path.DirectorySeparatorChar+"panel_src"),"bundle and source folders resolve inside data/ugc");
+ Check(BundleLayout.BundleDir(btConfig,"demo")==Path.Combine(Path.GetFullPath(btConfig.ServerRoot),"data","ugc","demo")&&BundleLayout.SourceDir(btConfig,"demo").EndsWith("panel_src"+Path.DirectorySeparatorChar+"demo"),"bundle and source folders resolve inside data/ugc");
  Reject(()=>BundleLayout.BundleDir(btConfig,"..\escape"),"bundle path traversal rejected");
  var secrets=new SecretStore(btRoot);var sealedToken=secrets.Protect("ghp_exampleSecretToken");
  Check(sealedToken!="ghp_exampleSecretToken"&&!sealedToken.Contains("ghp_")&&secrets.Unprotect(sealedToken)=="ghp_exampleSecretToken"&&new SecretStore(btRoot).Unprotect(sealedToken)=="ghp_exampleSecretToken","tokens are encrypted at rest and survive a restart");
@@ -176,6 +176,7 @@ try {
   foreach(var (id,ui) in combos){
    var rendered=BundleTemplates.Render(new NewProject("demo-"+id,"Test Author","A \"quoted\" description","1.1.0",ui));
    Check(rendered.ContainsKey("sv/sv.csproj")&&rendered["sv/sv.csproj"].Contains("replay.blackice.server\" Version=\"1.1.0\"")&&rendered["data/config.toml"].Contains("config_version = \"alpha_playtest\"")&&TomlDoc.Parse(rendered["data/config.toml"]).String("General","description")=="A \"quoted\" description","template "+id+" renders a complete C# project and a readable manifest");
+   Check(rendered["sh/sh.csproj"].Contains("Include=\"Serde\" Version=\"0.10.2\""),"template "+id+" ships the Serde package the message generator needs at runtime");
    if(ui is not null)Check(rendered.ContainsKey("ui/package.json")&&rendered.ContainsKey("ui/index.html")&&rendered["ui/vite.config."+(ui.TypeScript?"ts":"js")].Contains("base: './'")&&TomlDoc.Parse(rendered["data/config.toml"]).Array("ReUi","files").SequenceEqual(["ui/**"])&&TomlDoc.Parse(rendered["data/config.toml"]).String("ReUi","content_root")=="ui/","template "+id+" has a relative-path Vite UI wired into the manifest");
    if(Environment.GetEnvironmentVariable("PANEL_DUMP_TEMPLATES") is {Length:>0} dump)foreach(var (path,content) in rendered){var file=Path.Combine(dump,id,path);Directory.CreateDirectory(Path.GetDirectoryName(file)!);File.WriteAllText(file,content);}
   }
@@ -216,16 +217,113 @@ try {
   var rolled=await Wait(projService.Projects.Rollback("my-mode"));
   Check(rolled.State=="succeeded"&&File.ReadAllText(Path.Combine(bundleFolder,"sv.wasm"))=="build 1"&&Directory.Exists(src),"a rollback restores the previous build and keeps the sources");
   var listed=System.Text.Json.JsonSerializer.Serialize(projService.Projects.List());
-  Directory.CreateDirectory(Path.Combine(BundleLayout.BundleDir(projConfig,"manual"),"panel_src"));
+  Directory.CreateDirectory(BundleLayout.SourceDir(projConfig,"manual"));
   Check(listed.Contains("my-mode")&&System.Text.Json.JsonSerializer.Serialize(projService.Projects.List()).Contains("\"manual\""),"existing panel_src folders show up as projects");
   projService.Projects.RemoveSource("my-mode");
   Check(!Directory.Exists(src)&&File.Exists(Path.Combine(bundleFolder,"config.toml"))&&projService.Projects.Registry.Get("my-mode") is null,"removing the sources keeps the built bundle");
  }
+ // ---- git: import, check, pull, versions (local repositories only, skipped when git is missing)
+ {
+  string? gitExe=(Environment.GetEnvironmentVariable("PATH")??"").Split(Path.PathSeparator).Select(d=>Path.Combine(d,OperatingSystem.IsWindows()?"git.exe":"git")).FirstOrDefault(File.Exists);
+  if(gitExe is null)Console.WriteLine("SKIP git tests (git not installed)");
+  else{
+   Environment.SetEnvironmentVariable("PANEL_GIT_EXE",gitExe);Environment.SetEnvironmentVariable("PANEL_GIT_ALLOW_FILE","1");
+   void G(string dir,params string[] args){var info=new System.Diagnostics.ProcessStartInfo(gitExe){WorkingDirectory=dir,RedirectStandardOutput=true,RedirectStandardError=true,UseShellExecute=false};foreach(var a in new[]{"-c","user.name=t","-c","user.email=t@example.com","-c","init.defaultBranch=main","-c","protocol.file.allow=always"}.Concat(args))info.ArgumentList.Add(a);using var p=System.Diagnostics.Process.Start(info)!;p.StandardOutput.ReadToEnd();p.StandardError.ReadToEnd();p.WaitForExit();if(p.ExitCode!=0)throw new Exception("git "+string.Join(" ",args)+" failed");}
+   var origin=Path.Combine(btRoot,"origin-work");Directory.CreateDirectory(Path.Combine(origin,"data"));
+   File.WriteAllText(Path.Combine(origin,"data","config.toml"),"[General]\nauthor = \"git\"\n[Meta]\nconfig_version = \"alpha_playtest\"\n");File.WriteAllText(Path.Combine(origin,"README.md"),"one");
+   G(origin,"init");G(origin,"add","-A");G(origin,"commit","-m","one","--quiet");G(origin,"tag","v1");
+   var gitState=Path.Combine(btRoot,"git-state","panel.json");Directory.CreateDirectory(Path.GetDirectoryName(gitState)!);var gitConfig=new PanelConfig{ServerRoot=Path.Combine(btRoot,"git-server"),PasswordHash="x"};PanelConfig.Save(gitState,gitConfig);
+   using var gitService=new BundleToolsService(gitConfig,gitState,()=>null);gitService.ApplySettings("{\"enabled\":true,\"sourcesEnabled\":true}");
+   async Task<BundleJob> GitWait(BundleJob job){for(var i=0;i<600&&gitService.Jobs.Get(job.Id)!.State=="running";i++)await Task.Delay(25);return gitService.Jobs.Get(job.Id)!;}
+   var imported=await GitWait(gitService.Projects.Import(System.Text.Json.JsonSerializer.Serialize(new{name="from-git",url=origin,build=false})));
+   var importedSource=BundleLayout.SourceDir(gitConfig,"from-git");
+   Check(imported.State=="succeeded"&&Directory.Exists(Path.Combine(importedSource,".git"))&&File.Exists(Path.Combine(importedSource,"data","config.toml"))&&gitService.Projects.Registry.Get("from-git") is {Source:"import",Remote:not null},"a repository is cloned into panel_src and registered");
+   var first=await gitService.Git.InfoAsync(importedSource,null,CancellationToken.None);Check(first.Branch=="main"&&!first.Dirty&&first.Behind==0,"a fresh clone is clean and up to date");
+   File.WriteAllText(Path.Combine(origin,"README.md"),"two");File.WriteAllText(Path.Combine(origin,"new-file.txt"),"n");G(origin,"add","-A");G(origin,"commit","-m","two","--quiet");G(origin,"tag","v2");
+   var checkedInfo=System.Text.Json.JsonSerializer.Serialize(await gitService.Projects.Check("from-git",CancellationToken.None));
+   Check(checkedInfo.Contains("\"Behind\":1")&&checkedInfo.Contains("new-file.txt"),"a check shows how many commits and which files are new upstream");
+   Check(!File.Exists(Path.Combine(importedSource,"new-file.txt")),"checking never changes the sources");
+   File.WriteAllText(Path.Combine(importedSource,"README.md"),"local edit");
+   var dirtyPull=await GitWait(gitService.Projects.Pull("{\"name\":\"from-git\",\"build\":false,\"discard\":false}"));
+   Check(dirtyPull.State=="failed"&&dirtyPull.Error=="bundleTools.gitDirty","pulling over local changes is refused");
+   var discardPull=await GitWait(gitService.Projects.Pull("{\"name\":\"from-git\",\"build\":false,\"discard\":true}"));
+   Check(discardPull.State=="succeeded"&&File.Exists(Path.Combine(importedSource,"new-file.txt"))&&File.ReadAllText(Path.Combine(importedSource,"README.md"))=="two","pull with an explicit discard brings in the new files");
+   var refs=await gitService.Git.RefsAsync(importedSource,CancellationToken.None);Check(refs.Tags.Contains("v1")&&refs.Tags.Contains("v2")&&refs.Branches.Contains("main"),"branches and tags are listed for the version picker");
+   var switched=await GitWait(gitService.Projects.Checkout("{\"name\":\"from-git\",\"kind\":\"tag\",\"ref\":\"v1\",\"build\":false}"));
+   Check(switched.State=="succeeded"&&File.ReadAllText(Path.Combine(importedSource,"README.md"))=="one","a tag can be checked out");
+   Reject(()=>gitService.Projects.Checkout("{\"name\":\"from-git\",\"kind\":\"tag\",\"ref\":\"--upload-pack=evil\",\"build\":false}"),"option-like ref names are refused");
+   Reject(()=>gitService.Projects.Import("{\"name\":\"bad\",\"url\":\"ext::sh -c evil\",\"build\":false}"),"non-http remotes are refused");
+   Environment.SetEnvironmentVariable("PANEL_GIT_ALLOW_FILE",null);
+   Reject(()=>GitService.ValidateRemote("https://user:secret@example.com/r.git"),"remote URLs with embedded credentials are refused");
+   Check(GitService.ValidateRemote("https://example.com/org/repo.git")=="https://example.com/org/repo.git","plain https remotes are accepted");
+  }
+ }
+ // ---- git providers (mocked HTTP)
+ {
+  var providerHandler=new RecordingHandler();
+  providerHandler.Respond("https://api.github.com/user","{\"login\":\"octo\"}");
+  providerHandler.Respond("https://api.github.com/user/repos","{\"clone_url\":\"https://github.com/octo/demo.git\",\"html_url\":\"https://github.com/octo/demo\",\"default_branch\":\"main\"}");
+  providerHandler.Respond("https://gitlab.example.org/api/v4/projects","{\"http_url_to_repo\":\"https://gitlab.example.org/me/demo.git\",\"web_url\":\"https://gitlab.example.org/me/demo\",\"default_branch\":\"main\"}");
+  providerHandler.Respond("https://codeberg.org/api/v1/user/repos","{\"clone_url\":\"https://codeberg.org/me/demo.git\",\"html_url\":\"https://codeberg.org/me/demo\",\"default_branch\":\"main\"}");
+  providerHandler.Respond("https://evil.example/api/v1/user/repos","{\"clone_url\":\"https://attacker.example/me/demo.git\",\"html_url\":\"https://x\",\"default_branch\":\"main\"}");
+  var hub=new HttpClient(providerHandler);
+  var github=new GitAccount{Type="github",BaseUrl="https://github.com"};var gitlab=new GitAccount{Type="gitlab",BaseUrl="https://gitlab.example.org"};var gitea=new GitAccount{Type="gitea",BaseUrl="https://codeberg.org"};
+  Check(await GitProviders.TestAsync(hub,github,"tok-github",CancellationToken.None)=="octo"&&providerHandler.Last("https://api.github.com/user").Authorization=="Bearer tok-github","GitHub token test reads the user with a bearer header");
+  var repo=await GitProviders.CreateRepositoryAsync(hub,github,"tok-github","demo","A bundle",true,CancellationToken.None);
+  Check(repo.CloneUrl=="https://github.com/octo/demo.git"&&providerHandler.Last("https://api.github.com/user/repos").Body.Contains("\"private\":true")&&!providerHandler.Last("https://api.github.com/user/repos").Uri.Contains("tok-github"),"GitHub repository creation sends the visibility and keeps the token out of the URL");
+  await GitProviders.CreateRepositoryAsync(hub,gitlab,"tok-gitlab","demo","A bundle",false,CancellationToken.None);
+  Check(providerHandler.Last("https://gitlab.example.org/api/v4/projects").PrivateToken=="tok-gitlab"&&providerHandler.Last("https://gitlab.example.org/api/v4/projects").Body.Contains("\"visibility\":\"public\""),"GitLab repository creation uses the private-token header and visibility");
+  await GitProviders.CreateRepositoryAsync(hub,gitea,"tok-gitea","demo","A bundle",true,CancellationToken.None);
+  Check(providerHandler.Last("https://codeberg.org/api/v1/user/repos").Authorization=="token tok-gitea","Gitea/Forgejo/Codeberg repository creation uses a token header");
+  await GitProviders.CreateRepositoryAsync(hub,new GitAccount{Type="gitea",BaseUrl="https://evil.example"},"t","demo","d",true,CancellationToken.None).ContinueWith(t=>Check(t.IsFaulted,"a response pointing to a different host is refused"));
+  Check(GitProviders.ApiBase(github)=="https://api.github.com"&&GitProviders.ApiBase(new GitAccount{Type="github",BaseUrl="https://ghe.example.com"})=="https://ghe.example.com/api/v3","GitHub Enterprise uses its own API path");
+  Reject(()=>GitProviders.NormalizeBase("github","ftp://example.com"),"provider URLs must be http(s)");
+  Reject(()=>GitProviders.NormalizeBase("github","https://user:pw@example.com"),"provider URLs cannot contain credentials");
+  var accountState=Path.Combine(btRoot,"account-state","panel.json");Directory.CreateDirectory(Path.GetDirectoryName(accountState)!);var accountConfig=new PanelConfig{ServerRoot=Path.Combine(btRoot,"account-server"),PasswordHash="x"};PanelConfig.Save(accountState,accountConfig);
+  using var accountService=new BundleToolsService(accountConfig,accountState,()=>null,hub);accountService.ApplySettings("{\"enabled\":true}");
+  var saved=System.Text.Json.JsonSerializer.Serialize(accountService.AccountSave("{\"type\":\"github\",\"label\":\"Mine\",\"username\":\"octo\",\"token\":\"ghp_super_secret_token\"}"));
+  Check(!saved.Contains("ghp_super_secret_token")&&saved.Contains("\"hasToken\":true")&&!File.ReadAllText(accountState).Contains("ghp_super_secret_token"),"account tokens are encrypted on disk and never returned");
+  var accountId=accountConfig.BundleTools.Accounts[0].Id;
+  Check((await accountService.AccountTest(accountId,CancellationToken.None)).ToString()!.Contains("octo"),"a saved account can be tested");
+  accountService.AccountSave("{\"id\":\""+accountId+"\",\"type\":\"github\",\"label\":\"Renamed\",\"username\":\"octo\"}");
+  Check(accountConfig.BundleTools.Accounts[0].Label=="Renamed"&&accountService.Secrets.Unprotect(accountConfig.BundleTools.Accounts[0].TokenProtected)=="ghp_super_secret_token","editing an account keeps its token unless a new one is given");
+  accountService.AccountDelete(accountId);Check(accountConfig.BundleTools.Accounts.Count==0,"accounts can be deleted");
+ }
+ // ---- every template option combination only imports files that exist
+ {
+  var missingImports=new List<string>();var combosChecked=0;
+  foreach(var framework in BundleTemplates.Frameworks)foreach(var ts in new[]{true,false})foreach(var router in new[]{true,false})foreach(var state in new[]{true,false})foreach(var tailwind in new[]{true,false}){
+   var files=BundleTemplates.Render(new NewProject("combo","a","d","1.1.0",new UiOptions(framework,ts,router&&framework!="svelte",state,tailwind)));combosChecked++;
+   foreach(var (path,content) in files.Where(f=>f.Key.StartsWith("ui/src/")||f.Key=="ui/index.html")){
+    var importPattern=new System.Text.RegularExpressions.Regex("(?:from\\s+|import\\s+|src=\")['\"]?(\\.{1,2}/[^'\" ;)>]+|/src/[^'\" ;)>]+)");
+    foreach(System.Text.RegularExpressions.Match m in importPattern.Matches(content)){
+     var target=m.Groups[1].Value;
+     var parts=new List<string>(target.StartsWith("/src/")?new[]{"ui"}:(path=="ui/index.html"?new[]{"ui"}:path.Split('/')[..^1]));
+     foreach(var segment in target.TrimStart('/').Split('/').Where(x=>x!="."&&x.Length>0)){if(segment=="..")parts.RemoveAt(parts.Count-1);else parts.Add(segment);}
+     var combined=string.Join("/",parts);
+     var candidates=new[]{combined,combined+".ts",combined+".js",combined+".tsx",combined+".jsx",combined+".vue",combined+".svelte",combined+".svelte.ts",combined+".svelte.js"};
+     if(!candidates.Any(files.ContainsKey))missingImports.Add($"{framework} ts={ts} router={router} state={state} tailwind={tailwind}: {path} imports {target}");
+    }
+   }
+  }
+  Check(combosChecked==48&&missingImports.Count==0,"all "+combosChecked+" template option combinations only import files that exist"+(missingImports.Count>0?": "+string.Join("; ",missingImports.Take(3)):""));
+ }
  Console.WriteLine(passed+" core checks passed");
-}finally{Directory.Delete(root,true);}
+}finally{foreach(var leftover in Directory.EnumerateFiles(root,"*",SearchOption.AllDirectories))try{File.SetAttributes(leftover,FileAttributes.Normal);}catch(IOException){}Directory.Delete(root,true);}
 sealed class ToolHandler:HttpMessageHandler{
  readonly Dictionary<string,byte[]> responses=new(StringComparer.Ordinal);
  public void Add(string url,string text)=>responses[url]=System.Text.Encoding.UTF8.GetBytes(text);
  public void Add(string url,byte[] bytes)=>responses[url]=bytes;
  protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct)=>Task.FromResult(responses.TryGetValue(request.RequestUri!.ToString(),out var bytes)?new HttpResponseMessage(System.Net.HttpStatusCode.OK){Content=new ByteArrayContent(bytes)}:new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+}
+sealed class RecordingHandler:HttpMessageHandler{
+ public sealed record Seen(string Uri,string Body,string? Authorization,string? PrivateToken);
+ readonly Dictionary<string,string> responses=new(StringComparer.Ordinal);readonly Dictionary<string,Seen> seen=new(StringComparer.Ordinal);
+ public void Respond(string url,string json)=>responses[url]=json;
+ public Seen Last(string url)=>seen[url];
+ protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct){
+  var url=request.RequestUri!.ToString();var body=request.Content is null?"":await request.Content.ReadAsStringAsync(ct);
+  seen[url]=new Seen(url,body,request.Headers.Authorization?.ToString(),request.Headers.TryGetValues("PRIVATE-TOKEN",out var values)?values.First():null);
+  return responses.TryGetValue(url,out var json)?new HttpResponseMessage(System.Net.HttpStatusCode.OK){Content=new StringContent(json)}:new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+ }
 }

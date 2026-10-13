@@ -8,7 +8,7 @@ public sealed record LastBuild(DateTimeOffset Time, bool Ok, string? Commit, str
 public sealed class BundleProject
 {
     public string Name { get; set; } = "";
-    /// <summary>template, import or adopted (a panel_src folder that was already there)</summary>
+    /// <summary>template, import or adopted (a folder in panel_src that was already there)</summary>
     public string Source { get; set; } = "template";
     public string? Remote { get; set; }
     public string? AccountId { get; set; }
@@ -92,13 +92,13 @@ public sealed partial class BundleProjects(BundleToolsService service)
         service.RequireEnabled();
         var registered = Registry.All();
         var names = registered.Select(p => p.Name).ToList();
-        var ugc = BundleLayout.UgcRoot(Config);
-        if (Directory.Exists(ugc))
-            foreach (var directory in Directory.EnumerateDirectories(ugc))
+        var sources = BundleLayout.SourceRoot(Config);
+        if (Directory.Exists(sources))
+            foreach (var directory in Directory.EnumerateDirectories(sources))
             {
                 var name = Path.GetFileName(directory);
-                if (BundleLayout.ValidName(name) && !names.Contains(name) && Directory.Exists(Path.Combine(directory, BundleLayout.SourceFolder)))
-                    registered.Add(new BundleProject { Name = name, Source = "adopted", Created = Directory.GetCreationTimeUtc(Path.Combine(directory, BundleLayout.SourceFolder)) });
+                if (BundleLayout.ValidName(name) && !names.Contains(name))
+                    registered.Add(new BundleProject { Name = name, Source = "adopted", Created = Directory.GetCreationTimeUtc(directory) });
             }
         return registered.OrderBy(p => p.Name, StringComparer.Ordinal).Select(p =>
         {
@@ -122,7 +122,8 @@ public sealed partial class BundleProjects(BundleToolsService service)
     }
 
     // ------------------------------------------------------------------ create from template
-    private sealed record CreateArgs(string Name, string? Author, string? Description, bool Build, UiArgs? Ui);
+    private sealed record CreateArgs(string Name, string? Author, string? Description, bool Build, UiArgs? Ui, RepoArgs? Repo);
+    private sealed record RepoArgs(string AccountId, string? Visibility);
     private sealed record UiArgs(string Framework, bool TypeScript, bool Router, bool State, bool Tailwind);
 
     public BundleJob Create(string json)
@@ -142,6 +143,13 @@ public sealed partial class BundleProjects(BundleToolsService service)
         }
         var source = BundleLayout.SourceDir(Config, name);
         if (Directory.Exists(source) && Directory.EnumerateFileSystemEntries(source).Any()) throw new InvalidOperationException("bundleTools.exists");
+        GitAccount? repoAccount = null;
+        if (args.Repo is { } repoArgs)
+        {
+            repoAccount = Config.BundleTools.Accounts.FirstOrDefault(a => a.Id == repoArgs.AccountId) ?? throw new InvalidOperationException("bundleTools.account");
+            if (repoAccount.TokenProtected.Length == 0) throw new InvalidOperationException("bundleTools.tokenRejected");
+            if (service.Tools.GitExe is null) throw new InvalidOperationException("bundleTools.needGit");
+        }
         return service.Jobs.Start("project-create", name, async ctx =>
         {
             ctx.Phase("Resolving the newest package version");
@@ -159,10 +167,131 @@ public sealed partial class BundleProjects(BundleToolsService service)
                 File.WriteAllText(target, content, new System.Text.UTF8Encoding(false));
             }
             Registry.Update(name, p => { p.Source = "template"; p.UiFramework = ui?.Framework; }, () => new BundleProject { Name = name, Source = "template", UiFramework = ui?.Framework });
-            ctx.Log($"Created {files.Count} files in {BundleLayout.SourceFolder}.");
+            ctx.Log($"Created {files.Count} files in {BundleLayout.SourceFolder}/{name}.");
+            if (repoAccount is not null && args.Repo is { } repo)
+            {
+                ctx.Phase("Creating the " + (repo.Visibility == "public" ? "public" : "private") + " repository");
+                var token = service.Secrets.Unprotect(repoAccount.TokenProtected);
+                service.Redactor.Add(token);
+                RepoInfo info;
+                try { info = await GitProviders.CreateRepositoryAsync(service.Http, repoAccount, token, name, description.Length > 0 ? description : name, repo.Visibility != "public", ctx.Token); }
+                catch (HttpRequestException) { throw new InvalidOperationException("bundleTools.providerFailed"); }
+                ctx.Log("Repository: " + info.WebUrl);
+                await service.Git.InitAndPushAsync(source, info.CloneUrl, repoAccount, ctx);
+                Registry.Update(name, p => { p.Remote = info.CloneUrl; p.AccountId = repoAccount.Id; p.Branch = "main"; });
+            }
             if (args.Build) await BuildCore(name, ctx);
             else ctx.Log("Use Build to compile the project into the bundle folder.");
             ctx.Result("Created " + name);
+        });
+    }
+
+    // ------------------------------------------------------------------ git: import, check, pull, versions
+    private sealed record ImportArgs(string Name, string Url, string? Branch, string? AccountId, bool Build);
+    private sealed record PullArgs(string Name, bool Build, bool Discard);
+    private sealed record CheckoutArgs(string Name, string Kind, string Ref, bool Build);
+
+    private GitAccount? AccountOf(BundleProject project) => service.Git.AccountFor(project.AccountId, project.Remote ?? "");
+
+    public async Task<object> ListAsync(CancellationToken ct)
+    {
+        var projects = ((System.Collections.IEnumerable)List()).Cast<object>().ToArray();
+        var result = new List<object>();
+        foreach (var item in projects)
+        {
+            var name = (string)item.GetType().GetProperty("Name")!.GetValue(item)!;
+            var source = BundleLayout.SourceDir(Config, name);
+            GitInfo? git = null;
+            if (service.Tools.GitExe is not null && Directory.Exists(Path.Combine(source, ".git")))
+                try { git = await service.Git.InfoAsync(source, null, ct); } catch (InvalidOperationException) { }
+            result.Add(new { project = item, git });
+        }
+        return result;
+    }
+
+    public BundleJob Import(string json)
+    {
+        service.RequireEnabled();
+        if (!Config.BundleTools.SourcesEnabled) throw new InvalidOperationException("bundleTools.disabled");
+        var args = JsonSerializer.Deserialize<ImportArgs>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
+        var name = BundleLayout.RequireName(args.Name);
+        var url = GitService.ValidateRemote(args.Url);
+        var branch = string.IsNullOrWhiteSpace(args.Branch) ? null : GitService.ValidateRef(args.Branch.Trim());
+        var account = service.Git.AccountFor(args.AccountId, url);
+        var source = BundleLayout.SourceDir(Config, name);
+        if (Directory.Exists(source) && Directory.EnumerateFileSystemEntries(source).Any()) throw new InvalidOperationException("bundleTools.exists");
+        if (service.Tools.GitExe is null) throw new InvalidOperationException("bundleTools.needGit");
+        return service.Jobs.Start("project-import", name, async ctx =>
+        {
+            ctx.Phase("Cloning " + url);
+            try { await service.Git.CloneAsync(url, branch, source, account, ctx); }
+            catch { try { if (Directory.Exists(source)) ForceDelete(source); } catch (IOException) { } throw; }
+            var framework = DetectFramework(source);
+            Registry.Update(name, p => { p.Source = "import"; p.Remote = url; p.AccountId = account?.Id; p.Branch = branch; p.UiFramework = framework; }, () => new BundleProject { Name = name, Source = "import", Remote = url, AccountId = account?.Id, Branch = branch, UiFramework = framework });
+            if (FindManifest(source) is null) ctx.Log("Warning: no config.toml found (data/config.toml or config.toml). A build needs one.");
+            ctx.Log("Imported. Nothing was built or started.");
+            if (args.Build) await BuildCore(name, ctx);
+            ctx.Result("Imported " + name);
+        });
+    }
+
+    public async Task<object> Check(string name, CancellationToken ct)
+    {
+        service.RequireEnabled();
+        var project = Registry.Get(BundleLayout.RequireName(name)) ?? throw new InvalidOperationException("bundleTools.noSource");
+        var source = BundleLayout.SourceDir(Config, name);
+        var account = AccountOf(project);
+        var url = project.Remote ?? "";
+        if (service.Tools.GitExe is null || !Directory.Exists(Path.Combine(source, ".git"))) throw new InvalidOperationException("bundleTools.notGit");
+        var (exit, _) = await service.Git.RunAsync(["fetch", "--prune", "--tags", "--quiet", "origin"], source, account, url, ct);
+        if (exit != 0) throw new InvalidOperationException("bundleTools.gitFailed");
+        return await service.Git.InfoAsync(source, account, ct);
+    }
+
+    public BundleJob Pull(string json)
+    {
+        service.RequireEnabled();
+        var args = JsonSerializer.Deserialize<PullArgs>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
+        var project = Registry.Get(BundleLayout.RequireName(args.Name)) ?? throw new InvalidOperationException("bundleTools.noSource");
+        var source = BundleLayout.SourceDir(Config, args.Name);
+        if (service.Tools.GitExe is null) throw new InvalidOperationException("bundleTools.needGit");
+        if (!Directory.Exists(Path.Combine(source, ".git"))) throw new InvalidOperationException("bundleTools.notGit");
+        var account = AccountOf(project);
+        return service.Jobs.Start(args.Build ? "pull-build" : "pull", args.Name, async ctx =>
+        {
+            ctx.Phase("Pulling the latest sources");
+            await service.Git.PullAsync(source, args.Discard, account, project.Remote ?? "", ctx);
+            var info = await service.Git.InfoAsync(source, account, ctx.Token);
+            ctx.Log($"Now at {info.Branch} {info.Commit}.");
+            if (args.Build) await BuildCore(args.Name, ctx);
+            ctx.Result("Pulled " + args.Name);
+        });
+    }
+
+    public async Task<object> Refs(string name, CancellationToken ct)
+    {
+        service.RequireEnabled();
+        var source = BundleLayout.SourceDir(Config, BundleLayout.RequireName(name));
+        if (service.Tools.GitExe is null || !Directory.Exists(Path.Combine(source, ".git"))) throw new InvalidOperationException("bundleTools.notGit");
+        return await service.Git.RefsAsync(source, ct);
+    }
+
+    public BundleJob Checkout(string json)
+    {
+        service.RequireEnabled();
+        var args = JsonSerializer.Deserialize<CheckoutArgs>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
+        BundleLayout.RequireName(args.Name);
+        if (args.Kind is not ("branch" or "tag")) throw new InvalidOperationException("bundleTools.ref");
+        GitService.ValidateRef(args.Ref);
+        var source = BundleLayout.SourceDir(Config, args.Name);
+        if (service.Tools.GitExe is null || !Directory.Exists(Path.Combine(source, ".git"))) throw new InvalidOperationException("bundleTools.notGit");
+        return service.Jobs.Start("checkout", args.Name, async ctx =>
+        {
+            ctx.Phase("Switching to " + args.Kind + " " + args.Ref);
+            await service.Git.CheckoutAsync(source, args.Kind, args.Ref, ctx);
+            Registry.Update(args.Name, p => p.Branch = args.Kind == "branch" ? args.Ref : p.Branch);
+            if (args.Build) await BuildCore(args.Name, ctx);
+            ctx.Result("Switched " + args.Name);
         });
     }
 
@@ -236,6 +365,8 @@ public sealed partial class BundleProjects(BundleToolsService service)
             }
             // ---- manifest and seed data
             File.Copy(manifest, Path.Combine(stage, "config.toml"), true);
+            if (Directory.EnumerateFiles(stage, "config.toml", SearchOption.AllDirectories).Any(f => !Path.GetFullPath(f).Equals(Path.GetFullPath(Path.Combine(stage, "config.toml")), StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("bundleTools.nestedManifest");
             var vfs = Path.Combine(source, "vfs");
             if (Directory.Exists(vfs)) BundleSwap.CopyDirectory(vfs, Path.Combine(stage, "vfs"));
             // ---- install
@@ -309,7 +440,7 @@ public sealed partial class BundleProjects(BundleToolsService service)
         BundleLayout.RequireName(name);
         if (service.Jobs.Busy) throw new InvalidOperationException("bundleTools.busy");
         var source = BundleLayout.SourceDir(Config, name);
-        if (Directory.Exists(source) && !BundleLayout.IsPathInside(BundleLayout.BundleDir(Config, name), source)) throw new InvalidOperationException("bundleTools.path");
+        if (Directory.Exists(source) && !BundleLayout.IsPathInside(BundleLayout.SourceRoot(Config), source)) throw new InvalidOperationException("bundleTools.path");
         if (Directory.Exists(source)) ForceDelete(source);
         Registry.Remove(name);
         return List();

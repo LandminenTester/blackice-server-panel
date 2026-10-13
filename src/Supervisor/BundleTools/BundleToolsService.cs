@@ -22,6 +22,7 @@ public sealed class BundleToolsService : IDisposable
         Tools = new Toolchain(BundleLayout.Toolchain(this.configPath), client);
         Secrets = new SecretStore(BundleLayout.StateDir(this.configPath));
         Projects = new BundleProjects(this);
+        Git = new GitService(this);
         Redactor = new Redactor();
         Jobs = new BundleJobs(BundleLayout.Jobs(this.configPath), Redactor);
         foreach (var account in config.BundleTools.Accounts)
@@ -31,6 +32,7 @@ public sealed class BundleToolsService : IDisposable
     public Toolchain Tools { get; }
     public HttpClient Http { get; }
     public BundleProjects Projects { get; }
+    public GitService Git { get; }
     public SecretStore Secrets { get; }
     public Redactor Redactor { get; }
     public BundleJobs Jobs { get; }
@@ -62,6 +64,7 @@ public sealed class BundleToolsService : IDisposable
             config.BundleTools.CommitEmail,
         },
         toolchain = Tools.Status(),
+        accounts = PublicAccounts(),
         sourceFolder = BundleLayout.SourceFolder,
         uploadMaxMb = config.BundleTools.MaxUploadMb,
         job = Jobs.Current,
@@ -237,6 +240,64 @@ public sealed class BundleToolsService : IDisposable
     {
         RequireSources();
         return await Tools.LatestVersionsAsync(ct);
+    }
+
+    // ---------------------------------------------------------------- git accounts
+    private sealed record AccountArgs(string? Id, string Type, string? BaseUrl, string? Label, string? Username, string? Token);
+
+    public object PublicAccounts() => config.BundleTools.Accounts.Select(a => new { a.Id, a.Type, a.BaseUrl, a.Label, a.Username, hasToken = a.TokenProtected.Length > 0 }).ToArray();
+
+    public object AccountSave(string json)
+    {
+        RequireSources();
+        var args = JsonSerializer.Deserialize<AccountArgs>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
+        if (!GitProviders.Types.Contains(args.Type)) throw new InvalidOperationException("bundleTools.account");
+        var baseUrl = GitProviders.NormalizeBase(args.Type, string.IsNullOrWhiteSpace(args.BaseUrl) ? GitProviders.DefaultBase(args.Type) : args.BaseUrl);
+        var label = (args.Label ?? "").Trim();
+        var username = (args.Username ?? "").Trim();
+        if (label.Length > 60 || username.Length > 100 || label.Any(char.IsControl) || username.Any(char.IsControl) || username.Contains(':')) throw new InvalidOperationException("bundleTools.account");
+        lock (config)
+        {
+            var account = args.Id is { Length: > 0 } ? config.BundleTools.Accounts.FirstOrDefault(a => a.Id == args.Id) ?? throw new InvalidOperationException("bundleTools.account") : null;
+            if (account is null)
+            {
+                if (config.BundleTools.Accounts.Count >= 20 || string.IsNullOrWhiteSpace(args.Token)) throw new InvalidOperationException("bundleTools.account");
+                account = new GitAccount { Id = Guid.NewGuid().ToString("N")[..12] };
+                config.BundleTools.Accounts.Add(account);
+            }
+            account.Type = args.Type; account.BaseUrl = baseUrl; account.Label = label.Length > 0 ? label : new Uri(baseUrl).Host; account.Username = username;
+            if (!string.IsNullOrWhiteSpace(args.Token))
+            {
+                var token = args.Token.Trim();
+                if (token.Length > 500 || token.Any(c => char.IsControl(c) || char.IsWhiteSpace(c))) throw new InvalidOperationException("bundleTools.account");
+                account.TokenProtected = Secrets.Protect(token);
+                Redactor.Add(token);
+            }
+            PanelConfig.Save(configPath, config);
+        }
+        return PublicAccounts();
+    }
+
+    public object AccountDelete(string id)
+    {
+        RequireSources();
+        lock (config)
+        {
+            if (config.BundleTools.Accounts.RemoveAll(a => a.Id == id) == 0) throw new InvalidOperationException("bundleTools.account");
+            PanelConfig.Save(configPath, config);
+        }
+        return PublicAccounts();
+    }
+
+    public async Task<object> AccountTest(string id, CancellationToken ct)
+    {
+        RequireSources();
+        var account = config.BundleTools.Accounts.FirstOrDefault(a => a.Id == id) ?? throw new InvalidOperationException("bundleTools.account");
+        if (account.TokenProtected.Length == 0) throw new InvalidOperationException("bundleTools.tokenRejected");
+        var token = Secrets.Unprotect(account.TokenProtected);
+        Redactor.Add(token);
+        var user = await GitProviders.TestAsync(Http, account, token, ct);
+        return new { ok = true, user };
     }
 
     public object JobInfo(string id)
