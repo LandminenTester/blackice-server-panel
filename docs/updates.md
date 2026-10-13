@@ -22,6 +22,10 @@ Keep backups until the new version works. For manual recovery, stop all remainin
 
 When building a release, VERSION must match the assemblies' Directory.Build.props version. The CI packages this file and verifies replacement plus startup-failure rollback on Windows and Linux. Version 0.5.1 uses the former repository URL and cannot verify renamed release assets. Install 1.0.0 manually once, retaining .local; subsequent native releases can be installed in the dashboard.
 
+### Update channels
+
+**Settings → Updates → Update channel** selects the release stream. **Stable** (default) only offers normal releases. **Experimental** additionally offers pre-releases tagged `vX.Y.Z-experimental.N`, which carry new, unfinished features and can be unstable; a stable release that supersedes a pre-release is offered as well. Switching back to Stable never downgrades; it only stops offering pre-releases. Pre-releases are marked with an **Experimental** tag in the panel and on GitHub (they are never marked "Latest"), use the same SHA-256 verification and automatic rollback, and Docker users must pin the exact image version themselves.
+
 ## Deutsch
 
 Unter **Einstellungen → Panel-Updates** prüft das Panel das neueste stabile öffentliche Release von LandminenTester/blackice-server-panel. Installierte/neue Version und Releasehinweise werden angezeigt. Prüfungen werden eine Minute zwischengespeichert; ein GitHub-Token ist nicht erforderlich. Entwürfe und Vorabversionen werden ausgeschlossen.
@@ -43,3 +47,8 @@ Die neue Version muss Versions- und Webbereitschaftsprüfungen bestehen. Scheite
 Sicherungen behalten, bis die neue Version funktioniert. Zur manuellen Wiederherstellung verbliebene Panelprozesse mit dem direkten Stopbefehl beenden, fehlgeschlagene Artefakte/Start zur Seite verschieben und die Sicherung zurückkopieren. panel.json nur bei gescheiterter Konfigurationsmigration zurückspielen; das Schlüsselverzeichnis behalten. Anschließend Start öffnen. Falls der Stopbefehl scheitert, vor dem Dateiaustausch Prozessidentitäten prüfen. Keine Paneldateien in den Spielserverordner kopieren.
 
 VERSION muss beim Releasebau der Assemblyversion aus Directory.Build.props entsprechen. Die CI liefert diese Datei mit und prüft Austausch sowie Wiederherstellung unter Windows und Linux. Version 0.5.1 verwendet den alten Repositorynamen und kann umbenannte Release-Artefakte nicht prüfen. 1.0.0 einmal manuell installieren und .local erhalten; spätere native Releases lassen sich über das Dashboard installieren.
+
+### Update-Kanäle
+
+**Einstellungen → Updates → Update-Kanal** wählt den Release-Strom. **Stabil** (Standard) bietet nur normale Releases an. **Experimentell** bietet zusätzlich Vorabversionen mit dem Tag `vX.Y.Z-experimental.N` an; sie enthalten neue, unfertige Funktionen und können instabil sein. Ein stabiles Release, das eine Vorabversion ablöst, wird ebenfalls angeboten. Der Wechsel zurück zu Stabil führt kein Downgrade durch, es werden nur keine Vorabversionen mehr angeboten. Vorabversionen sind im Panel und auf GitHub mit **Experimentell** markiert (nie als „Latest“), nutzen dieselbe SHA-256-Prüfung samt automatischem Rollback; Docker-Nutzer wählen die genaue Image-Version selbst.
+

@@ -1,9 +1,9 @@
 using System.Text.Json;
 using System.Security.Cryptography;
 namespace ReplayPanel.Shared;
-public sealed record Request(string Action, string? Command = null, string? ShutdownMode = null, bool? AutoStartServer = null, string? Locale = null, bool? AutoUpdateChecks = null);
+public sealed record Request(string Action, string? Command = null, string? ShutdownMode = null, bool? AutoStartServer = null, string? Locale = null, bool? AutoUpdateChecks = null, string? UpdateChannel = null);
 public sealed record Reply(bool Ok, string? Error = null, ServerStatus? Status = null, string[]? Lines = null);
-public sealed record ServerStatus(string State, int? Pid, string ServerRoot, string ShutdownMode, string? Detail = null, bool AutoStartServer = true, string? PathIssue = null, bool AutoUpdateChecks = true);
+public sealed record ServerStatus(string State, int? Pid, string ServerRoot, string ShutdownMode, string? Detail = null, bool AutoStartServer = true, string? PathIssue = null, bool AutoUpdateChecks = true, string UpdateChannel = "stable");
 public sealed class PanelConfig
 {
     public List<PanelUser>? Users { get; set; }
@@ -25,6 +25,7 @@ public sealed class PanelConfig
     public int StopTimeoutSeconds { get; set; } = 30;
     public bool AutoStartServer { get; set; } = true;
     public bool AutoUpdateChecks { get; set; } = true;
+    public string UpdateChannel { get; set; } = "stable";
     public bool AutoRestart { get; set; }
     public string PasswordHash { get; set; } = "";
     public string PasswordSalt { get; set; } = "";
@@ -44,6 +45,7 @@ public sealed class PanelConfig
         if(c.Bridge.Port is <1024 or >65535||c.Bridge.RetentionDays is <1 or >30||c.Bridge.MaxMegabytes is <10 or >1000)throw new InvalidOperationException("config.invalid");
         if (!text.Contains("schemaVersion")) { if(!File.Exists(file+".v1.bak")) {try { File.Copy(file,file+".v1.bak",false); } catch(IOException) when(File.Exists(file+".v1.bak")) {} } c.SchemaVersion = 2; Save(file, c); }
         if (c.ServerRoot.Length > 0) c.ServerRoot = Path.GetFullPath(c.ServerRoot);
+        if (c.UpdateChannel is not ("stable" or "experimental")) throw new InvalidOperationException("config.invalid");
         if (c.ShutdownMode is not ("keep-running" or "stop-server") || c.StopTimeoutSeconds is < 1 or > 120) throw new InvalidOperationException("config.invalid");
         if (!Uri.TryCreate(c.Url, UriKind.Absolute, out var uri) || uri.Scheme != "http" || (!uri.IsLoopback && c.AllowedHosts.Length == 0)) throw new InvalidOperationException("config.invalid");
         return c;

@@ -21,6 +21,7 @@
     shutdownMode: string;
     autoStartServer: boolean;
     autoUpdateChecks?: boolean;
+    updateChannel?: string;
     detail?: string;
     pathIssue?: string;
   };
@@ -326,6 +327,19 @@
       status = data.status;
       notice = "saved";
     });
+  }
+  async function updateChannel(value: string) {
+    await run(async () => {
+      const data = await request("/api/settings", { updateChannel: value });
+      status = data.status;
+      notice = "saved";
+    });
+    try {
+      await request("/api/updates/check", {});
+    } catch {
+      /* the update panel shows its own error on the next poll */
+    }
+    await refreshVersions();
   }
   async function updateChecks(value: boolean) {
     await run(async () => {
@@ -782,7 +796,7 @@
             ]}</button
           >{/each}
       </div>
-      <div class="nav-foot"><strong>BlackICE</strong><span>{t.unofficial}</span>{#if panelVersion}<button type="button" class="build" onclick={openUpdates} title={panelUpdate ? t.updateBadge : ""}>{t.panelBuild} {panelVersion}{#if panelUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}{#if serverBuild}<button type="button" class="build" onclick={openUpdates} title={serverUpdate ? t.updateBadge : ""}>{t.serverBuild} {serverBuild.slice(0, 8)}{#if serverUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}<span class="links"><a href="https://github.com/LandminenTester/blackice-server-panel" target="_blank" rel="noopener noreferrer">GitHub ↗</a><a href="https://discord.gg/k6ttXWdAyP" target="_blank" rel="noopener noreferrer">Discord ↗</a></span></div>
+      <div class="nav-foot"><strong>BlackICE</strong><span>{t.unofficial}</span>{#if panelVersion}<button type="button" class="build" onclick={openUpdates} title={panelUpdate ? t.updateBadge : ""}>{t.panelBuild} {panelVersion}{#if panelVersion.includes("-")}<span class="exp-tag">{t.experimental}</span>{/if}{#if panelUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}{#if serverBuild}<button type="button" class="build" onclick={openUpdates} title={serverUpdate ? t.updateBadge : ""}>{t.serverBuild} {serverBuild.slice(0, 8)}{#if serverUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}<span class="links"><a href="https://github.com/LandminenTester/blackice-server-panel" target="_blank" rel="noopener noreferrer">GitHub ↗</a><a href="https://discord.gg/k6ttXWdAyP" target="_blank" rel="noopener noreferrer">Discord ↗</a></span></div>
     </nav>
     <div
       class="workspace"
@@ -951,7 +965,7 @@
               >{/each}
           </div>
           {#if settingsTab === "updates" && can("settings.write")}
-            <Updates {t} {request} installAllowed={can("users.manage")} onchanged={refreshVersions} autoCheck={status?.autoUpdateChecks !== false} />
+            <Updates {t} {request} installAllowed={can("users.manage")} onchanged={refreshVersions} autoCheck={status?.autoUpdateChecks !== false} channel={status?.updateChannel ?? "stable"} onchannel={updateChannel} />
             <ServerUpdates {t} {locale} {request} installAllowed={can("users.manage")} onchanged={refreshVersions} />
           {:else if settingsTab === "bridge" && can("settings.write")}
             <Bridge {t} {locale} {request} settings {backend} />

@@ -152,8 +152,8 @@ app.MapPost("/api/server/{action}", async (string action, HttpContext c, BundleM
 app.MapPost("/api/command", async (Command body, BundleManager bundles, CancellationToken ct) =>
     Result(await bundles.Command(new("command", body.Text), ct))).RequireAuthorization("console.write");
 app.MapPost("/api/settings", async (Settings body, HttpContext c, PipeClient pipe, CancellationToken ct) => {
-    if((body.ShutdownMode is not null||body.AutoStartServer is not null||body.AutoUpdateChecks is not null)&&!Can(c,"settings.write"))return Results.Forbid();
-    return Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode,AutoStartServer:body.AutoStartServer,Locale:body.Locale,AutoUpdateChecks:body.AutoUpdateChecks), ct));
+    if((body.ShutdownMode is not null||body.AutoStartServer is not null||body.AutoUpdateChecks is not null||body.UpdateChannel is not null)&&!Can(c,"settings.write"))return Results.Forbid();
+    return Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode,AutoStartServer:body.AutoStartServer,Locale:body.Locale,AutoUpdateChecks:body.AutoUpdateChecks,UpdateChannel:body.UpdateChannel), ct));
 }).RequireAuthorization();
 app.MapGet("/api/server-name",async(PipeClient pipe,CancellationToken ct)=>{
     var reply=await pipe.Call(new("server-config"),ct);
@@ -219,7 +219,7 @@ static async Task<UserView?> CurrentUser(ClaimsPrincipal principal,PipeClient pi
 record UserDelete(string Username);
 record Login(string? Password, string? Username, bool? Remember);
 record Command(string? Text);
-record Settings(string? ShutdownMode, bool? AutoStartServer, string? Locale, bool? AutoUpdateChecks);
+record Settings(string? ShutdownMode, bool? AutoStartServer, string? Locale, bool? AutoUpdateChecks, string? UpdateChannel);
 public partial class Program { }
 
 record SetupKey(string Key);

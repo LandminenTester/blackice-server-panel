@@ -85,6 +85,10 @@ Settings → General can check and save a moved native server directory while th
 - Ports: game/bundle downloads 20770 TCP/UDP, voice 20771 TCP/UDP, dashboard 20772 TCP on localhost. For remote access use the documented [HTTPS proxy settings](docs/operations.md).
 - Back up `.local/` and your game-server directory. New server downloads use LAN mode and disabled automatic server updates. Public game servers require [official registration](https://docs.replay.re/servers/registering/).
 
+### Update channel
+
+By default the panel only follows stable releases. In **Settings → Updates** you can switch to the **Experimental** channel to receive pre-releases (`vX.Y.Z-experimental.N`) with new, unfinished features; see [docs/updates.md](docs/updates.md). Stable is recommended for production servers.
+
 ## Server updates and bridge diagnostics
 
 REServer updates are now available in Settings: check official alpha, verify/download files and install with runtime backup and startup rollback. Select current alpha or a locally backed-up previous build. [Server update guide](docs/server-updates.md).

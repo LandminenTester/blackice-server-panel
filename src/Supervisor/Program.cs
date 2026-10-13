@@ -109,8 +109,9 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
             case "server-config-save":{if(!config.Configured)throw new InvalidOperationException("setup.required");ServerConfig.Write(config.ServerRoot,JsonSerializer.Deserialize<ServerConfigValues>(request.Command!,PanelConfig.Json)!);reply=new(true,Lines:[Enc(ServerConfig.Read(config.ServerRoot,backend?.Status().State=="running"))]);break;}
             case "settings": { lock(config) {
                 if(request.Locale is not null && request.Locale is not ("de" or "en"))throw new InvalidOperationException("settings.invalid");
+                if(request.UpdateChannel is not null && request.UpdateChannel is not ("stable" or "experimental"))throw new InvalidOperationException("settings.invalid");
                 if(request.ShutdownMode is not null && request.ShutdownMode is not ("keep-running" or "stop-server"))throw new InvalidOperationException("settings.invalid");
-                if(request.ShutdownMode is not null)config.ShutdownMode=request.ShutdownMode;if(request.AutoStartServer is not null)config.AutoStartServer=request.AutoStartServer.Value;if(request.Locale is not null)config.Locale=request.Locale;if(request.AutoUpdateChecks is not null)config.AutoUpdateChecks=request.AutoUpdateChecks.Value;PanelConfig.Save(configPath,config);reply=new(true,Status:backend?.Status()); } break; }
+                if(request.ShutdownMode is not null)config.ShutdownMode=request.ShutdownMode;if(request.AutoStartServer is not null)config.AutoStartServer=request.AutoStartServer.Value;if(request.Locale is not null)config.Locale=request.Locale;if(request.AutoUpdateChecks is not null)config.AutoUpdateChecks=request.AutoUpdateChecks.Value;if(request.UpdateChannel is not null)config.UpdateChannel=request.UpdateChannel;PanelConfig.Save(configPath,config);reply=new(true,Status:backend?.Status()); } break; }
             case "webhost-stopping":if(config.ShutdownMode=="stop-server"&&backend?.Status().State=="running")await backend.StopAsync();reply=new(true);break;
             case "shutdown":if(backend?.Status().State=="running")throw new InvalidOperationException("server.running");await setup.StopInstallation();reply=new(true);shutdown.Cancel();break;
             case "bundles":if(bundles is null)throw new InvalidOperationException("setup.required");reply=new(true,Lines:[Enc(await bundles.List(timeout.Token))]);break;
@@ -119,7 +120,7 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
         }
     }catch(Exception e){Console.Error.WriteLine($"{requestAction}: {e.GetType().Name}: {ErrorCodes.From(e)}");if(Environment.GetEnvironmentVariable("REPLAY_PANEL_TRACE_ERRORS")=="1")Console.Error.WriteLine(e);reply=new(false,Error:ErrorCodes.From(e));}
     if(reply.Ok && requestAction is "stop" or "force-stop")await NativeConsole.CloseServer(config);
-    if(reply.Status is {} status)reply=reply with{Status=status with{AutoStartServer=config.AutoStartServer,AutoUpdateChecks=config.AutoUpdateChecks,PathIssue=ServerLocation.Issue(config)}};
+    if(reply.Status is {} status)reply=reply with{Status=status with{AutoStartServer=config.AutoStartServer,AutoUpdateChecks=config.AutoUpdateChecks,UpdateChannel=config.UpdateChannel,PathIssue=ServerLocation.Issue(config)}};
     if(locationLease)locationGate.Release();
     await writer.WriteLineAsync(JsonSerializer.Serialize(reply,PanelConfig.Json));
 },shutdown.Token);}catch(OperationCanceledException){}

@@ -1,7 +1,7 @@
 name: build-and-test
 on:
   push:
-    branches: [main]
+    branches: [main, experimental]
     tags: ["v*"]
     # Templates and contribution files never affect the build (tag pushes always run).
     paths-ignore:
@@ -149,4 +149,8 @@ jobs:
       - name: Publish packages
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --generate-notes
+        run: |
+          # Tags such as v1.5.0-experimental.1 are published as pre-releases and never become "latest".
+          FLAGS=""
+          case "$GITHUB_REF_NAME" in *-*) FLAGS="--prerelease --latest=false";; esac
+          gh release create "$GITHUB_REF_NAME" blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --generate-notes $FLAGS

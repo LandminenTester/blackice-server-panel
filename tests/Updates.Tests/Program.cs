@@ -33,6 +33,33 @@ try {
  handler.Bytes=(byte[])bytes.Clone();handler.Bytes[0]^=0xff;await manager.Download();for(var i=0;i<200&&manager.Status().Job?.State is "downloading" or "verifying";i++)await Task.Delay(10);
  Check(manager.Status().Job?.State=="failed"&&manager.Status().Job?.Error=="update.integrity","corrupted download rejected by checksum");Check(File.ReadAllBytes(Path.Combine(root,windows?"Start.exe":"Start")).SequenceEqual(new byte[]{1}),"failed download leaves current launcher intact");
  handler.Fail=true;await manager.Download();for(var i=0;i<200&&manager.Status().Job?.State is "downloading" or "verifying";i++)await Task.Delay(10);Check(manager.Status().Job?.State=="failed","network failure leaves retryable failed job");
+ // ---- update channels and pre-release ordering
+ Check(PanelVersion.Compare("1.5.0-experimental.3","1.5.0")<0,"pre-release sorts below its stable version");
+ Check(PanelVersion.Compare("1.5.0-experimental.10","1.5.0-experimental.9")>0,"pre-release numbers compare numerically");
+ Check(PanelVersion.Compare("1.10.0","1.9.9")>0&&PanelVersion.Compare("2.0.0-experimental.1","1.99.99")>0,"numeric version core comparison");
+ Check(PanelVersion.IsNewer("1.4.1","1.4.0")&&!PanelVersion.IsNewer("1.4.0","1.5.0-experimental.1")&&!PanelVersion.IsNewer("1.4.0","1.4.0"),"newer detection never downgrades");
+ Check(!PanelVersion.TryParse("1.5.0-beta.1",out _)&&!PanelVersion.TryParse("1.5.0-experimental",out _)&&!PanelVersion.TryParse("v1.5.0",out _)&&!PanelVersion.TryParse("1.5",out _),"unsupported version shapes rejected");
+ string Release(string ver,bool pre,bool draft=false)=>JsonSerializer.Serialize(new{tag_name="v"+ver,draft,prerelease=pre,assets=new[]{new{name=asset,digest="sha256:"+hash,size=bytes.Length,browser_download_url="https://github.com/"+PanelUpdates.Repository+"/releases/download/v"+ver+"/"+asset}}});
+ var preMeta=Release("999.1.0-experimental.2",true);
+ Check(PanelUpdates.ParseRelease(preMeta,windows,true).Prerelease,"experimental pre-release accepted when the channel allows it");
+ Reject(()=>PanelUpdates.ParseRelease(preMeta,windows),"experimental pre-release rejected on the stable channel");
+ Reject(()=>PanelUpdates.ParseRelease(Release("999.1.0-experimental.2",false),windows,true),"pre-release tag without the pre-release flag rejected");
+ Reject(()=>PanelUpdates.ParseRelease(Release("999.1.0",true),windows,true),"stable tag marked as pre-release rejected");
+ Reject(()=>PanelUpdates.ParseRelease(Release("999.1.0-beta.1",true),windows,true),"unknown pre-release suffix rejected");
+ var list="["+string.Join(",",Release("999.0.0",false),Release("999.1.0-experimental.1",true),Release("999.1.0-experimental.2",true),Release("999.9.0",false,true),Release("999.2.0-beta.1",true))+"]";
+ Check(PanelUpdates.SelectNewest(list,windows)!.Version=="999.1.0-experimental.2","newest valid release selected, drafts and unknown suffixes ignored");
+ var withStable="["+string.Join(",",Release("999.1.0-experimental.2",true),Release("999.1.0",false))+"]";
+ Check(PanelUpdates.SelectNewest(withStable,windows)!.Version=="999.1.0","a stable release supersedes its experimental pre-releases");
+ Check(PanelUpdates.SelectNewest("[]",windows) is null,"empty release list yields nothing");
+ {
+  var channelPath=Path.Combine(root,".local","channel-panel.json");PanelConfig.Save(channelPath,new PanelConfig{UpdateChannel="stable"});
+  var channelHandler=new FakeHandler(metadata,bytes){List=list};using var channelManager=new PanelUpdates(channelPath,new HttpClient(channelHandler),root);
+  var stableInfo=await channelManager.Check();Check(stableInfo.Latest=="999.0.0"&&stableInfo.Channel=="stable"&&!stableInfo.Prerelease,"stable channel only follows the latest stable release");
+  PanelConfig.Save(channelPath,new PanelConfig{UpdateChannel="experimental"});
+  var experimentalInfo=await channelManager.Check();Check(experimentalInfo.Latest=="999.1.0-experimental.2"&&experimentalInfo.Prerelease&&experimentalInfo.Channel=="experimental"&&experimentalInfo.Available,"switching to experimental bypasses the cached stable check");
+  PanelConfig.Save(channelPath,new PanelConfig{UpdateChannel="stable"});
+  var backInfo=await channelManager.Check();Check(backInfo.Latest=="999.0.0"&&!backInfo.Prerelease,"switching back to stable stops offering pre-releases");
+ }
  Console.WriteLine(count+" update checks passed");
 }finally{Directory.Delete(root,true);}
-sealed class FakeHandler(string metadata,byte[] bytes):HttpMessageHandler{public byte[] Bytes=bytes;public bool Fail;protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct){if(request.RequestUri!.Host=="api.github.com")return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(metadata)});if(Fail)throw new HttpRequestException("test failure");return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new ByteArrayContent(Bytes)});}}
+sealed class FakeHandler(string metadata,byte[] bytes):HttpMessageHandler{public byte[] Bytes=bytes;public bool Fail;public string? List;protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct){if(request.RequestUri!.Host=="api.github.com")return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(List is not null&&request.RequestUri.PathAndQuery.Contains("/releases?")?List:metadata)});if(Fail)throw new HttpRequestException("test failure");return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new ByteArrayContent(Bytes)});}}

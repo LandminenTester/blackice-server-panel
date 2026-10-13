@@ -87,6 +87,10 @@ Unter Einstellungen → Allgemein lässt sich der neue native Serverordner prüf
 - Ports: Spiel/Bundle-Download 20770 TCP/UDP, Voice 20771 TCP/UDP, Dashboard 20772 TCP auf localhost. Fernzugriff über dokumentierten [HTTPS-Reverse-Proxy](docs/operations.md).
 - `.local/` und Spielserverordner sichern. Neue Downloads verwenden LAN-Modus und deaktivierte automatische Serverupdates. Öffentliche Server benötigen die [offizielle Registrierung](https://docs.replay.re/servers/registering/).
 
+### Update-Kanal
+
+Standardmäßig folgt das Panel nur stabilen Releases. Unter **Einstellungen → Updates** kann auf den Kanal **Experimentell** gewechselt werden, um Vorabversionen (`vX.Y.Z-experimental.N`) mit neuen, unfertigen Funktionen zu erhalten; siehe [docs/updates.md](docs/updates.md). Für Produktivserver wird Stabil empfohlen.
+
 ## Server-Updates und Bridge-Diagnose
 
 REServer-Updates stehen jetzt unter Einstellungen bereit: offizielles Alpha prüfen, Dateien verifizieren und mit Laufzeitsicherung sowie Start-Rollback installieren. Aktuelles Alpha oder zuvor lokal gesicherten Build auswählen. [Serverupdate-Anleitung](docs/server-updates.md).

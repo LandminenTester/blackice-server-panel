@@ -42,6 +42,10 @@ check((await request('/api/login',{username:'other',password:account.password}))
 check((await request('/api/login',{username:account.username,password:account.password})).ok,'new admin can sign in');
 csrf=(await(await request('/api/session')).json()).csrf;const remembered=await request('/api/login',{username:account.username,password:account.password,remember:true});check(remembered.ok&&/expires=/i.test(remembered.headers.getSetCookie().join(';')),'stay signed in issues a persistent cookie');
 check((await(await request('/api/server-name')).json()).name!==undefined,'server name endpoint available to signed-in users');
+csrf=(await(await request('/api/session')).json()).csrf;
+check((await(await request('/api/settings',{updateChannel:'experimental'})).json()).status?.updateChannel==='experimental','update channel can be switched to experimental');
+check((await request('/api/settings',{updateChannel:'nightly'})).status===409,'unknown update channel rejected');
+check((await(await request('/api/settings',{updateChannel:'stable'})).json()).status?.updateChannel==='stable','update channel returns to stable');
 await mkdir(resolve(fixture,'logs'),{recursive:true});await writeFile(resolve(fixture,'logs/server_2026-10-12T09-03-05Z_cl0.txt'),'hello log');
 const listed=await(await request('/api/log-files')).json();check(listed.length===1&&listed[0].started?.startsWith('2026-10-12T09:03:05'),'log archive lists server starts');
 check((await(await request('/api/log-files/server_2026-10-12T09-03-05Z_cl0.txt')).text())==='hello log','log file readable');

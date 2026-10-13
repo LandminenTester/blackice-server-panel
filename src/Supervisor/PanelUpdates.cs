@@ -7,22 +7,35 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using ReplayPanel.Shared;
 namespace ReplayPanel.Supervisor;
-public sealed record PanelRelease(string Version,string Url,string Asset,string Download,string Digest,long Size);
+public sealed record PanelRelease(string Version,string Url,string Asset,string Download,string Digest,long Size,bool Prerelease=false);
 public sealed record UpdateJob(string Id,string State,string Phase,long Bytes=0,long Total=0,string? Error=null);
-public sealed record UpdateInfo(string Current,string? Latest,bool Available,bool CanInstall,string? ReleaseUrl,UpdateJob? Job);
+public sealed record UpdateInfo(string Current,string? Latest,bool Available,bool CanInstall,string? ReleaseUrl,UpdateJob? Job,string Channel="stable",bool Prerelease=false);
+/// <summary>Panel versions: MAJOR.MINOR.PATCH with an optional -experimental.N suffix; a pre-release sorts below the same stable version.</summary>
+public static class PanelVersion {
+ static readonly Regex Pattern=new(@"^([0-9]{1,6})[.]([0-9]{1,6})[.]([0-9]{1,6})(?:-experimental[.]([0-9]{1,6}))?$",RegexOptions.Compiled);
+ public static bool TryParse(string? value,out (int Major,int Minor,int Patch,int? Pre) version){version=default;if(value is null)return false;var m=Pattern.Match(value);if(!m.Success)return false;version=(int.Parse(m.Groups[1].Value),int.Parse(m.Groups[2].Value),int.Parse(m.Groups[3].Value),m.Groups[4].Success?int.Parse(m.Groups[4].Value):null);return true;}
+ public static bool IsPrerelease(string value)=>value.Contains('-');
+ public static int Compare(string a,string b){
+  if(!TryParse(a,out var x)||!TryParse(b,out var y))throw new FormatException("version");
+  var core=x.Major.CompareTo(y.Major);if(core!=0)return core;core=x.Minor.CompareTo(y.Minor);if(core!=0)return core;core=x.Patch.CompareTo(y.Patch);if(core!=0)return core;
+  if(x.Pre is null&&y.Pre is null)return 0;if(x.Pre is null)return 1;if(y.Pre is null)return -1;return x.Pre.Value.CompareTo(y.Pre.Value);
+ }
+ public static bool IsNewer(string candidate,string running)=>TryParse(candidate,out _)&&TryParse(running,out _)&&Compare(candidate,running)>0;
+}
 public sealed record UpdateManifest(string Root,string Config,string Stage,string Target,string Previous);
 public sealed class PanelUpdates : IDisposable {
  public const string Repository="LandminenTester/blackice-server-panel";
  public static string RunningVersion=>typeof(PanelUpdates).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion.Split('+')[0];
- readonly string root,configPath,stateFile;readonly HttpClient http;readonly SemaphoreSlim gate=new(1);readonly object stateGate=new();CancellationTokenSource? cancel;Task? downloadTask;PanelRelease? release;UpdateJob? job;DateTimeOffset checkedAt;
+ readonly string root,configPath,stateFile;readonly HttpClient http;readonly SemaphoreSlim gate=new(1);readonly object stateGate=new();CancellationTokenSource? cancel;Task? downloadTask;PanelRelease? release;UpdateJob? job;DateTimeOffset checkedAt;string releaseChannel="stable";
  public PanelUpdates(string configPath,HttpClient? client=null,string? packageRoot=null){this.configPath=Path.GetFullPath(configPath);root=Path.GetFullPath(packageRoot??Path.Combine(AppContext.BaseDirectory,"..",".."));stateFile=Path.Combine(root,".local","panel-update.json");http=client??new HttpClient(){Timeout=TimeSpan.FromMinutes(15)};http.DefaultRequestHeaders.UserAgent.ParseAdd("BlackICE-Panel/"+RunningVersion);if(File.Exists(stateFile))try{job=JsonSerializer.Deserialize<UpdateJob>(File.ReadAllText(stateFile),PanelConfig.Json);if(job?.State is "downloading" or "verifying" or "ready")job=job with{State="failed",Error="update.interrupted"};}catch(JsonException){} }
  bool HasController {get {try{using var probe=new FileStream(Path.Combine(Path.GetDirectoryName(configPath)!,"controller.lock"),FileMode.Open,FileAccess.ReadWrite,FileShare.None);return false;}catch(IOException e){return File.Exists(Path.Combine(Path.GetDirectoryName(configPath)!,"controller.lock"))&&e is not FileNotFoundException;}}}
  public bool CanInstall=>HasController&&Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER")!="true"&&File.Exists(Path.Combine(root,OperatingSystem.IsWindows()?"Start.exe":"Start"));
- public UpdateInfo Status(){lock(stateGate){if(job?.State=="applying"&&File.Exists(stateFile)){try{job=JsonSerializer.Deserialize<UpdateJob>(File.ReadAllText(stateFile),PanelConfig.Json)??job;}catch(IOException){}catch(JsonException){}}return new(RunningVersion,release?.Version,release is not null&&Version.Parse(release.Version)>Version.Parse(RunningVersion),CanInstall,release?.Url,job);}}
- public static PanelRelease ParseRelease(string json,bool windows){
+ public UpdateInfo Status(){lock(stateGate){if(job?.State=="applying"&&File.Exists(stateFile)){try{job=JsonSerializer.Deserialize<UpdateJob>(File.ReadAllText(stateFile),PanelConfig.Json)??job;}catch(IOException){}catch(JsonException){}}return new(RunningVersion,release?.Version,release is not null&&PanelVersion.IsNewer(release.Version,RunningVersion),CanInstall,release?.Url,job,releaseChannel,release?.Prerelease==true);}}
+ public static PanelRelease ParseRelease(string json,bool windows,bool allowPrerelease=false){
   using var doc=JsonDocument.Parse(json);var value=doc.RootElement;
   var tag=value.GetProperty("tag_name").GetString()!;var version=tag.TrimStart('v');
-  if(!Regex.IsMatch(version,@"^[0-9]+[.][0-9]+[.][0-9]+$")||!Version.TryParse(version,out _)||value.GetProperty("draft").GetBoolean()||value.GetProperty("prerelease").GetBoolean())throw new InvalidOperationException("update.release");
+  var prerelease=value.GetProperty("prerelease").GetBoolean();
+  if(!PanelVersion.TryParse(version,out _)||value.GetProperty("draft").GetBoolean()||(prerelease&&!allowPrerelease)||prerelease!=PanelVersion.IsPrerelease(version))throw new InvalidOperationException("update.release");
   var name=windows?"blackice-server-panel-win-x64.zip":"blackice-server-panel-linux-x64.tar.gz";
   var asset=value.GetProperty("assets").EnumerateArray().SingleOrDefault(a=>a.GetProperty("name").GetString()==name);
   if(asset.ValueKind==JsonValueKind.Undefined)throw new InvalidOperationException("update.asset");
@@ -32,14 +45,33 @@ public sealed class PanelUpdates : IDisposable {
   var download=asset.GetProperty("browser_download_url").GetString()!;
   if(download!="https://github.com/"+Repository+"/releases/download/"+tag+"/"+name)throw new InvalidOperationException("update.release");
   var size=asset.GetProperty("size").GetInt64();if(size<1||size>512L*1024*1024)throw new InvalidOperationException("update.size");
-  return new(version,url,name,download,digest[7..],size);
+  return new(version,url,name,download,digest[7..],size,prerelease);
  }
  public async Task<UpdateInfo> Check(CancellationToken ct=default){await gate.WaitAsync(ct);try{
-  if(release is not null&&DateTimeOffset.UtcNow-checkedAt<TimeSpan.FromSeconds(60))return Status();
-  using var response=await http.GetAsync("https://api.github.com/repos/"+Repository+"/releases/latest",ct);if(!response.IsSuccessStatusCode)throw new InvalidOperationException("update.network");
-  var text=await response.Content.ReadAsStringAsync(ct);if(text.Length>1024*1024)throw new InvalidOperationException("update.release");
-  release=ParseRelease(text,OperatingSystem.IsWindows());checkedAt=DateTimeOffset.UtcNow;return Status();
+  var channel=PanelConfig.Load(configPath).UpdateChannel;
+  if(release is not null&&releaseChannel==channel&&DateTimeOffset.UtcNow-checkedAt<TimeSpan.FromSeconds(60))return Status();
+  PanelRelease? selected;
+  if(channel=="stable"){
+   using var response=await http.GetAsync("https://api.github.com/repos/"+Repository+"/releases/latest",ct);if(!response.IsSuccessStatusCode)throw new InvalidOperationException("update.network");
+   var text=await response.Content.ReadAsStringAsync(ct);if(text.Length>1024*1024)throw new InvalidOperationException("update.release");
+   selected=ParseRelease(text,OperatingSystem.IsWindows());
+  }else{
+   // Experimental channel: newest valid release of any kind (pre-releases and stable) by version order.
+   using var response=await http.GetAsync("https://api.github.com/repos/"+Repository+"/releases?per_page=30",ct);if(!response.IsSuccessStatusCode)throw new InvalidOperationException("update.network");
+   var text=await response.Content.ReadAsStringAsync(ct);if(text.Length>8*1024*1024)throw new InvalidOperationException("update.release");
+   selected=SelectNewest(text,OperatingSystem.IsWindows())??throw new InvalidOperationException("update.release");
+  }
+  release=selected;releaseChannel=channel;checkedAt=DateTimeOffset.UtcNow;return Status();
  }catch(HttpRequestException){throw new InvalidOperationException("update.network");}finally{gate.Release();}}
+ public static PanelRelease? SelectNewest(string json,bool windows){
+  using var doc=JsonDocument.Parse(json);if(doc.RootElement.ValueKind!=JsonValueKind.Array)throw new InvalidOperationException("update.release");
+  PanelRelease? best=null;
+  foreach(var item in doc.RootElement.EnumerateArray()){
+   try{var candidate=ParseRelease(item.GetRawText(),windows,true);if(best is null||PanelVersion.Compare(candidate.Version,best.Version)>0)best=candidate;}
+   catch(Exception e)when(e is InvalidOperationException or KeyNotFoundException or JsonException or InvalidCastException or FormatException){}
+  }
+  return best;
+ }
  void Save(UpdateJob value){lock(stateGate){job=value;Directory.CreateDirectory(Path.GetDirectoryName(stateFile)!);var tmp=stateFile+".tmp";File.WriteAllText(tmp,JsonSerializer.Serialize(value,PanelConfig.Json));File.Move(tmp,stateFile,true);}}
  public async Task<UpdateInfo> Download(CancellationToken ct=default){await Check(ct);await gate.WaitAsync(ct);try{
   if(!CanInstall)throw new InvalidOperationException("update.deployment");
