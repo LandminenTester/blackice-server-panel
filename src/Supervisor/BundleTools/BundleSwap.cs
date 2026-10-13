@@ -41,9 +41,20 @@ public static class BundleSwap
             if (entry.Name.Equals(BundleLayout.SourceFolder, StringComparison.Ordinal)) continue;
             var destination = Path.Combine(target, entry.Name);
             if (entry.Name.Equals("vfs", StringComparison.Ordinal) && entry is DirectoryInfo vfs) { SeedMissing(vfs, destination); continue; }
-            if (entry is DirectoryInfo directory) Directory.Move(directory.FullName, destination); else File.Move(entry.FullName, destination, true);
+            MoveEntry(entry, destination);
         }
         log("Bundle files replaced.");
+    }
+
+    /// <summary>Moves a staged entry; falls back to copying when stage and bundle are on different volumes (Docker: /state and /server).</summary>
+    private static void MoveEntry(FileSystemInfo entry, string destination)
+    {
+        try { if (entry is DirectoryInfo directory) Directory.Move(directory.FullName, destination); else File.Move(entry.FullName, destination, true); }
+        catch (IOException) when (Path.Exists(entry.FullName))
+        {
+            if (entry is DirectoryInfo && Directory.Exists(destination)) Directory.Delete(destination, true);
+            CopyEntry(entry, destination);
+        }
     }
 
     private static void SeedMissing(DirectoryInfo source, string destination)

@@ -263,7 +263,7 @@ public sealed class Toolchain(string directory, HttpClient http)
             if (Windows) ExtractZip(archive, staging); else ExtractTarGz(archive, staging);
             var exe = Path.Combine(staging, Windows ? "dotnet.exe" : "dotnet");
             if (!File.Exists(exe)) throw new InvalidOperationException("bundleTools.toolArchive");
-            if (!Windows) File.SetUnixFileMode(exe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(exe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
             Place("dotnet", staging, latest);
             ctx.Log(".NET SDK " + latest + " installed.");
         }
