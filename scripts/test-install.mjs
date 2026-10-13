@@ -68,6 +68,7 @@ try{
 
  if(process.env.BUNDLE_E2E==='1'){
   const run=async(path,body,label)=>{const start=await req(path,body);let state='running',lines=[];for(let n=0;n<3600;n++){const r=await req('/api/bundle-tools/jobs/'+start.id);state=r.job.state;lines=r.log;if(state!=='running')break;await new Promise(x=>setTimeout(x,500));}assert.equal(state,'succeeded',label+': '+lines.slice(-25).join(String.fromCharCode(10)));};
+  if(backend==='docker')execFileSync('docker',['run','--rm','--user','0','--entrypoint','sh','-v','panel-install-'+process.pid+'-files:/test','replay-panel:next','-c','chown -R 10001 /test/'+target.split('/').slice(2).join('/')+' || true; chmod -R g+rwX /test/'+target.split('/').slice(2).join('/')]);
   await req('/api/bundle-tools/settings',{enabled:true,sourcesEnabled:true,uploadEnabled:true});
   await run('/api/bundle-tools/tools/install',{id:'dotnet'},'dotnet install');
   await run('/api/bundle-tools/tools/install',{id:'node'},'node install');
