@@ -118,6 +118,8 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
             case "bundles":if(bundles is null)throw new InvalidOperationException("setup.required");reply=new(true,Lines:[Enc(await bundles.List(timeout.Token))]);break;
             case "bundle-tools-status":reply=new(true,Lines:[Enc(bundleTools.Status())]);break;
             case "bundle-tools-settings":reply=new(true,Lines:[Enc(bundleTools.ApplySettings(request.Command!))]);break;
+            case "bundle-tools-upload-inspect":reply=new(true,Lines:[Enc(bundleTools.UploadInspect(request.Command!))]);break;
+            case "bundle-tools-upload-install":reply=new(true,Lines:[Enc(bundleTools.UploadInstall(request.Command!))]);break;
             case "bundle-tools-job":reply=new(true,Lines:[Enc(bundleTools.JobInfo(request.Command!))]);break;
             case "bundle-action":if(bundles is null)throw new InvalidOperationException("setup.required");var action=JsonSerializer.Deserialize<string[]>(request.Command!)!;reply=new(true,Lines:[Enc(await bundles.Action(action[0],action[1],timeout.Token))]);break;
             default:if(adapter is null){reply=new(true,Status:new("unconfigured",null,"",config.ShutdownMode));break;}reply=await adapter.Call(request,timeout.Token);break;

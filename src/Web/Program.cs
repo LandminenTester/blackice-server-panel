@@ -21,6 +21,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls(config.Url);
 builder.Services.AddSingleton(config);
 builder.Services.AddSingleton<PipeClient>();
+builder.Services.AddSingleton(new ConfigPath(configPath));
 builder.Services.AddSingleton<BundleManager>();
 builder.Services.AddHostedService<LocalStopService>();
 builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetDirectoryName(configPath)!, "keys"))).SetApplicationName("ReplayPanel");

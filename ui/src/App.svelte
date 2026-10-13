@@ -9,6 +9,7 @@
   import ServerPath from "./ServerPath.svelte";
   import ServerConfig from "./ServerConfig.svelte";
   import BundleToolsSettings from "./BundleToolsSettings.svelte";
+  import BundleUpload from "./BundleUpload.svelte";
   import Bridge from "./Bridge.svelte";
   import HexBackground from "./HexBackground.svelte";
   import DiagnosticStream from "./DiagnosticStream.svelte";
@@ -313,7 +314,10 @@
     notice = "";
     error = "";
     view = name;
-    if (name === "bundles") loadBundles();
+    if (name === "bundles") {
+      loadBundles();
+      loadBundleTools();
+    }
   }
   async function settings(value: string) {
     await run(async () => {
@@ -347,6 +351,41 @@
       const data = await request("/api/settings", { autoUpdateChecks: value });
       status = data.status;
       notice = "saved";
+    });
+  }
+  let btState = $state<any>(null),
+    bundleView = $state("list");
+  async function loadBundleTools() {
+    try {
+      btState = await request("/api/bundle-tools");
+      if (!btState.enabled) bundleView = "list";
+    } catch {
+      btState = null;
+      bundleView = "list";
+    }
+  }
+  function uploadBundle(file: File, progress: (percent: number) => void): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const form = new FormData();
+      form.append("file", file, file.name);
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/bundle-tools/upload");
+      xhr.setRequestHeader("X-CSRF", csrf);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) progress(Math.round((e.loaded * 100) / e.total));
+      };
+      xhr.onload = () => {
+        let body: any = null;
+        try {
+          body = JSON.parse(xhr.responseText);
+        } catch {
+          /* non-JSON error body */
+        }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+        else reject(new Error(body?.error ?? "request.failed"));
+      };
+      xhr.onerror = () => reject(new Error("network.failed"));
+      xhr.send(form);
     });
   }
   async function pick() {
@@ -884,6 +923,15 @@
           </form>{/if}
         </section>
       {:else if view === "bundles"}
+        {#if btState?.enabled && (can("bundles.upload") || can("bundles.build"))}
+          <div class="subtabs" role="tablist" aria-label={t.bundles}>
+            <button role="tab" aria-selected={bundleView === "list"} class:active={bundleView === "list"} onclick={() => (bundleView = "list")}>{t.bvList}</button>
+            {#if btState.settings.uploadEnabled && can("bundles.upload")}<button role="tab" aria-selected={bundleView === "upload"} class:active={bundleView === "upload"} onclick={() => (bundleView = "upload")}>{t.bvUpload}<span class="exp-tag">{t.experimental}</span></button>{/if}
+          </div>
+        {/if}
+        {#if bundleView === "upload" && btState?.enabled}
+          <BundleUpload {t} {locale} {request} upload={uploadBundle} maxMb={btState.uploadMaxMb} onInstalled={loadBundles} />
+        {:else}
         <section class="bundle-panel" aria-busy={bundleLoading}>
           <div class="section-heading">
             <h2>{t.bundleStatus}</h2>
@@ -951,6 +999,7 @@
           </ul>
           {#if busy}<p role="status">{t.actionPending}</p>{/if}
         </section>
+        {/if}
       {:else if view === "users" && can("users.manage")}
         <Users {t} {request} onchanged={session} />
       {:else}
@@ -971,7 +1020,7 @@
           {:else if settingsTab === "bridge" && can("settings.write")}
             <Bridge {t} {locale} {request} settings {backend} />
           {:else if settingsTab === "bundles" && can("settings.write")}
-            <BundleToolsSettings {t} {request} />
+            <BundleToolsSettings {t} {request} onchanged={loadBundleTools} />
           {:else if settingsTab === "server" && can("settings.write")}
             <ServerConfig {t} {locale} {request} {backend} onsaved={loadServerName} />
           {:else}

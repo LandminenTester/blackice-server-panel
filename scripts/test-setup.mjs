@@ -3,6 +3,7 @@ import {mkdir,readFile,writeFile,copyFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {randomBytes} from 'node:crypto';
 import assert from 'node:assert/strict';
+import zlib from 'node:zlib';
 const root=resolve(import.meta.dirname,'..'),build=process.env.PANEL_TEST_BUILD??'artifacts',directory=resolve(root,'.local/setup-'+randomBytes(6).toString('hex'));
 await mkdir(directory,{recursive:true});
 const configPath=resolve(directory,'panel.json'),config={schemaVersion:2,autoStartServer:false,url:'http://127.0.0.1:20775',pipeName:'panel-setup-'+process.pid,backend:process.platform==='win32'?'windows':'linux'};
@@ -46,6 +47,20 @@ csrf=(await(await request('/api/session')).json()).csrf;
 check((await(await request('/api/settings',{updateChannel:'experimental'})).json()).status?.updateChannel==='experimental','update channel can be switched to experimental');
 check((await request('/api/settings',{updateChannel:'nightly'})).status===409,'unknown update channel rejected');
 check((await(await request('/api/settings',{updateChannel:'stable'})).json()).status?.updateChannel==='stable','update channel returns to stable');
+function storedZip(files){const parts=[],central=[];let offset=0;for(const [name,text] of Object.entries(files)){const data=Buffer.from(text),nameBuf=Buffer.from(name),crc=zlib.crc32(data);const local=Buffer.alloc(30);local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(20,4);local.writeUInt32LE(crc>>>0,14);local.writeUInt32LE(data.length,18);local.writeUInt32LE(data.length,22);local.writeUInt16LE(nameBuf.length,26);parts.push(local,nameBuf,data);const entry=Buffer.alloc(46);entry.writeUInt32LE(0x02014b50,0);entry.writeUInt16LE(20,4);entry.writeUInt16LE(20,6);entry.writeUInt32LE(crc>>>0,16);entry.writeUInt32LE(data.length,20);entry.writeUInt32LE(data.length,24);entry.writeUInt16LE(nameBuf.length,28);entry.writeUInt32LE(offset,42);central.push(entry,nameBuf);offset+=30+nameBuf.length+data.length;}const dir=Buffer.concat(central);const end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(Object.keys(files).length,8);end.writeUInt16LE(Object.keys(files).length,10);end.writeUInt32LE(dir.length,12);end.writeUInt32LE(offset,16);return Buffer.concat([...parts,dir,end]);}
+async function upload(bytes,name){const form=new FormData();form.append('file',new Blob([bytes]),name);const response=await fetch(config.url+'/api/bundle-tools/upload',{method:'POST',headers:{Cookie:[...cookies].map(x=>x.join('=')).join('; '),'X-CSRF':csrf},body:form});return {status:response.status,body:await response.json().catch(()=>null)};}
+csrf=(await(await request('/api/session')).json()).csrf;
+const demoManifest=['[General]','description = "API test bundle"','author = "ci"','version = "0.1.0"','[Scripting]','server_blob = "sv.wasm"','[Meta]','config_version = "alpha_playtest"',''].join(String.fromCharCode(10));
+const demoZip=storedZip({'config.toml':demoManifest,'sv.wasm':'wasm'});
+check((await upload(demoZip,'api-bundle.zip')).status===409,'bundle upload is refused while bundle tools are off');
+check((await request('/api/bundle-tools/settings',{enabled:true,uploadEnabled:true})).ok,'bundle tools can be enabled (experimental)');
+const uploaded=await upload(demoZip,'api-bundle.zip');
+check(uploaded.status===200&&uploaded.body.report.ok&&uploaded.body.report.name==='api-bundle'&&uploaded.body.exists===false,'bundle ZIP upload is inspected');
+const bundleJob=await(await request('/api/bundle-tools/upload/install',{file:uploaded.body.file,originalName:'api-bundle.zip',name:'api-bundle',replace:false})).json();
+let bundleState=bundleJob;for(let i=0;i<100&&bundleState.state==='running';i++){await new Promise(r=>setTimeout(r,100));bundleState=(await(await request('/api/bundle-tools/jobs/'+bundleJob.id)).json()).job;}
+check(bundleState.state==='succeeded'&&(await readFile(resolve(fixture,'data/ugc/api-bundle/config.toml'),'utf8')).includes('API test bundle'),'uploaded bundle is installed into data/ugc');
+check((await upload(Buffer.from('not a zip at all, definitely not'),'bad.zip')).status===409,'a non-ZIP upload is refused');
+check((await request('/api/bundle-tools/settings',{enabled:false})).ok,'bundle tools can be switched off again');
 await mkdir(resolve(fixture,'logs'),{recursive:true});await writeFile(resolve(fixture,'logs/server_2026-10-12T09-03-05Z_cl0.txt'),'hello log');
 const listed=await(await request('/api/log-files')).json();check(listed.length===1&&listed[0].started?.startsWith('2026-10-12T09:03:05'),'log archive lists server starts');
 check((await(await request('/api/log-files/server_2026-10-12T09-03-05Z_cl0.txt')).text())==='hello log','log file readable');

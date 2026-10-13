@@ -54,6 +54,7 @@ public sealed class BundleToolsService : IDisposable
             config.BundleTools.CommitEmail,
         },
         sourceFolder = BundleLayout.SourceFolder,
+        uploadMaxMb = config.BundleTools.MaxUploadMb,
         job = Jobs.Current,
         jobs = Jobs.Recent(),
     };
@@ -80,6 +81,123 @@ public sealed class BundleToolsService : IDisposable
             PanelConfig.Save(configPath, config);
         }
         return Status();
+    }
+
+
+    // ---------------------------------------------------------------- bundle lifecycle helpers
+    public async Task<string?> BundleStateAsync(string name, CancellationToken ct)
+    {
+        var manager = Bundles;
+        if (manager is null) return null;
+        try
+        {
+            var list = await manager.List(ct);
+            return list.CanControl ? list.Bundles.FirstOrDefault(b => b.Name == name)?.State : null;
+        }
+        catch (InvalidOperationException) { return null; }
+    }
+
+    /// <summary>Stops a running bundle (when the restart option is on), runs the file work, then starts it again.</summary>
+    public async Task WithBundleStoppedAsync(string name, Action<string> log, CancellationToken ct, Func<Task> work)
+    {
+        var restart = config.BundleTools.RestartAfterBuild ? await BundleStateAsync(name, ct) : null;
+        var stopped = false;
+        if (restart == "running" && Bundles is { } manager)
+        {
+            log("Stopping bundle " + name + "...");
+            await manager.Action(name, "stop", ct);
+            stopped = true;
+        }
+        try { await work(); }
+        finally
+        {
+            if (stopped && Bundles is { } again)
+            {
+                try { log("Starting bundle " + name + "..."); await again.Action(name, "start", CancellationToken.None); }
+                catch (Exception e) { log("Could not start the bundle: " + e.Message); }
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- ZIP upload
+    private sealed record UploadRef(string File, string? OriginalName, string? Name, bool Replace);
+
+    private void RequireUpload()
+    {
+        RequireEnabled();
+        if (!config.BundleTools.UploadEnabled) throw new InvalidOperationException("bundleTools.disabled");
+    }
+
+    private string UploadPath(string file)
+    {
+        if (!System.Text.RegularExpressions.Regex.IsMatch(file ?? "", @"\A[0-9a-f]{32}\.zip\z")) throw new InvalidOperationException("bundleTools.upload");
+        var path = Path.Combine(BundleLayout.Uploads(configPath), file!);
+        if (!File.Exists(path)) throw new InvalidOperationException("bundleTools.upload");
+        return path;
+    }
+
+    private void SweepUploads()
+    {
+        var directory = BundleLayout.Uploads(configPath);
+        if (!Directory.Exists(directory)) return;
+        foreach (var file in Directory.EnumerateFiles(directory, "*.zip"))
+            try { if (DateTime.UtcNow - File.GetLastWriteTimeUtc(file) > TimeSpan.FromHours(24)) File.Delete(file); } catch (IOException) { }
+    }
+
+    private bool BundleExists(string name)
+    {
+        var directory = BundleLayout.BundleDir(config, name);
+        return Directory.Exists(directory) && Directory.EnumerateFileSystemEntries(directory).Any(e => !Path.GetFileName(e).Equals(BundleLayout.SourceFolder, StringComparison.Ordinal));
+    }
+
+    public object UploadInspect(string json)
+    {
+        RequireUpload();
+        SweepUploads();
+        var args = JsonSerializer.Deserialize<UploadRef>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
+        var path = UploadPath(args.File);
+        var report = BundleZip.Inspect(path, args.OriginalName, config.BundleTools.MaxUploadMb * 1024L * 1024L);
+        return new { file = args.File, report, exists = report.Name.Length > 0 && BundleExists(report.Name) };
+    }
+
+    public object ExistsCheck(string name) => new { exists = BundleLayout.ValidName(name) && BundleExists(name) };
+
+    public BundleJob UploadInstall(string json)
+    {
+        RequireUpload();
+        var args = JsonSerializer.Deserialize<UploadRef>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
+        var name = BundleLayout.RequireName(args.Name);
+        var zip = UploadPath(args.File);
+        var target = BundleLayout.BundleDir(config, name);
+        var maxBytes = config.BundleTools.MaxUploadMb * 1024L * 1024L;
+        return Jobs.Start("upload", name, async ctx =>
+        {
+            var stage = Path.Combine(BundleLayout.Stage(configPath), ctx.Id);
+            try
+            {
+                ctx.Phase("Checking the archive");
+                var report = BundleZip.Inspect(zip, args.OriginalName, maxBytes);
+                foreach (var check in report.Checks) ctx.Log($"[{check.Status}] {check.Id} {check.Detail}");
+                if (!report.Ok) throw new InvalidOperationException("bundleTools.zipInvalid");
+                if (BundleExists(name) && !args.Replace) throw new InvalidOperationException("bundleTools.exists");
+                ctx.Phase("Extracting");
+                BundleZip.Extract(zip, report.Root, stage, ctx.Token);
+                ctx.Phase("Installing");
+                await WithBundleStoppedAsync(name, ctx.Log, ctx.Token, () =>
+                {
+                    BundleSwap.Backup(target, BundleLayout.Backups(configPath), name, config.BundleTools.KeepBackups, ctx.Log);
+                    BundleSwap.Apply(stage, target, ctx.Log);
+                    return Task.CompletedTask;
+                });
+                ctx.Result("Installed " + name);
+                ctx.Log("Done. Start the bundle from the Bundles list.");
+            }
+            finally
+            {
+                try { if (Directory.Exists(stage)) Directory.Delete(stage, true); } catch (IOException) { }
+                try { File.Delete(zip); } catch (IOException) { }
+            }
+        });
     }
 
     public object JobInfo(string id)

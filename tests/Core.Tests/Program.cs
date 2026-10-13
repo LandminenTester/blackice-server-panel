@@ -92,5 +92,46 @@ try {
   busyGate.SetResult();for(var i=0;i<100&&btService.Jobs.Get(first.Id)!.State=="running";i++)await Task.Delay(20);
   Check(btService.Jobs.Get(first.Id)!.State=="succeeded"&&btService.Jobs.Tail(first.Id).Length>0,"finished jobs keep a log");
  }
+ // ---- bundle ZIP structure check and install
+ byte[] BundleZipBytes(Dictionary<string,string> files){using var buffer=new MemoryStream();using(var zip=new System.IO.Compression.ZipArchive(buffer,System.IO.Compression.ZipArchiveMode.Create,true))foreach(var (path,content) in files){var entry=zip.CreateEntry(path);using var writer=new StreamWriter(entry.Open());writer.Write(content);}return buffer.ToArray();}
+ const string manifest="[General]\ndescription = \"Demo\"\nauthor = \"tester\"\nversion = \"1.2.3\"\n[Scripting]\nclient_blob = \"cl.wasm\"\nserver_blob = \"sv.wasm\"\n[ReUi]\ninitial_page = \"index.html\"\ncontent_root = \"ui/\"\nfiles = [\n  \"ui/index.html\",\n  \"ui/assets/**\",\n]\n[Meta]\nconfig_version = \"alpha_playtest\"\n";
+ var goodZip=Path.Combine(btRoot,"good.zip");File.WriteAllBytes(goodZip,BundleZipBytes(new(){["config.toml"]=manifest,["sv.wasm"]="\0asm",["cl.wasm"]="\0asm",["ui/index.html"]="<html>",["ui/assets/app.js"]="x",["vfs/seed.txt"]="seed"}));
+ var goodReport=BundleZip.Inspect(goodZip,"My Bundle.zip",1L<<30);
+ Check(goodReport.Ok&&goodReport.Name=="My-Bundle"&&goodReport.Meta!.Author=="tester"&&goodReport.Meta.Version=="1.2.3"&&goodReport.Meta.HasUi&&goodReport.Root=="","a complete bundle ZIP passes the structure check");
+ var wrappedZip=Path.Combine(btRoot,"wrapped.zip");File.WriteAllBytes(wrappedZip,BundleZipBytes(new(){["inner-bundle/config.toml"]=manifest,["inner-bundle/sv.wasm"]="a",["inner-bundle/cl.wasm"]="b",["inner-bundle/ui/index.html"]="<html>",["inner-bundle/ui/assets/a.js"]="x"}));
+ var wrappedReport=BundleZip.Inspect(wrappedZip,"whatever.zip",1L<<30);Check(wrappedReport.Ok&&wrappedReport.Root=="inner-bundle/"&&wrappedReport.Name=="inner-bundle","a ZIP wrapped in one folder is unwrapped");
+ var missingBlob=Path.Combine(btRoot,"missing.zip");File.WriteAllBytes(missingBlob,BundleZipBytes(new(){["config.toml"]=manifest,["sv.wasm"]="a",["ui/index.html"]="<html>",["ui/assets/a.js"]="x"}));
+ var missingReport=BundleZip.Inspect(missingBlob,"m.zip",1L<<30);Check(!missingReport.Ok&&missingReport.Checks.Any(c=>c.Id=="blob.client_blob"&&c.Status=="fail"),"a referenced blob that is missing fails the check");
+ var noManifest=Path.Combine(btRoot,"nomanifest.zip");File.WriteAllBytes(noManifest,BundleZipBytes(new(){["readme.txt"]="x",["a/b.txt"]="y"}));
+ Check(!BundleZip.Inspect(noManifest,"n.zip",1L<<30).Ok,"a ZIP without config.toml fails the check");
+ var traversal=Path.Combine(btRoot,"traversal.zip");File.WriteAllBytes(traversal,BundleZipBytes(new(){["config.toml"]=manifest,["../evil.txt"]="x"}));
+ Check(!BundleZip.Inspect(traversal,"t.zip",1L<<30).Ok,"path traversal in a ZIP is refused");
+ File.WriteAllText(Path.Combine(btRoot,"notzip.zip"),"hello");Check(!BundleZip.Inspect(Path.Combine(btRoot,"notzip.zip"),"x.zip",1L<<30).Ok,"a file that is not a ZIP is refused");
+ Check(!BundleZip.Inspect(goodZip,"x.zip",10).Ok,"an oversized upload is refused");
+ {
+  var toml=TomlDoc.Parse("# c\n[General]\ndescription = \"A \\\"quoted\\\" # not a comment\" # trailing\nauthor = 'literal'\n[Scripting]\nenable_vfs = true\n[ReUi]\nfiles = [\"a\", 'b',\n \"c\"]\n");
+  Check(toml.String("General","description")=="A \"quoted\" # not a comment"&&toml.String("General","author")=="literal"&&toml.Bool("Scripting","enable_vfs")==true&&toml.Array("ReUi","files").SequenceEqual(["a","b","c"]),"the manifest reader handles quotes, comments, booleans and multi-line arrays");
+ }
+ using(var uploadService=new BundleToolsService(btConfig,btConfigPath,()=>null)){
+  uploadService.ApplySettings("{\"enabled\":true,\"uploadEnabled\":true,\"keepBackups\":2}");
+  var uploads=BundleLayout.Uploads(btConfigPath);Directory.CreateDirectory(uploads);
+  string Stash(string source){var id=Guid.NewGuid().ToString("N");File.Copy(source,Path.Combine(uploads,id+".zip"));return id+".zip";}
+  async Task<BundleJob> Finished(BundleJob job){for(var i=0;i<200&&uploadService.Jobs.Get(job.Id)!.State=="running";i++)await Task.Delay(25);return uploadService.Jobs.Get(job.Id)!;}
+  var firstFile=Stash(goodZip);
+  var inspected=System.Text.Json.JsonSerializer.Serialize(uploadService.UploadInspect(System.Text.Json.JsonSerializer.Serialize(new{file=firstFile,originalName="demo.zip"})));
+  Check(inspected.Contains("\"exists\":false"),"inspection reports whether the bundle already exists");
+  var install=await Finished(uploadService.UploadInstall(System.Text.Json.JsonSerializer.Serialize(new{file=firstFile,name="demo",replace=false})));
+  var demoDir=BundleLayout.BundleDir(btConfig,"demo");
+  Check(install.State=="succeeded"&&File.Exists(Path.Combine(demoDir,"config.toml"))&&File.Exists(Path.Combine(demoDir,"sv.wasm"))&&File.Exists(Path.Combine(demoDir,"ui","index.html"))&&File.Exists(Path.Combine(demoDir,"vfs","seed.txt")),"an uploaded bundle is installed into data/ugc");
+  Directory.CreateDirectory(Path.Combine(demoDir,"panel_src"));File.WriteAllText(Path.Combine(demoDir,"panel_src","keep.cs"),"// source");File.WriteAllText(Path.Combine(demoDir,"vfs","seed.txt"),"runtime data");File.WriteAllText(Path.Combine(demoDir,"stale.txt"),"old build artifact");
+  var conflict=await Finished(uploadService.UploadInstall(System.Text.Json.JsonSerializer.Serialize(new{file=Stash(goodZip),name="demo",replace=false})));
+  Check(conflict.State=="failed"&&conflict.Error=="bundleTools.exists","installing over an existing bundle needs an explicit replace");
+  var replaced=await Finished(uploadService.UploadInstall(System.Text.Json.JsonSerializer.Serialize(new{file=Stash(goodZip),name="demo",replace=true})));
+  Check(replaced.State=="succeeded"&&!File.Exists(Path.Combine(demoDir,"stale.txt"))&&File.Exists(Path.Combine(demoDir,"panel_src","keep.cs"))&&File.ReadAllText(Path.Combine(demoDir,"vfs","seed.txt"))=="runtime data","replacing keeps panel_src and runtime vfs data and removes stale artifacts");
+  Check(BundleSwap.LatestBackup(BundleLayout.Backups(btConfigPath),"demo") is {} backupDir&&File.Exists(Path.Combine(backupDir,"stale.txt")),"the previous bundle files are backed up before a replace");
+  var badInstall=await Finished(uploadService.UploadInstall(System.Text.Json.JsonSerializer.Serialize(new{file=Stash(missingBlob),name="other",replace=false})));
+  Check(badInstall.State=="failed"&&!Directory.Exists(BundleLayout.BundleDir(btConfig,"other")),"an invalid ZIP installs nothing");
+  Reject(()=>uploadService.UploadInstall(System.Text.Json.JsonSerializer.Serialize(new{file="../../etc/passwd",name="x",replace=false})),"upload ids cannot point outside the upload folder");
+ }
  Console.WriteLine(passed+" core checks passed");
 }finally{Directory.Delete(root,true);}
