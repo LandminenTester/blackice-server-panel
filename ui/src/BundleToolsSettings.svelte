@@ -3,14 +3,19 @@ import {onMount} from 'svelte';
 import type {Catalog} from './locales';
 import Toggle from './components/Toggle.svelte';
 import Experimental from './components/Experimental.svelte';
+import JobLog from './components/JobLog.svelte';
 let {t,request,onchanged=()=>{}}=$props<{t:Catalog;request:(url:string,body?:object)=>Promise<any>;onchanged?:()=>void}>();
 type Settings={uploadEnabled:boolean;sourcesEnabled:boolean;restartAfterBuild:boolean;buildUi:boolean;keepBackups:number;maxUploadMb:number;commitName:string;commitEmail:string};
-type State={enabled:boolean;settings:Settings;sourceFolder:string};
+type Tool={id:string;installed:boolean;version:string|null;source:string;sizeMb:number;installable:boolean;note:string|null};
+type State={enabled:boolean;settings:Settings;sourceFolder:string;toolchain:Tool[];job?:{id:string;state:string}|null};
 let st=$state<State|null>(null),busy=$state(false),error=$state(''),saved=$state(false),keep=$state(3),max=$state(512),name=$state(''),email=$state('');
-let dialog=$state<HTMLDialogElement>()!;
+let dialog=$state<HTMLDialogElement>()!,toolJob=$state(''),latest=$state<Record<string,string|null>>({}),checking=$state(false);
 function adopt(s:State){st=s;keep=s.settings.keepBackups;max=s.settings.maxUploadMb;name=s.settings.commitName;email=s.settings.commitEmail;}
 async function load(){try{adopt(await request('/api/bundle-tools'));}catch(e){error=(e as Error).message;}}
 async function patch(body:object){busy=true;error='';saved=false;try{adopt(await request('/api/bundle-tools/settings',body));saved=true;onchanged();}catch(e){error=(e as Error).message;}finally{busy=false;}}
+async function toolAction(kind:'install'|'remove',id:string){error='';try{const r=await request('/api/bundle-tools/tools/'+kind,{id});if(kind==='install')toolJob=r.id;else adopt(r);}catch(e){error=(e as Error).message;}}
+async function checkLatest(){checking=true;error='';try{latest=await request('/api/bundle-tools/tools/latest');}catch(e){error=(e as Error).message;}finally{checking=false;}}
+function toolDone(){toolJob='';load();}
 function toggleMaster(value:boolean){if(value)dialog.showModal();else patch({enabled:false});}
 onMount(load);
 </script>
@@ -35,6 +40,14 @@ onMount(load);
 <div class="actions"><button class="primary" disabled={busy}>{t.btSave}</button></div>
 </form>
 <p class="muted">{t.btLayout.replace('{folder}',st.sourceFolder)}</p>
+<h3>{t.btTools}</h3>
+<p class="muted">{t.btToolsHint}</p>
+<ul class="tool-list">{#each st.toolchain as tool (tool.id)}<li>
+<div><strong>{t['toolName_'+tool.id as keyof typeof t]}</strong> <span class={'job-badge '+(tool.installed?'succeeded':'')}>{tool.installed?t.toolInstalled+(tool.version?' '+tool.version:'')+(tool.source==='system'?' ('+t.toolSystem+')':''):t.toolMissing}</span>{#if latest[tool.id]}<small class="muted"> {t.toolLatest}: {latest[tool.id]}</small>{/if}<br/><small class="muted">{t.toolSize.replace('{mb}',String(tool.sizeMb))}{tool.note?' · '+tool.note:''}</small></div>
+<div class="actions">{#if tool.installable}<button disabled={!!toolJob||busy} onclick={()=>toolAction('install',tool.id)}>{tool.installed?t.toolUpdate:t.toolInstall}</button>{/if}{#if tool.installed&&tool.source==='panel'}<button disabled={!!toolJob||busy} onclick={()=>toolAction('remove',tool.id==='wasi'?'wasi':tool.id)}>{t.toolRemove}</button>{/if}</div>
+</li>{/each}</ul>
+<div class="actions"><button disabled={checking||!!toolJob} onclick={checkLatest}>{checking?t.toolBusy:t.toolCheck}</button></div>
+{#if toolJob}<JobLog {t} {request} jobId={toolJob} ondone={toolDone}/>{/if}
 </div>
 {/if}
 {#if saved}<p class="notice" role="status">{t.btSaved}</p>{/if}

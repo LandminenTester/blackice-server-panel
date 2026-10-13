@@ -74,6 +74,9 @@ public static class BundleToolsEndpoints
         app.MapPost("/api/bundle-tools/settings", async (JsonElement body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-settings", body.GetRawText()), ct))).RequireAuthorization("settings.write");
         app.MapPost("/api/bundle-tools/upload", (HttpContext c, PipeClient pipe, ConfigPath path, CancellationToken ct) => Upload(c, pipe, path.Value, ct)).RequireAuthorization("bundles.upload");
         app.MapPost("/api/bundle-tools/upload/install", async (JsonElement body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-upload-install", body.GetRawText()), ct))).RequireAuthorization("bundles.upload");
+        app.MapPost("/api/bundle-tools/tools/install", async (JsonElement body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-tool-install", body.GetRawText()), ct))).RequireAuthorization("settings.write");
+        app.MapPost("/api/bundle-tools/tools/remove", async (JsonElement body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-tool-remove", body.GetRawText()), ct))).RequireAuthorization("settings.write");
+        app.MapGet("/api/bundle-tools/tools/latest", async (PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-tool-latest"), ct))).RequireAuthorization("settings.write");
         app.MapGet("/api/bundle-tools/jobs/{id}", async (string id, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-job", id), ct))).RequireAuthorization("bundles.read");
     }
 }

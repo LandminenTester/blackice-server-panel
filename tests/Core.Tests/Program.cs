@@ -133,5 +133,48 @@ try {
   Check(badInstall.State=="failed"&&!Directory.Exists(BundleLayout.BundleDir(btConfig,"other")),"an invalid ZIP installs nothing");
   Reject(()=>uploadService.UploadInstall(System.Text.Json.JsonSerializer.Serialize(new{file="../../etc/passwd",name="x",replace=false})),"upload ids cannot point outside the upload folder");
  }
+ // ---- toolchain manager (fake official hosts)
+ {
+  var winHost=OperatingSystem.IsWindows();
+  byte[] ZipOf(Dictionary<string,string> entries){using var buffer=new MemoryStream();using(var zip=new System.IO.Compression.ZipArchive(buffer,System.IO.Compression.ZipArchiveMode.Create,true))foreach(var (path,content) in entries){var entry=zip.CreateEntry(path);using var writer=new StreamWriter(entry.Open());writer.Write(content);}return buffer.ToArray();}
+  byte[] TarGzOf(Dictionary<string,string> entries){using var buffer=new MemoryStream();using(var gzip=new System.IO.Compression.GZipStream(buffer,System.IO.Compression.CompressionLevel.Fastest,true))using(var tar=new System.Formats.Tar.TarWriter(gzip,true)){foreach(var (path,content) in entries){var entry=new System.Formats.Tar.PaxTarEntry(System.Formats.Tar.TarEntryType.RegularFile,path){DataStream=new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content))};tar.WriteEntry(entry);}}return buffer.ToArray();}
+  byte[] Archive(Dictionary<string,string> entries)=>winHost?ZipOf(entries):TarGzOf(entries);
+  var dotnetArchive=Archive(new(){[winHost?"dotnet.exe":"dotnet"]="fake-dotnet",["sdk/10.9.9/Sdks.txt"]="sdk"});
+  var nodeTop="node-v24.99.0-"+(winHost?"win-x64":"linux-x64");
+  var nodeArchive=Archive(new(){[nodeTop+(winHost?"/node.exe":"/bin/node")]="fake-node",[nodeTop+(winHost?"/node_modules/npm/bin/npm-cli.js":"/lib/node_modules/npm/bin/npm-cli.js")]="npm"});
+  string Hex(byte[] data,bool sha512)=>Convert.ToHexString(sha512?System.Security.Cryptography.SHA512.HashData(data):System.Security.Cryptography.SHA256.HashData(data)).ToLowerInvariant();
+  var dotnetUrl="https://builds.dotnet.microsoft.com/dotnet/Sdk/10.9.9/dotnet-sdk-10.9.9-"+(winHost?"win-x64.zip":"linux-x64.tar.gz");
+  string DotnetJson(string hash)=>System.Text.Json.JsonSerializer.Serialize(new{latest_sdk="10.9.9"}).Replace("latest_sdk","latest-sdk").TrimEnd('}')+",\"releases\":[{\"sdk\":{\"version\":\"10.9.9\",\"files\":[{\"rid\":\""+(winHost?"win-x64":"linux-x64")+"\",\"name\":\""+(winHost?"dotnet-sdk-win-x64.zip":"dotnet-sdk-linux-x64.tar.gz")+"\",\"url\":\""+dotnetUrl+"\",\"hash\":\""+hash+"\"}]}}]}";
+  var gitArchive=ZipOf(new(){["cmd/git.exe"]="fake-git"});
+  var gitUrl="https://github.com/git-for-windows/git/releases/download/v9.9.9.windows.1/MinGit-9.9.9-64-bit.zip";
+  var toolHandler=new ToolHandler();
+  toolHandler.Add(Toolchain.DotnetMetadata,DotnetJson(Hex(dotnetArchive,true)));toolHandler.Add(dotnetUrl,dotnetArchive);
+  toolHandler.Add(Toolchain.NodeIndex+"SHASUMS256.txt",Hex(nodeArchive,false)+"  "+nodeTop+(winHost?".zip":".tar.gz")+"\n");toolHandler.Add(Toolchain.NodeIndex+nodeTop+(winHost?".zip":".tar.gz"),nodeArchive);
+  toolHandler.Add(Toolchain.GitReleases,"{\"tag_name\":\"v9.9.9.windows.1\",\"assets\":[{\"name\":\"MinGit-9.9.9-64-bit.zip\",\"browser_download_url\":\""+gitUrl+"\",\"digest\":\"sha256:"+Hex(gitArchive,false)+"\"}]}");toolHandler.Add(gitUrl,gitArchive);
+  var toolConfigPath=Path.Combine(btRoot,"tools-panel.json");PanelConfig.Save(toolConfigPath,btConfig);
+  using var toolService=new BundleToolsService(btConfig,toolConfigPath,()=>null,new HttpClient(toolHandler));
+  toolService.ApplySettings("{\"enabled\":true,\"sourcesEnabled\":true}");
+  async Task<BundleJob> ToolDone(BundleJob job){for(var i=0;i<400&&toolService.Jobs.Get(job.Id)!.State=="running";i++)await Task.Delay(25);return toolService.Jobs.Get(job.Id)!;}
+  var dotnetJob=await ToolDone(toolService.ToolInstall("{\"id\":\"dotnet\"}"));
+  Check(dotnetJob.State=="succeeded"&&toolService.Tools.DotnetExe is not null&&toolService.Tools.Status().First(t=>t.Id=="dotnet") is {Installed:true,Version:"10.9.9"},".NET SDK is downloaded, verified and installed");
+  var nodeJob=await ToolDone(toolService.ToolInstall("{\"id\":\"node\"}"));
+  Check(nodeJob.State=="succeeded"&&toolService.Tools.NodeExe is not null&&toolService.Tools.NpmCli is not null&&toolService.Tools.Status().First(t=>t.Id=="node").Version=="24.99.0","Node.js is installed without its wrapping folder");
+  if(winHost){var gitJob=await ToolDone(toolService.ToolInstall("{\"id\":\"git\"}"));Check(gitJob.State=="succeeded"&&toolService.Tools.GitExe is not null&&toolService.Tools.Status().First(t=>t.Id=="git").Version=="9.9.9.windows.1","MinGit is installed on Windows");}
+  Environment.SetEnvironmentVariable("REPLAY_PANEL_TEST_SECRET","do-not-leak");
+  var buildEnv=toolService.Tools.BuildEnvironment();
+  Check(!buildEnv.ContainsKey("REPLAY_PANEL_TEST_SECRET")&&!buildEnv.Values.Any(v=>v.Contains("do-not-leak"))&&buildEnv["DOTNET_CLI_TELEMETRY_OPTOUT"]=="1"&&buildEnv["PATH"].Contains(toolService.Tools.DotnetRoot)&&buildEnv["NUGET_PACKAGES"].StartsWith(BundleLayout.Toolchain(toolConfigPath)),"build tools get a scrubbed, panel-owned environment");
+  toolHandler.Add(dotnetUrl,Archive(new(){["dotnet-fake"]="tampered"}));
+  var tampered2=await ToolDone(toolService.ToolInstall("{\"id\":\"dotnet\"}"));
+  Check(tampered2.State=="failed"&&tampered2.Error=="bundleTools.toolHash"&&toolService.Tools.Status().First(t=>t.Id=="dotnet").Version=="10.9.9","a download with a wrong hash is rejected and the installed tool stays intact");
+  toolService.ToolRemove("{\"id\":\"node\"}");Check(toolService.Tools.NodeExe is null,"a managed tool can be removed");
+  Reject(()=>toolService.ToolInstall("{\"id\":\"../../evil\"}"),"unknown tool ids are refused");
+  Check((await toolService.Tools.LatestVersionsAsync(CancellationToken.None))["dotnet"]=="10.9.9","latest tool versions are read from the official metadata on demand");
+ }
  Console.WriteLine(passed+" core checks passed");
 }finally{Directory.Delete(root,true);}
+sealed class ToolHandler:HttpMessageHandler{
+ readonly Dictionary<string,byte[]> responses=new(StringComparer.Ordinal);
+ public void Add(string url,string text)=>responses[url]=System.Text.Encoding.UTF8.GetBytes(text);
+ public void Add(string url,byte[] bytes)=>responses[url]=bytes;
+ protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct)=>Task.FromResult(responses.TryGetValue(request.RequestUri!.ToString(),out var bytes)?new HttpResponseMessage(System.Net.HttpStatusCode.OK){Content=new ByteArrayContent(bytes)}:new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+}

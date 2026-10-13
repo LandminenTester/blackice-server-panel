@@ -11,11 +11,14 @@ public sealed class BundleToolsService : IDisposable
     private readonly string configPath;
     private readonly Func<BundleManager?> bundles;
 
-    public BundleToolsService(PanelConfig config, string configPath, Func<BundleManager?> bundles)
+    public BundleToolsService(PanelConfig config, string configPath, Func<BundleManager?> bundles, HttpClient? http = null)
     {
         this.config = config;
         this.configPath = Path.GetFullPath(configPath);
         this.bundles = bundles;
+        var client = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(45) };
+        if (http is null) client.DefaultRequestHeaders.UserAgent.ParseAdd("BlackICE-Panel/" + PanelUpdates.RunningVersion);
+        Tools = new Toolchain(BundleLayout.Toolchain(this.configPath), client);
         Secrets = new SecretStore(BundleLayout.StateDir(this.configPath));
         Redactor = new Redactor();
         Jobs = new BundleJobs(BundleLayout.Jobs(this.configPath), Redactor);
@@ -23,6 +26,7 @@ public sealed class BundleToolsService : IDisposable
             try { if (account.TokenProtected.Length > 0) Redactor.Add(Secrets.Unprotect(account.TokenProtected)); } catch (Exception e) when (e is InvalidOperationException or FormatException) { }
     }
 
+    public Toolchain Tools { get; }
     public SecretStore Secrets { get; }
     public Redactor Redactor { get; }
     public BundleJobs Jobs { get; }
@@ -53,6 +57,7 @@ public sealed class BundleToolsService : IDisposable
             config.BundleTools.CommitName,
             config.BundleTools.CommitEmail,
         },
+        toolchain = Tools.Status(),
         sourceFolder = BundleLayout.SourceFolder,
         uploadMaxMb = config.BundleTools.MaxUploadMb,
         job = Jobs.Current,
@@ -198,6 +203,36 @@ public sealed class BundleToolsService : IDisposable
                 try { File.Delete(zip); } catch (IOException) { }
             }
         });
+    }
+
+    private sealed record ToolRef(string Id);
+
+    private void RequireSources()
+    {
+        RequireEnabled();
+        if (!config.BundleTools.SourcesEnabled) throw new InvalidOperationException("bundleTools.disabled");
+    }
+
+    public BundleJob ToolInstall(string json)
+    {
+        RequireSources();
+        var id = (JsonSerializer.Deserialize<ToolRef>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid")).Id;
+        if (id is not ("git" or "dotnet" or "node")) throw new InvalidOperationException("bundleTools.tool");
+        return Jobs.Start("tool-install", id, ctx => Tools.InstallAsync(id, ctx));
+    }
+
+    public object ToolRemove(string json)
+    {
+        RequireSources();
+        if (Jobs.Busy) throw new InvalidOperationException("bundleTools.busy");
+        Tools.Remove((JsonSerializer.Deserialize<ToolRef>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid")).Id);
+        return Status();
+    }
+
+    public async Task<object> ToolLatest(CancellationToken ct)
+    {
+        RequireSources();
+        return await Tools.LatestVersionsAsync(ct);
     }
 
     public object JobInfo(string id)
