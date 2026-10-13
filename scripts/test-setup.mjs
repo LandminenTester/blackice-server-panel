@@ -12,15 +12,20 @@ await mkdir(resolve(fixture,'cfg'),{recursive:true});await writeFile(resolve(fix
 await copyFile(resolve(root,'.local/fixture/REServer'+suffix),resolve(fixture,'REServer'+suffix));
 let output='',key='',csrf='',cookies=new Map(),count=0;
 const supervisor=spawn(resolve(root,build,'supervisor/Supervisor'+suffix),[configPath],{env:{...process.env,REPLAY_PANEL_NO_TERMINAL:'1'},stdio:['ignore','pipe','inherit']});
-supervisor.stdout.on('data',data=>{output+=data;key=output.match(/Setup key: ([A-F0-9]+)/)?.[1]??'';});
+supervisor.stdout.on('data',data=>{output+=data;key=[...output.matchAll(/Setup key: ([A-Z0-9]+)/g)].pop()?.[1]??'';});
 const web=spawn(resolve(root,build,'web/Web'+suffix),[],{cwd:resolve(root,build,'web'),env:{...process.env,REPLAY_PANEL_CONFIG:configPath},stdio:'ignore'});
 async function request(route,body){const response=await fetch(config.url+route,{method:body?'POST':'GET',headers:{Cookie:[...cookies].map(x=>x.join('=')).join('; '),'Content-Type':'application/json','X-CSRF':csrf},body:body?JSON.stringify(body):undefined});for(const cookie of response.headers.getSetCookie()){const [name,...value]=cookie.split(';')[0].split('=');cookies.set(name,value.join('='));}return response;}
 function check(value,name){assert(value,name);console.log('PASS '+name);count++;}
 try{
 for(let i=0;i<80;i++){try{const response=await request('/api/session');csrf=(await response.json()).csrf;if(key)break;}catch{}await new Promise(r=>setTimeout(r,200));}
 check(!(await(await request('/api/bootstrap')).json()).configured,'fresh host boots into protected setup');
-check(key.length===6,'setup key has 6 characters');
-check((await(await request('/api/setup/console')).json()).join(' ').includes('Setup key: '+key),'setup key shown in web terminal');
+check(key.length===8,'setup key has 8 characters');
+check((await(await request('/api/setup/console')).json()).join(' ').includes('Setup key: '+key),'setup key shown in web terminal for local requests');
+const proxied=await(await fetch(config.url+'/api/setup/console',{headers:{'X-Forwarded-For':'203.0.113.9'}})).json();check(!proxied.join(' ').includes(key)&&proxied.join(' ').includes('hidden'),'setup key hidden from proxied requests');
+const lowercase=key.toLowerCase();check((await request('/api/setup/validate',{key:lowercase,serverRoot:'relative',backend:config.backend})).status===409,'lowercase key accepted before path validation');
+const oldKey=key;for(let i=0;i<5;i++)await request('/api/setup/validate',{key:'WRONG'+i,serverRoot:fixture,backend:config.backend});
+for(let i=0;i<40&&key===oldKey;i++)await new Promise(r=>setTimeout(r,100));
+check(key!==oldKey&&key.length===8,'setup key regenerated after repeated wrong keys');
 check((await request('/api/setup/pick',{key:'wrong',path:''})).status===409,'wrong setup key rejected');
 check(String((await(await request('/api/bootstrap')).json()).defaultServerRoot).endsWith('server'),'default server folder offered by bootstrap');
 check((await request('/api/setup/validate',{key,serverRoot:'relative',backend:config.backend})).status===409,'relative path rejected');
@@ -41,6 +46,9 @@ await mkdir(resolve(fixture,'logs'),{recursive:true});await writeFile(resolve(fi
 const listed=await(await request('/api/log-files')).json();check(listed.length===1&&listed[0].started?.startsWith('2026-10-12T09:03:05'),'log archive lists server starts');
 check((await(await request('/api/log-files/server_2026-10-12T09-03-05Z_cl0.txt')).text())==='hello log','log file readable');
 check((await request('/api/log-files/..%2Fpanel.json')).status===404,'log path traversal rejected');
+const toml=['[General]','description = "Demo \\"mode\\" bundle"','author = "replay.re"','version = "1.0.0"','','[Meta]','config_version = "alpha_playtest"',''].join(String.fromCharCode(10));await mkdir(resolve(fixture,'data/ugc/demo'),{recursive:true});await writeFile(resolve(fixture,'data/ugc/demo/config.toml'),toml);
+const bundleList=await(await request('/api/bundles')).json();const demo=bundleList.bundles?.find(b=>b.name==='demo');check(demo?.author==='replay.re'&&demo?.version==='1.0.0'&&demo?.description==='Demo "mode" bundle','bundle author, version and description are read from config.toml');
+const current=await request('/api/log-files-current');check(current.ok&&(await current.text())==='hello log'&&/attachment/i.test(current.headers.get('content-disposition')??''),'current server start log downloads as one file');
 const zip=Buffer.from(await(await request('/api/log-files.zip')).arrayBuffer());check(zip.subarray(0,2).toString()==='PK'&&zip.includes('server_2026-10-12T09-03-05Z_cl0.txt'),'all logs download as ZIP');
 const cfgBefore=await(await request('/api/server-config')).json();check(cfgBefore.exists&&cfgBefore.values.autoUpdate===false,'server config readable after setup');
 const saved=JSON.parse(await readFile(configPath));check(saved.passwordHash&&saved.passwordSalt&&!JSON.stringify(saved).includes(account.password),'password is stored only as salted hash');

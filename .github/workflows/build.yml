@@ -112,6 +112,8 @@ jobs:
     permissions:
       contents: write
       packages: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -135,7 +137,16 @@ jobs:
           docker build -t ghcr.io/landminentester/blackice-server-panel:$VERSION .
           docker push ghcr.io/landminentester/blackice-server-panel:$VERSION
           docker save ghcr.io/landminentester/blackice-server-panel:$VERSION | gzip > blackice-server-panel-docker.tar.gz
+      - name: Checksums
+        run: sha256sum blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz > SHA256SUMS.txt
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            blackice-server-panel-win-x64.zip
+            blackice-server-panel-linux-x64.tar.gz
+            blackice-server-panel-docker.tar.gz
       - name: Publish packages
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz --repo "$GITHUB_REPOSITORY" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --generate-notes

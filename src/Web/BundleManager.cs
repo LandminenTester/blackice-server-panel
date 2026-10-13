@@ -1,7 +1,7 @@
 using ReplayPanel.Shared;
 using System.Text.Json;
 namespace ReplayPanel.Web;
-public sealed record BundleInfo(string Name,string State);
+public sealed record BundleInfo(string Name,string State,string? Author=null,string? Description=null,string? Version=null);
 public sealed record BundleList(bool Ok,BundleInfo[] Bundles,bool CanControl,DateTimeOffset CheckedAt,string? Error=null);
 public sealed class BundleManager(PipeClient pipe)
 {

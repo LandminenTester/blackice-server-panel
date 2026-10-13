@@ -8,21 +8,39 @@ public sealed record InstallInput(string Key, string ServerRoot, string Backend)
 public sealed record InstallJob(string Id, string State, string Phase, long Bytes, string? Error = null);
 public sealed class SetupService(PanelConfig config, string configPath)
 {
-    private readonly string key = Convert.ToHexString(RandomNumberGenerator.GetBytes(3));
+    // 8 characters from an unambiguous alphabet (no 0/O/1/I/L).
+    private const string KeyAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    private const int MaxKeyFailures = 5;
+    private readonly object keyLock = new();
+    private string key = NewKey();
+    private int keyFailures;
+    private static string NewKey() => string.Create(8, 0, (span, _) => { for (var i = 0; i < span.Length; i++) span[i] = KeyAlphabet[RandomNumberGenerator.GetInt32(KeyAlphabet.Length)]; });
     private readonly SemaphoreSlim completion = new(1);
     private readonly object sync = new();
     private CancellationTokenSource? cancellation;
     private InstallJob? job;
     public void PrintKey() { if (!config.Configured) Console.WriteLine("Setup key: " + key); }
-    public string[] Banner()
+    /// <summary>The key is shown in the browser terminal only to a genuinely local request; remote visitors are pointed at the supervisor console.</summary>
+    public string[] Banner(bool local)
     {
         if (config.Configured) throw new InvalidOperationException("setup.completed");
-        return ["BlackICE supervisor ready.", "Setup key: " + key];
+        lock (keyLock)
+            return local ? ["BlackICE supervisor ready.", "Setup key: " + key] : ["BlackICE supervisor ready.", "Setup key hidden for remote access. Read it in the Supervisor console or in .local/supervisor.log."];
     }
     public void Authorize(string supplied)
     {
         if (config.Configured) throw new InvalidOperationException("setup.completed");
-        if (!CryptographicOperations.FixedTimeEquals(System.Text.Encoding.UTF8.GetBytes(supplied ?? ""), System.Text.Encoding.UTF8.GetBytes(key))) throw new InvalidOperationException("setup.key");
+        var candidate = (supplied ?? "").Trim().ToUpperInvariant();
+        lock (keyLock)
+        {
+            if (CryptographicOperations.FixedTimeEquals(System.Text.Encoding.UTF8.GetBytes(candidate), System.Text.Encoding.UTF8.GetBytes(key))) { keyFailures = 0; return; }
+            if (++keyFailures < MaxKeyFailures) throw new InvalidOperationException("setup.key");
+            // Brute-force protection: too many wrong guesses invalidate the key and print a fresh one to the supervisor console only.
+            key = NewKey(); keyFailures = 0;
+            Console.WriteLine("Too many wrong setup keys - the key was regenerated.");
+            Console.WriteLine("Setup key: " + key);
+            throw new InvalidOperationException("setup.locked");
+        }
     }
     private static string Root(string path)
     {
@@ -71,7 +89,8 @@ public sealed class SetupService(PanelConfig config, string configPath)
         var magic = new byte[4]; file.ReadExactly(magic);
         if (backend == "windows" ? magic[0] != 'M' || magic[1] != 'Z' : magic[0] != 127 || magic[1] != 'E' || magic[2] != 'L' || magic[3] != 'F') throw new InvalidOperationException("server.platform");
         if (backend == "linux" && !OperatingSystem.IsWindows()) {
-            if ((File.GetUnixFileMode(exe) & UnixFileMode.UserExecute) == 0) throw new InvalidOperationException("server.executable");
+            var mode = File.GetUnixFileMode(exe);
+            if ((mode & UnixFileMode.UserExecute) == 0 || (mode & (UnixFileMode.OtherWrite | UnixFileMode.GroupWrite)) != 0) throw new InvalidOperationException("server.executable");
             var start = new System.Diagnostics.ProcessStartInfo("ldd") { RedirectStandardOutput = true, RedirectStandardError = true };
             start.ArgumentList.Add(exe); start.Environment["LD_LIBRARY_PATH"] = path;
             using var process = System.Diagnostics.Process.Start(start)!;

@@ -43,6 +43,8 @@ builder.Services.AddRateLimiter(o =>
     o.RejectionStatusCode = 429;
     o.AddPolicy("login", context => RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "local",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    o.AddPolicy("setup", context => RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "local",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(o => {
     o.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
@@ -77,15 +79,15 @@ app.UseDefaultFiles(); app.UseStaticFiles();
 app.MapGet("/api/session", (HttpContext c, IAntiforgery antiforgery) =>
     Results.Ok(new { authenticated = c.User.Identity?.IsAuthenticated == true, username=c.User.Identity?.Name, permissions=c.User.FindAll("permission").Select(x=>x.Value), csrf = antiforgery.GetAndStoreTokens(c).RequestToken }));
 app.MapGet("/api/bootstrap", async (PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bootstrap"), ct)));
-app.MapGet("/api/setup/console", async (PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("setup-banner"), ct)));
+app.MapGet("/api/setup/console", async (HttpContext c, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("setup-banner", IsLocalRequest(c) ? "local" : "remote"), ct))).RequireRateLimiting("setup");
 foreach(var route in new[]{"validate","install","finish"}) {
     var action=route;
-    app.MapPost("/api/setup/"+route,async (JsonElement body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("setup-"+action,body.GetRawText()),ct)));
+    app.MapPost("/api/setup/"+route,async (JsonElement body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("setup-"+action,body.GetRawText()),ct))).RequireRateLimiting("setup");
 }
-app.MapPost("/api/setup/pick",async (JsonElement body,HttpContext c,PipeClient pipe,CancellationToken ct)=>System.Net.IPAddress.IsLoopback(c.Connection.RemoteIpAddress??System.Net.IPAddress.None)?Data(await pipe.Call(new("setup-pick",body.GetRawText()),ct)):Results.Json(new Reply(false,"pick.unavailable"),statusCode:409));
-app.MapPost("/api/setup/pick-status",async (SetupKey body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("setup-pick-status",body.Key),ct)));
-app.MapPost("/api/setup/job",async (SetupKey body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("setup-job",body.Key),ct)));
-app.MapPost("/api/setup/cancel",async (SetupKey body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("setup-cancel",body.Key),ct)));
+app.MapPost("/api/setup/pick",async (JsonElement body,HttpContext c,PipeClient pipe,CancellationToken ct)=>IsLocalRequest(c)?Data(await pipe.Call(new("setup-pick",body.GetRawText()),ct)):Results.Json(new Reply(false,"pick.unavailable"),statusCode:409)).RequireRateLimiting("setup");
+app.MapPost("/api/setup/pick-status",async (SetupKey body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("setup-pick-status",body.Key),ct))).RequireRateLimiting("setup");
+app.MapPost("/api/setup/job",async (SetupKey body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("setup-job",body.Key),ct))).RequireRateLimiting("setup");
+app.MapPost("/api/setup/cancel",async (SetupKey body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("setup-cancel",body.Key),ct))).RequireRateLimiting("setup");
 app.MapPost("/api/login", async (Login body, HttpContext c, PipeClient pipe) =>
 {
     if (body.Password is null || body.Password.Length > 256) return Results.Unauthorized();
@@ -110,6 +112,12 @@ app.MapGet("/api/log-files",(HttpContext c)=>{
     var dir=LogsDirectory(configPath);
     var files=Directory.Exists(dir)?new DirectoryInfo(dir).EnumerateFiles().OrderByDescending(f=>f.LastWriteTimeUtc).Select(f=>new{name=f.Name,size=f.Length,modified=f.LastWriteTimeUtc,started=LogStart(f)}).ToArray():[];
     return Results.Json(files);
+}).RequireAuthorization("logs.read");
+app.MapGet("/api/log-files-current",(HttpContext c)=>{
+    var dir=LogsDirectory(configPath);if(!Directory.Exists(dir))return Results.NotFound();
+    var file=new DirectoryInfo(dir).EnumerateFiles().OrderByDescending(f=>LogStart(f)??f.LastWriteTimeUtc).FirstOrDefault();if(file is null)return Results.NotFound();
+    var stream=new FileStream(file.FullName,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete);
+    return Results.File(stream,"text/plain; charset=utf-8",file.Name);
 }).RequireAuthorization("logs.read");
 app.MapGet("/api/log-files/{name}",(string name)=>{
     var file=SafeLog(configPath,name);if(file is null)return Results.NotFound();
@@ -144,8 +152,8 @@ app.MapPost("/api/server/{action}", async (string action, HttpContext c, BundleM
 app.MapPost("/api/command", async (Command body, BundleManager bundles, CancellationToken ct) =>
     Result(await bundles.Command(new("command", body.Text), ct))).RequireAuthorization("console.write");
 app.MapPost("/api/settings", async (Settings body, HttpContext c, PipeClient pipe, CancellationToken ct) => {
-    if((body.ShutdownMode is not null||body.AutoStartServer is not null)&&!Can(c,"settings.write"))return Results.Forbid();
-    return Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode,AutoStartServer:body.AutoStartServer,Locale:body.Locale), ct));
+    if((body.ShutdownMode is not null||body.AutoStartServer is not null||body.AutoUpdateChecks is not null)&&!Can(c,"settings.write"))return Results.Forbid();
+    return Result(await pipe.Call(new("settings", ShutdownMode: body.ShutdownMode,AutoStartServer:body.AutoStartServer,Locale:body.Locale,AutoUpdateChecks:body.AutoUpdateChecks), ct));
 }).RequireAuthorization();
 app.MapGet("/api/server-name",async(PipeClient pipe,CancellationToken ct)=>{
     var reply=await pipe.Call(new("server-config"),ct);
@@ -187,6 +195,11 @@ app.Lifetime.ApplicationStopping.Register(() =>
     catch (Exception) { app.Logger.LogWarning("Supervisor could not be notified during webhost shutdown."); }
 });
 await app.RunAsync();
+static bool IsLocalRequest(HttpContext c){
+    if(!System.Net.IPAddress.IsLoopback(c.Connection.RemoteIpAddress??System.Net.IPAddress.None))return false;
+    foreach(var header in new[]{"X-Forwarded-For","X-Forwarded-Host","X-Forwarded-Proto","X-Real-IP","Forwarded","Via"})if(c.Request.Headers.ContainsKey(header))return false;
+    return c.Request.Host.Host is "localhost" or "127.0.0.1" or "[::1]" or "::1";
+}
 static string LogsDirectory(string configPath)=>Path.Combine(PanelConfig.Load(configPath).ServerRoot,"logs");
 static string? SafeLog(string configPath,string name){
     if(!System.Text.RegularExpressions.Regex.IsMatch(name,@"\A[A-Za-z0-9._-]{1,128}\z"))return null;
@@ -206,7 +219,7 @@ static async Task<UserView?> CurrentUser(ClaimsPrincipal principal,PipeClient pi
 record UserDelete(string Username);
 record Login(string? Password, string? Username, bool? Remember);
 record Command(string? Text);
-record Settings(string? ShutdownMode, bool? AutoStartServer, string? Locale);
+record Settings(string? ShutdownMode, bool? AutoStartServer, string? Locale, bool? AutoUpdateChecks);
 public partial class Program { }
 
 record SetupKey(string Key);

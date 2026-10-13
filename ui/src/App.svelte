@@ -20,10 +20,11 @@
     serverRoot: string;
     shutdownMode: string;
     autoStartServer: boolean;
+    autoUpdateChecks?: boolean;
     detail?: string;
     pathIssue?: string;
   };
-  type Bundle = { name: string; state: string };
+  type Bundle = { name: string; state: string; author?: string; description?: string; version?: string };
   type Job = {
     id: string;
     state: string;
@@ -87,11 +88,12 @@
   async function loadVersions() {
     if (!can("settings.write")) return;
     try {
+      const auto = ((await request("/api/status")).status?.autoUpdateChecks ?? true) !== false;
       let p = await request("/api/updates");
-      if (!p.latest) p = await request("/api/updates/check", {});
+      if (!p.latest && auto) p = await request("/api/updates/check", {});
       panelUpdate = !!p.available;
       let v = await request("/api/server-updates");
-      if (!v.latest) v = await request("/api/server-updates/check", {});
+      if (!v.latest && auto) v = await request("/api/server-updates/check", {});
       serverBuild = v.current ?? "";
       serverUpdate = !!(v.current && v.latest && v.current !== v.latest);
     } catch {
@@ -321,6 +323,13 @@
   async function autoStart(value: boolean) {
     await run(async () => {
       const data = await request("/api/settings", { autoStartServer: value });
+      status = data.status;
+      notice = "saved";
+    });
+  }
+  async function updateChecks(value: boolean) {
+    await run(async () => {
+      const data = await request("/api/settings", { autoUpdateChecks: value });
       status = data.status;
       notice = "saved";
     });
@@ -892,6 +901,8 @@
                             : bundle.state) as "running" | "stopped" | "unknown"
                     ]}</span
                   >
+                  {#if bundle.version}<small class="bundle-meta">v{bundle.version}</small>{/if}{#if bundle.author}<small class="bundle-meta">{t.bundleBy} {bundle.author}</small>{/if}
+                  {#if bundle.description}<p class="muted bundle-desc">{bundle.description}</p>{/if}
                 </div>
                 <div
                   class="actions"
@@ -940,7 +951,7 @@
               >{/each}
           </div>
           {#if settingsTab === "updates" && can("settings.write")}
-            <Updates {t} {request} installAllowed={can("users.manage")} onchanged={refreshVersions} />
+            <Updates {t} {request} installAllowed={can("users.manage")} onchanged={refreshVersions} autoCheck={status?.autoUpdateChecks !== false} />
             <ServerUpdates {t} {locale} {request} installAllowed={can("users.manage")} onchanged={refreshVersions} />
           {:else if settingsTab === "bridge" && can("settings.write")}
             <Bridge {t} {locale} {request} settings {backend} />
@@ -953,6 +964,11 @@
           <Toggle checked={status?.autoStartServer ?? true} label={t.autoStart} disabled={busy || !connected || !can("settings.write")} onchange={autoStart} />
           <p class="muted">{t.autoStartHint}</p>
           </section>
+          {#if can("settings.write")}<section class="update-panel general-panel">
+          <h2>{t.autoUpdateChecks}</h2>
+          <Toggle checked={status?.autoUpdateChecks ?? true} label={t.autoUpdateChecks} disabled={busy || !connected} onchange={updateChecks} />
+          <p class="muted">{t.autoUpdateChecksHint}</p>
+          </section>{/if}
           <section class="update-panel general-panel">
           <h2>{t.shutdown}</h2>
           <Select

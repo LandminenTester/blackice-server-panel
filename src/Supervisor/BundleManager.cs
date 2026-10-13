@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 using ReplayPanel.Shared;
 namespace ReplayPanel.Supervisor;
 
-public sealed record BundleInfo(string Name, string State);
+public sealed record BundleInfo(string Name, string State, string? Author = null, string? Description = null, string? Version = null);
 public sealed record BundleList(bool Ok, BundleInfo[] Bundles, bool CanControl, DateTimeOffset CheckedAt, string? Error = null);
 
 // Console queries and commands share a gate. Markers delimit real server output, not terminal input echo.
@@ -20,7 +20,7 @@ public sealed partial class BundleManager(PipeClient pipe, PanelConfig config)
     public async Task<BundleList> List(CancellationToken ct)
     {
         await gate.WaitAsync(ct);
-        try { return await ListCore(ct); }
+        try { return Enrich(await ListCore(ct)); }
         finally { gate.Release(); }
     }
     public async Task<BundleList> Action(string name, string action, CancellationToken ct)
@@ -39,7 +39,7 @@ public sealed partial class BundleManager(PipeClient pipe, PanelConfig config)
             var result = await ListCore(ct);
             if (!result.Ok || result.Bundles.SingleOrDefault(x => x.Name == name)?.State != (action == "stop" ? "stopped" : "running"))
                 throw new InvalidOperationException(result.Error ?? "bundle.timeout");
-            return result;
+            return Enrich(result);
         }
         finally { gate.Release(); }
     }
@@ -180,6 +180,33 @@ public sealed partial class BundleManager(PipeClient pipe, PanelConfig config)
     }
     [GeneratedRegex(@"\[server_ugc\] (Started|Restarted|Stopped) bundle ([A-Za-z0-9][A-Za-z0-9_.-]{0,127})(?:\s|$)")] private static partial Regex Lifecycle();
     [GeneratedRegex(@"\[server_ugc\] (?:Discovered new|Removed old) UgcBundle\s*'([A-Za-z0-9][A-Za-z0-9_.-]{0,127})'")] private static partial Regex Discovery();
+    private BundleList Enrich(BundleList list) => list with { Bundles = list.Bundles.Select(b => ReadMeta(b)).ToArray() };
+    /// <summary>Reads the optional [General] author, description and version keys from the bundle's config.toml.</summary>
+    private BundleInfo ReadMeta(BundleInfo bundle)
+    {
+        try
+        {
+            var path = Path.Combine(config.ServerRoot, "data", "ugc", bundle.Name, "config.toml");
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Length > 65536) return bundle;
+            string? author = null, description = null, version = null; var general = false;
+            foreach (var raw in File.ReadLines(path))
+            {
+                var line = raw.Trim();
+                if (line.StartsWith('[')) { general = line.TrimEnd().Equals("[General]", StringComparison.OrdinalIgnoreCase); continue; }
+                if (!general) continue;
+                var m = TomlString().Match(line);
+                if (!m.Success) continue;
+                var value = Clean(m.Groups[2].Value.Replace("\\\"", "\"").Replace("\\\\", "\\"));
+                switch (m.Groups[1].Value) { case "author": author = Limit(value, 80); break; case "description": description = Limit(value, 300); break; case "version": version = Limit(value, 40); break; }
+            }
+            return bundle with { Author = author, Description = description, Version = version };
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return bundle; }
+    }
+    private static string Clean(string value) => new(value.Where(c => !char.IsControl(c)).ToArray());
+    private static string? Limit(string value, int length) => value.Length == 0 ? null : value.Length > length ? value[..length] : value;
+    [GeneratedRegex("^(author|description|version)\\s*=\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*(?:#.*)?$")] private static partial Regex TomlString();
     private string[] Discover()
     {
         var directory = Path.Combine(config.ServerRoot, "data", "ugc");

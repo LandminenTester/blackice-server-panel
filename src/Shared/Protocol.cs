@@ -1,9 +1,9 @@
 using System.Text.Json;
 using System.Security.Cryptography;
 namespace ReplayPanel.Shared;
-public sealed record Request(string Action, string? Command = null, string? ShutdownMode = null, bool? AutoStartServer = null, string? Locale = null);
+public sealed record Request(string Action, string? Command = null, string? ShutdownMode = null, bool? AutoStartServer = null, string? Locale = null, bool? AutoUpdateChecks = null);
 public sealed record Reply(bool Ok, string? Error = null, ServerStatus? Status = null, string[]? Lines = null);
-public sealed record ServerStatus(string State, int? Pid, string ServerRoot, string ShutdownMode, string? Detail = null, bool AutoStartServer = true, string? PathIssue = null);
+public sealed record ServerStatus(string State, int? Pid, string ServerRoot, string ShutdownMode, string? Detail = null, bool AutoStartServer = true, string? PathIssue = null, bool AutoUpdateChecks = true);
 public sealed class PanelConfig
 {
     public List<PanelUser>? Users { get; set; }
@@ -24,6 +24,7 @@ public sealed class PanelConfig
     public string ShutdownMode { get; set; } = "keep-running";
     public int StopTimeoutSeconds { get; set; } = 30;
     public bool AutoStartServer { get; set; } = true;
+    public bool AutoUpdateChecks { get; set; } = true;
     public bool AutoRestart { get; set; }
     public string PasswordHash { get; set; } = "";
     public string PasswordSalt { get; set; } = "";

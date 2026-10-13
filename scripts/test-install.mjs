@@ -13,7 +13,7 @@ const target=backend==='windows'?resolve(folder,'Replay Download'):'/server/down
 if(backend==='windows') {
  await writeFile(configPath,JSON.stringify({schemaVersion:2,autoStartServer:false,gamePort:30770,voicePort:30771,pipeName:'panel-install-'+process.pid,url}));
  supervisor=spawn(resolve(root,build,'supervisor/Supervisor.exe'),[configPath],{env:{...process.env,REPLAY_PANEL_NO_TERMINAL:'1'},stdio:['ignore','pipe','inherit']});
- supervisor.stdout.on('data',chunk=>{output+=chunk;key=output.match(/Setup key: ([A-F0-9]+)/)?.[1]??'';});
+ supervisor.stdout.on('data',chunk=>{output+=chunk;key=[...output.matchAll(/Setup key: ([A-Z0-9]+)/g)].pop()?.[1]??'';});
  restartWeb=()=>{web=spawn(resolve(root,build,'web/Web.exe'),[],{cwd:resolve(root,build,'web'),env:{...process.env,REPLAY_PANEL_CONFIG:configPath},stdio:'ignore'});};restartWeb();
  stopWeb=async()=>{const previous=web;execFileSync('node',[resolve(root,'scripts/control.mjs'),'stop-web'],{cwd:root,env:{...process.env,REPLAY_PANEL_CONFIG:configPath},stdio:'ignore'});if(previous.exitCode===null)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Webhost shutdown timed out')),10000);previous.once('exit',()=>{clearTimeout(timer);resolve();});});};
 } else {
@@ -34,7 +34,7 @@ if(backend==='windows') {
  restartWeb=()=>execFileSync('docker',['start',name+'-web'],{stdio:'ignore'});
  supervisor={kill(){if(backend==='docker'){try{const data=JSON.parse(execFileSync('docker',['exec',name+'-supervisor','cat','/test/state/panel.json'],{encoding:'utf8'}));if(/^[a-f0-9]{64}$/.test(data.containerId))execFileSync('docker',['rm','-f',data.containerId]);if(/^[a-f0-9]{32}$/.test(data.instanceId)){const ids=execFileSync('docker',['ps','-aq','--filter','label=replay.panel.instance='+data.instanceId],{encoding:'utf8'}).trim().split(/\s+/).filter(x=>/^[a-f0-9]{12,64}$/.test(x));if(ids.length)execFileSync('docker',['rm','-f',...ids]);try{execFileSync('docker',['network','disconnect','-f','blackice-bridge-'+data.instanceId,name+'-supervisor']);execFileSync('docker',['network','rm','blackice-bridge-'+data.instanceId]);}catch{}} }catch{}}execFileSync('docker',['rm','-f',name+'-supervisor']);}};
  web={kill(){execFileSync('docker',['rm','-f',name+'-web']);execFileSync('docker',['volume','rm',volume]);}};
- for(let i=0;i<30&&!key;i++){key=execFileSync('docker',['logs',name+'-supervisor'],{encoding:'utf8'}).match(/Setup key: ([A-F0-9]+)/)?.[1]??'';await new Promise(r=>setTimeout(r,200));}
+ for(let i=0;i<30&&!key;i++){key=execFileSync('docker',['logs',name+'-supervisor'],{encoding:'utf8'}).match(/Setup key: ([A-Z0-9]+)/)?.[1]??'';await new Promise(r=>setTimeout(r,200));}
 }
 async function req(path,body){const response=await fetch(url+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-CSRF':csrf,Cookie:[...cookies].map(x=>x.join('=')).join('; ')},body:body?JSON.stringify(body):undefined});for(const c of response.headers.getSetCookie()){const [n,...v]=c.split(';')[0].split('=');cookies.set(n,v.join('='));}if(!response.ok)throw Error(await response.text());return response.json();}
 try{
