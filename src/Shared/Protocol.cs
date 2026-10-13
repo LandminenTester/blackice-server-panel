@@ -8,6 +8,7 @@ public sealed class PanelConfig
 {
     public List<PanelUser>? Users { get; set; }
     public BridgeSettings Bridge { get; set; } = new();
+    public BundleToolsSettings BundleTools { get; set; } = new();
     public int SchemaVersion { get; set; } = 2;
     public string DashboardName { get; set; } = "Unofficial BlackICE Server Webpanel";
     public string Username { get; set; } = "admin";
@@ -42,6 +43,10 @@ public sealed class PanelConfig
         var text = File.ReadAllText(file);
         var c = JsonSerializer.Deserialize<PanelConfig>(text, Json) ?? throw new InvalidOperationException("config.invalid");
         c.Bridge ??= new();
+        c.BundleTools ??= new();
+        c.BundleTools.Accounts ??= [];
+        c.BundleTools.KeepBackups = Math.Clamp(c.BundleTools.KeepBackups, 1, 20);
+        c.BundleTools.MaxUploadMb = Math.Clamp(c.BundleTools.MaxUploadMb, 1, 2048);
         if(c.Bridge.Port is <1024 or >65535||c.Bridge.RetentionDays is <1 or >30||c.Bridge.MaxMegabytes is <10 or >1000)throw new InvalidOperationException("config.invalid");
         if (!text.Contains("schemaVersion")) { if(!File.Exists(file+".v1.bak")) {try { File.Copy(file,file+".v1.bak",false); } catch(IOException) when(File.Exists(file+".v1.bak")) {} } c.SchemaVersion = 2; Save(file, c); }
         if (c.ServerRoot.Length > 0) c.ServerRoot = Path.GetFullPath(c.ServerRoot);
@@ -64,6 +69,30 @@ public sealed class PanelConfig
     }
     public bool VerifyPassword(string password) => Configured && CryptographicOperations.FixedTimeEquals(
         Rfc2898DeriveBytes.Pbkdf2(password, Convert.FromBase64String(PasswordSalt), 210000, HashAlgorithmName.SHA256, 32), Convert.FromBase64String(PasswordHash));
+}
+/// <summary>EXPERIMENTAL bundle tools (upload, source projects, builds). Everything is off unless Enabled is set.</summary>
+public sealed class BundleToolsSettings
+{
+    public bool Enabled { get; set; }
+    public bool UploadEnabled { get; set; } = true;
+    public bool SourcesEnabled { get; set; } = true;
+    public bool RestartAfterBuild { get; set; } = true;
+    public bool BuildUi { get; set; } = true;
+    public int KeepBackups { get; set; } = 3;
+    public int MaxUploadMb { get; set; } = 512;
+    public string CommitName { get; set; } = "BlackICE Panel";
+    public string CommitEmail { get; set; } = "panel@localhost";
+    public List<GitAccount> Accounts { get; set; } = [];
+}
+/// <summary>A hosted-git account (GitHub, GitLab, Gitea/Forgejo/Codeberg). The token is stored encrypted and never sent to the browser.</summary>
+public sealed class GitAccount
+{
+    public string Id { get; set; } = "";
+    public string Type { get; set; } = "github";
+    public string BaseUrl { get; set; } = "";
+    public string Label { get; set; } = "";
+    public string Username { get; set; } = "";
+    public string TokenProtected { get; set; } = "";
 }
 public sealed record BridgeSettings(bool Enabled=false,int Port=20774,int RetentionDays=7,int MaxMegabytes=100);
 public sealed record DiagnosticLine(long Seq,string StreamId,long? SourceSeq,string Source,string Module,string Text,DateTimeOffset ReceivedAt);

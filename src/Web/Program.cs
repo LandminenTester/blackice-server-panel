@@ -188,6 +188,7 @@ app.MapGet("/api/events", async (HttpContext c, PipeClient pipe) =>
         }
     } catch (OperationCanceledException) { } catch (IOException) { }
 }).RequireAuthorization();
+app.MapBundleTools();
 app.MapFallbackToFile("index.html");
 app.Lifetime.ApplicationStopping.Register(() =>
 {

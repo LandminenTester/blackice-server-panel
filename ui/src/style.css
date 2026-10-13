@@ -107,3 +107,4 @@ body::before{opacity:.5}
 .exp-tag{display:inline-block;padding:1px 6px;margin-left:6px;border:1px solid var(--yellow);color:var(--yellow);font-size:11px;line-height:1.4;text-transform:uppercase;letter-spacing:.04em;vertical-align:middle}
 .channel-row{display:flex;align-items:center;gap:12px;margin:12px 0;flex-wrap:wrap}.channel-row .select-wrap{min-width:220px}
 .exp-warning{color:var(--yellow)}
+.bundle-tools h2 .exp-tag{margin-left:10px}.bundle-tools-options h3{margin:18px 0 8px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}.bundle-tools-options .config-grid{margin-top:16px}

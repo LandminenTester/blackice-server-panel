@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 namespace ReplayPanel.Shared;
 public static class Permissions {
- public static readonly string[] All=["server.start","server.stop","server.restart","server.force-stop","console.read","console.write","logs.read","bundles.read","bundles.start","bundles.stop","bundles.restart","settings.write","users.manage"];
+ public static readonly string[] All=["server.start","server.stop","server.restart","server.force-stop","console.read","console.write","logs.read","bundles.read","bundles.start","bundles.stop","bundles.restart","bundles.upload","bundles.build","settings.write","users.manage"];
 }
 public sealed class PanelUser {
  public string Username {get;set;}="";

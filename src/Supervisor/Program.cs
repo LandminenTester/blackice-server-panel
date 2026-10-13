@@ -37,6 +37,7 @@ using var updates=new PanelUpdates(configPath);
 using var single=new FileStream(Path.Combine(Path.GetDirectoryName(configPath)!,"supervisor.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
 var setup=new SetupService(config,configPath);setup.PrintKey();
 IServerBackend? backend=null;BundleManager? bundles=null;PipeClient? adapter=null;
+using var bundleTools=new ReplayPanel.Supervisor.BundleTools.BundleToolsService(config,configPath,()=>bundles);
 await using var serverUpdates=new ServerUpdates(config,configPath,()=>backend);
 void Activate(){
     backend=new BridgeBackend(config,configPath);
@@ -115,6 +116,9 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
             case "webhost-stopping":if(config.ShutdownMode=="stop-server"&&backend?.Status().State=="running")await backend.StopAsync();reply=new(true);break;
             case "shutdown":if(backend?.Status().State=="running")throw new InvalidOperationException("server.running");await setup.StopInstallation();reply=new(true);shutdown.Cancel();break;
             case "bundles":if(bundles is null)throw new InvalidOperationException("setup.required");reply=new(true,Lines:[Enc(await bundles.List(timeout.Token))]);break;
+            case "bundle-tools-status":reply=new(true,Lines:[Enc(bundleTools.Status())]);break;
+            case "bundle-tools-settings":reply=new(true,Lines:[Enc(bundleTools.ApplySettings(request.Command!))]);break;
+            case "bundle-tools-job":reply=new(true,Lines:[Enc(bundleTools.JobInfo(request.Command!))]);break;
             case "bundle-action":if(bundles is null)throw new InvalidOperationException("setup.required");var action=JsonSerializer.Deserialize<string[]>(request.Command!)!;reply=new(true,Lines:[Enc(await bundles.Action(action[0],action[1],timeout.Token))]);break;
             default:if(adapter is null){reply=new(true,Status:new("unconfigured",null,"",config.ShutdownMode));break;}reply=await adapter.Call(request,timeout.Token);break;
         }

@@ -8,6 +8,7 @@
   import ServerUpdates from "./ServerUpdates.svelte";
   import ServerPath from "./ServerPath.svelte";
   import ServerConfig from "./ServerConfig.svelte";
+  import BundleToolsSettings from "./BundleToolsSettings.svelte";
   import Bridge from "./Bridge.svelte";
   import HexBackground from "./HexBackground.svelte";
   import DiagnosticStream from "./DiagnosticStream.svelte";
@@ -85,7 +86,7 @@
     serverBuild = $state(""),
     panelUpdate = $state(false),
     serverUpdate = $state(false);
-  let settingsTabs = $derived(can("settings.write") ? ["general", "updates", "bridge", "server"] : ["general"]);
+  let settingsTabs = $derived(can("settings.write") ? ["general", "updates", "bridge", "server", "bundles"] : ["general"]);
   async function loadVersions() {
     if (!can("settings.write")) return;
     try {
@@ -961,7 +962,7 @@
                 aria-selected={settingsTab === name}
                 class:active={settingsTab === name}
                 onclick={() => (settingsTab = name)}
-                >{t[("set" + name[0].toUpperCase() + name.slice(1)) as "setGeneral"]}{#if name === "updates" && (panelUpdate || serverUpdate)}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button
+                >{t[("set" + name[0].toUpperCase() + name.slice(1)) as "setGeneral"]}{#if name === "bundles"}<span class="exp-tag">{t.experimental}</span>{/if}{#if name === "updates" && (panelUpdate || serverUpdate)}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button
               >{/each}
           </div>
           {#if settingsTab === "updates" && can("settings.write")}
@@ -969,6 +970,8 @@
             <ServerUpdates {t} {locale} {request} installAllowed={can("users.manage")} onchanged={refreshVersions} />
           {:else if settingsTab === "bridge" && can("settings.write")}
             <Bridge {t} {locale} {request} settings {backend} />
+          {:else if settingsTab === "bundles" && can("settings.write")}
+            <BundleToolsSettings {t} {request} />
           {:else if settingsTab === "server" && can("settings.write")}
             <ServerConfig {t} {locale} {request} {backend} onsaved={loadServerName} />
           {:else}

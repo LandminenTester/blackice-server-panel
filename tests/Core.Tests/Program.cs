@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text.Json;
 using ReplayPanel.Shared;
 using ReplayPanel.Supervisor;
+using ReplayPanel.Supervisor.BundleTools;
 var root=Path.Combine(Path.GetTempPath(),"panel-core-"+Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
 int passed=0;
@@ -66,5 +67,30 @@ try {
  Check(ServerLocation.Issue(location) is null,"available runtime clears path diagnosis");
  Reject(()=>ServerLocation.Validate(location,cfgRoot,new("external",1,cfgRoot,"keep-running")),"external process cannot be rebound");
  location.Backend="docker";Reject(()=>ServerLocation.Validate(location,cfgRoot,new("stopped",null,cfgRoot,"keep-running")),"Docker mount rebinding requires deployment");
+ // ---- bundle tools (experimental): layout, secrets, redaction, settings
+ Check(BundleLayout.ValidName("my-bundle_1.0")&&!BundleLayout.ValidName("../x")&&!BundleLayout.ValidName(".hidden")&&!BundleLayout.ValidName("a b")&&!BundleLayout.ValidName("x/y")&&!BundleLayout.ValidName(""),"bundle names follow the same rules as the bundle manager");
+ var btRoot=Path.Combine(root,"bundle-tools");Directory.CreateDirectory(btRoot);
+ var btConfig=new PanelConfig{ServerRoot=Path.Combine(btRoot,"server"),PasswordHash="x"};Directory.CreateDirectory(Path.Combine(btConfig.ServerRoot,"data","ugc"));
+ Check(BundleLayout.BundleDir(btConfig,"demo")==Path.Combine(Path.GetFullPath(btConfig.ServerRoot),"data","ugc","demo")&&BundleLayout.SourceDir(btConfig,"demo").EndsWith("demo"+Path.DirectorySeparatorChar+"panel_src"),"bundle and source folders resolve inside data/ugc");
+ Reject(()=>BundleLayout.BundleDir(btConfig,"..\escape"),"bundle path traversal rejected");
+ var secrets=new SecretStore(btRoot);var sealedToken=secrets.Protect("ghp_exampleSecretToken");
+ Check(sealedToken!="ghp_exampleSecretToken"&&!sealedToken.Contains("ghp_")&&secrets.Unprotect(sealedToken)=="ghp_exampleSecretToken"&&new SecretStore(btRoot).Unprotect(sealedToken)=="ghp_exampleSecretToken","tokens are encrypted at rest and survive a restart");
+ var tampered=Convert.FromBase64String(sealedToken);tampered[^1]^=1;Reject(()=>secrets.Unprotect(Convert.ToBase64String(tampered)),"tampered secret rejected");
+ var redactor=new Redactor();redactor.Add("ghp_exampleSecretToken");
+ Check(!redactor.Redact("push https://user:hunter2@example.com/r.git with ghp_exampleSecretToken").Contains("hunter2")&&!redactor.Redact("push with ghp_exampleSecretToken").Contains("ghp_example")&&!redactor.Redact("AUTHORIZATION: basic dXNlcjp0b2tlbjEyMzQ1Ng==").Contains("dXNlcjp0b2tlbjEyMzQ1Ng"),"logs never contain tokens or credentials");
+ var btConfigPath=Path.Combine(btRoot,"panel.json");PanelConfig.Save(btConfigPath,btConfig);
+ using(var btService=new BundleToolsService(btConfig,btConfigPath,()=>null)){
+  Check(!btConfig.BundleTools.Enabled,"bundle tools are off by default");
+  Reject(()=>btService.RequireEnabled(),"bundle tool actions are refused while the feature is off");
+  btService.ApplySettings("{\"enabled\":true,\"keepBackups\":5,\"commitName\":\"Panel Bot\",\"commitEmail\":\"bot@example.com\"}");
+  Check(btConfig.BundleTools.Enabled&&btConfig.BundleTools.KeepBackups==5&&PanelConfig.Load(btConfigPath).BundleTools.CommitName=="Panel Bot","bundle tool settings are validated and persisted");
+  Reject(()=>btService.ApplySettings("{\"keepBackups\":99}"),"out-of-range bundle tool setting rejected");
+  Reject(()=>btService.ApplySettings("{\"commitEmail\":\"not-an-email\"}"),"invalid commit email rejected");
+  btService.RequireEnabled();
+  var busyGate=new TaskCompletionSource();var first=btService.Jobs.Start("test","a",async _=>await busyGate.Task);
+  Reject(()=>btService.Jobs.Start("test","b",_=>Task.CompletedTask),"only one bundle job runs at a time");
+  busyGate.SetResult();for(var i=0;i<100&&btService.Jobs.Get(first.Id)!.State=="running";i++)await Task.Delay(20);
+  Check(btService.Jobs.Get(first.Id)!.State=="succeeded"&&btService.Jobs.Tail(first.Id).Length>0,"finished jobs keep a log");
+ }
  Console.WriteLine(passed+" core checks passed");
 }finally{Directory.Delete(root,true);}
