@@ -66,6 +66,15 @@ try{
  await req('/api/server/restart',{});await new Promise(r=>setTimeout(r,1500));assert.equal((await req('/api/status')).status.state,'running');console.log('PASS '+backend+' restart');
 
 
+ if(process.env.BUNDLE_E2E==='1'){
+  const run=async(path,body,label)=>{const start=await req(path,body);let state='running',lines=[];for(let n=0;n<3600;n++){const r=await req('/api/bundle-tools/jobs/'+start.id);state=r.job.state;lines=r.log;if(state!=='running')break;await new Promise(x=>setTimeout(x,500));}assert.equal(state,'succeeded',label+': '+lines.slice(-25).join(String.fromCharCode(10)));};
+  await req('/api/bundle-tools/settings',{enabled:true,sourcesEnabled:true,uploadEnabled:true});
+  await run('/api/bundle-tools/tools/install',{id:'dotnet'},'dotnet install');
+  await run('/api/bundle-tools/tools/install',{id:'node'},'node install');
+  await run('/api/bundle-tools/projects/create',{name:'ci-demo',author:'ci',description:'CI bundle',build:true,ui:{framework:'svelte',typeScript:true,router:false,state:true,tailwind:false}},'project build');
+  const listing=await req('/api/bundles');assert(JSON.stringify(listing).includes('ci-demo'),JSON.stringify(listing));
+  console.log('PASS '+backend+' bundle tools toolchain install, template build and bundle discovery');
+ }
  const version=await req('/api/server-updates/check',{});await req('/api/server-updates/download',{target:version.latest});let serverJob;
  for(let n=0;n<1800;n++){serverJob=await req('/api/server-updates');if(serverJob.job.state!=='downloading')break;await new Promise(r=>setTimeout(r,500));}assert.equal(serverJob.job.state,'ready',JSON.stringify(serverJob));await req('/api/server-updates/apply',{});
  for(let n=0;n<160;n++){serverJob=await req('/api/server-updates');if(serverJob.job.state!=='applying')break;await new Promise(r=>setTimeout(r,250));}assert.equal(serverJob.job.state,'completed',JSON.stringify(serverJob));console.log('PASS '+backend+' official server update through dashboard API');

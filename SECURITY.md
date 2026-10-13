@@ -14,6 +14,10 @@ The latest stable release is the supported version. Reports are handled by the m
 - **Updates.** Panel and server updates are verified against SHA-256 digests (integrity), not against a publisher signature. Release assets ship with `SHA256SUMS.txt` and a GitHub build provenance attestation; verify with `gh attestation verify <file> --repo LandminenTester/blackice-server-panel`. Automatic update checks (GitHub and artifacts.replay.re) can be switched off in **Settings → General**.
 - **Console access.** Users with *Write console* can send arbitrary REServer commands. Grant it only to trusted operators.
 
+## Bundle tools (experimental)
+
+Bundle tools are off by default. Building a project executes project code (MSBuild targets, analyzers, npm packages, with install scripts disabled) with the rights of the panel user, so only enable them for repositories you trust and run the panel as a low-privilege OS user. Git tokens are stored encrypted in the state directory, are never returned to the browser and are redacted from job logs. Nothing is pulled, built or updated automatically. See [docs/bundle-tools.md](docs/bundle-tools.md).
+
 ## Deutsch
 
 Überwiegend KI-gestützt entwickelt, menschlich geprüft und getestet; keine unabhängige Sicherheitsprüfung. Betreiber beurteilen den Einsatz selbst. Schwachstellen über den privaten GitHub-Link oben melden: Versionen, Plattform, minimale Reproduktion, Auswirkungen und bereinigte Nachweise angeben. Keine Zugangsdaten oder ausnutzbaren Details öffentlich posten. Die neueste stabile Version wird unterstützt; es gibt keine garantierte Reaktionszeit. Reviews und gemeinsame Behebung sind willkommen.

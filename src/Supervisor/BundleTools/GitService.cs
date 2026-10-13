@@ -95,7 +95,7 @@ public sealed partial class GitService(BundleToolsService service)
         if (!Directory.Exists(Path.Combine(source, ".git"))) return new(null, null, false, 0, 0, [], null);
         var (_, branch) = await RunAsync(["rev-parse", "--abbrev-ref", "HEAD"], source, account, "", ct);
         var (_, commit) = await RunAsync(["rev-parse", "--short", "HEAD"], source, account, "", ct);
-        var (_, dirty) = await RunAsync(["status", "--porcelain"], source, account, "", ct);
+        var (_, dirty) = await RunAsync(["status", "--porcelain", "--untracked-files=no"], source, account, "", ct);
         var (_, remote) = await RunAsync(["remote", "get-url", "origin"], source, account, "", ct);
         var (counts, count) = await RunAsync(["rev-list", "--left-right", "--count", "HEAD...@{u}"], source, account, "", ct);
         int ahead = 0, behind = 0;
@@ -115,7 +115,7 @@ public sealed partial class GitService(BundleToolsService service)
     {
         var info = await InfoAsync(source, account, ctx.Token);
         if (info.Dirty && !discardLocal) throw new InvalidOperationException("bundleTools.gitDirty");
-        if (info.Dirty) { ctx.Log("Discarding local changes as requested."); await RunAsync(["reset", "--hard"], source, account, url, ctx.Token, ctx.Log); await RunAsync(["clean", "-fd"], source, account, url, ctx.Token, ctx.Log); }
+        if (info.Dirty) { ctx.Log("Discarding local changes as requested."); await RunAsync(["reset", "--hard"], source, account, url, ctx.Token, ctx.Log); }
         await FetchAsync(source, account, url, ctx, ctx.Token);
         var (exit, _) = await RunAsync(["merge", "--ff-only", "@{u}"], source, account, url, ctx.Token, ctx.Log);
         if (exit != 0) throw new InvalidOperationException("bundleTools.gitDiverged");

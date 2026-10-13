@@ -122,3 +122,4 @@ body::before{opacity:.5}
 .package-panel{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 dialog.create-project{width:min(560px,92vw)}dialog.create-project .config-grid{max-width:none}.ui-options{display:grid;gap:12px;padding:12px;border:1px solid var(--line)}
 .inline-check{display:inline-flex;gap:6px;align-items:center}.inline-check input{width:auto;min-height:0}
+.exp-box{margin:16px 0;padding:12px 14px;border:1px solid var(--yellow)}.exp-box h3{margin:0 0 8px;font-size:15px}.exp-box .check{display:flex;gap:8px;align-items:center}

@@ -14,7 +14,7 @@ COPY --from=ui /build/src/Web/wwwroot src/Web/wwwroot
 COPY licenses src/Web/wwwroot/licenses
 RUN dotnet publish src/Web -c Release -r linux-x64 --self-contained true -o /out/web && dotnet publish src/Supervisor -c Release -r linux-x64 --self-contained true -o /out/supervisor && cc -O2 -Wall -Wextra native/terminal.c -lutil -o /out/supervisor/replay-terminal
 FROM debian:trixie-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libicu76 libssl3t64 libstdc++6 zlib1g && rm -rf /var/lib/apt/lists/* && useradd -u 10001 -m panel
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git libicu76 libssl3t64 libstdc++6 zlib1g && rm -rf /var/lib/apt/lists/* && useradd -u 10001 -m panel
 LABEL org.opencontainers.image.source="https://github.com/LandminenTester/blackice-server-panel"
 WORKDIR /app
 COPY --from=build /out /app/artifacts

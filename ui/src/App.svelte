@@ -48,7 +48,8 @@
     setupConsole = $state<string[]>([]),
     pickerBusy = $state(false),
     pickerFailed = $state(false);
-  let dashboardName = $state("Unofficial BlackICE - Server Webpanel"),
+  let wizardBundleTools = $state(false),
+    dashboardName = $state("Unofficial BlackICE - Server Webpanel"),
     username = $state("admin"),
     password = $state(""),
     confirmation = $state(""),
@@ -436,6 +437,12 @@
         backend,
       });
       await request("/api/login", { username, password, remember: false });
+      if (wizardBundleTools) {
+        try {
+          await session();
+          await request("/api/bundle-tools/settings", { enabled: true, sourcesEnabled: true, uploadEnabled: true });
+        } catch {}
+      }
       password = "";
       confirmation = "";
       key = "";
@@ -760,6 +767,11 @@
           <dt>{t.serverRoot}</dt>
           <dd>{serverRoot}</dd>
         </dl>
+        <section class="exp-box">
+          <h3>{t.bundleToolsTitle} <span class="exp-tag">{t.experimental}</span></h3>
+          <p class="muted">{t.wizBundleTools}</p>
+          <label class="check"><input type="checkbox" bind:checked={wizardBundleTools} /> {t.wizBundleToolsEnable}</label>
+        </section>
         <div class="actions">
           <button type="button" onclick={() => (step = 1)}>{t.back}</button
           ><button class="primary" disabled={busy || !validated}
