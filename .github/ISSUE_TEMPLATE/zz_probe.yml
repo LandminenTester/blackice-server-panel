@@ -1,6 +1,0 @@
-name: Probe
-description: probe
-body:
-  - type: textarea
-    attributes:
-      label: Text
