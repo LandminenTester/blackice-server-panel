@@ -6,6 +6,7 @@
   import Users from "./Users.svelte";
   import Updates from "./Updates.svelte";
   import ServerUpdates from "./ServerUpdates.svelte";
+  import ServerPath from "./ServerPath.svelte";
   import ServerConfig from "./ServerConfig.svelte";
   import Bridge from "./Bridge.svelte";
   import HexBackground from "./HexBackground.svelte";
@@ -20,6 +21,7 @@
     shutdownMode: string;
     autoStartServer: boolean;
     detail?: string;
+    pathIssue?: string;
   };
   type Bundle = { name: string; state: string };
   type Job = {
@@ -456,6 +458,9 @@
     ><span class="brand-text"><span>{t.app}</span>{#if authenticated && serverName}<small>{serverName}</small>{/if}</span></a
   >
   <div class="header-server">      {#if authenticated}
+        {#if status?.pathIssue}
+        <div class="server-path-warning"><span role="alert">{status.pathIssue==='serverPath.missing'?t.pathMissing:t.pathFiles}</span>{#if can("settings.write")}<button onclick={()=>{settingsTab="general";navigate("settings");}}>{t.pathEdit}</button>{/if}{#if serverState==="running"&&can("server.stop")}<button class="danger" onclick={()=>confirm("stop")}>{t.stop}</button>{/if}</div>
+        {:else}
         <div
           class="actions header-actions"
           role="group"
@@ -491,6 +496,7 @@
             : t.disconnected}</span
         >
 
+        {/if}
       {/if}
 </div>
   <div class="toolbar-right">
@@ -941,6 +947,7 @@
           {:else if settingsTab === "server" && can("settings.write")}
             <ServerConfig {t} {locale} {request} {backend} onsaved={loadServerName} />
           {:else}
+          {#if can("settings.write")}<ServerPath {t} {request} serverRoot={status?.serverRoot??""} {serverState} {backend} {connected} onchanged={value=>{status=value;serverName="";loadServerName();}}/>{/if}
           <section class="update-panel general-panel">
           <h2>{t.autoStart}</h2>
           <Toggle checked={status?.autoStartServer ?? true} label={t.autoStart} disabled={busy || !connected || !can("settings.write")} onchange={autoStart} />

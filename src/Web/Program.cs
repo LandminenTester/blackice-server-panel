@@ -153,6 +153,7 @@ app.MapGet("/api/server-name",async(PipeClient pipe,CancellationToken ct)=>{
     using var doc=JsonDocument.Parse(reply.Lines[0]);
     return Results.Ok(new{name=doc.RootElement.GetProperty("values").GetProperty("name").GetString()??""});
 }).RequireAuthorization();
+app.MapPost("/api/server-path",async(ServerPath body,PipeClient pipe,CancellationToken ct)=>Result(await pipe.Call(new("server-path",body.ServerRoot),ct))).RequireAuthorization("settings.write");
 app.MapGet("/api/server-config",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("server-config"),ct))).RequireAuthorization("settings.write");
 app.MapPost("/api/server-config",async(JsonElement body,PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("server-config-save",body.GetRawText()),ct))).RequireAuthorization("settings.write");
 app.MapGet("/api/updates",async(PipeClient pipe,CancellationToken ct)=>Data(await pipe.Call(new("update-status"),ct))).RequireAuthorization("settings.write");
@@ -209,3 +210,5 @@ record Settings(string? ShutdownMode, bool? AutoStartServer, string? Locale);
 public partial class Program { }
 
 record SetupKey(string Key);
+
+record ServerPath(string ServerRoot);

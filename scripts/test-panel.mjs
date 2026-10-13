@@ -1,5 +1,5 @@
 // Runs only the disposable ConsoleFixture. Never targets an existing game server.
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,7 @@ const salt = randomBytes(16);
 const configPath = resolve(folder, 'panel.json');
 const config = { schemaVersion:2,autoStartServer:false, backend:process.platform==='win32'?'windows':'linux', serverRoot: resolve(root, '.local/fixture'), pipeName: 'replay-panel-test-' + process.pid, shutdownMode:'keep-running', stopTimeoutSeconds:10, autoRestart:false, url:'http://127.0.0.1:20774', passwordSalt:salt.toString('base64'), passwordHash:pbkdf2Sync(password,salt,210000,32,'sha256').toString('base64') };
 await writeFile(configPath, JSON.stringify(config));
+await mkdir(resolve(config.serverRoot,'cfg'),{recursive:true});await writeFile(resolve(config.serverRoot,'cfg/server.cfg'),'# Test fixture only\n');
 for (const name of ['fixture-bundle','parked-bundle','broken-bundle']) {
   const directory = resolve(config.serverRoot,'data/ugc',name);
   await mkdir(directory,{recursive:true}); await writeFile(resolve(directory,'config.toml'),'# Disposable bundle fixture\n');
@@ -57,6 +58,7 @@ try {
   check((await post('/api/bridge/settings',{enabled:true,port:80,retentionDays:7,maxMegabytes:100})).status===409,'invalid bridge settings rejected');
   check((await request('/api/diagnostics?cursor=-1&source=all')).status===409,'invalid diagnostic cursor rejected');
   check((await post('/api/server/start')).status===409,'duplicate start rejected through web API');
+  check((await post('/api/server-path',{serverRoot:config.serverRoot})).status===409,'running server path change rejected');
   const initialBundles = await (await request('/api/bundles')).json();
   check(initialBundles.ok && initialBundles.canControl && initialBundles.bundles.some(x=>x.name==='fixture-bundle' && x.state==='running') && initialBundles.bundles.some(x=>x.name==='parked-bundle' && x.state==='stopped'),'native loaded list merged with installed stopped bundles');
   check((await request('/api/bundles/parked-bundle/start',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status===400,'bundle actions require CSRF');
@@ -96,6 +98,27 @@ try {
   check((await post('/api/server/start')).status===200,'fixture can restart');
   check((await post('/api/server/force-stop')).status===200,'explicit forced stop works');
 
+  check((await request('/api/server-path',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({serverRoot:config.serverRoot})})).status===400,'server path requires CSRF');
+  check((await post('/api/server-path',{serverRoot:'relative-folder'})).status===409,'relative server path rejected');
+  check((await post('/api/server-path',{serverRoot:resolve(root,'.local/nonexistent-'+process.pid)})).status===409,'missing replacement rejected');
+  const oldRoot=config.serverRoot,movedRoot=resolve(root,'.local/fixture moved-'+process.pid);
+  await rename(oldRoot,movedRoot);
+  try {
+   const missing=(await(await request('/api/status')).json()).status;
+   check(missing.pathIssue==='serverPath.missing','moved directory detected in shared status');
+   check((await post('/api/server/start')).status===409,'missing directory cannot be recreated by Start');
+   const changed=await(await post('/api/server-path',{serverRoot:movedRoot})).json();
+   check(changed.ok&&changed.status.serverRoot===movedRoot&&!changed.status.pathIssue,'moved path with spaces accepted without webhost restart');
+   const stored=JSON.parse(await readFile(configPath));
+   check(stored.serverRoot===movedRoot&&stored.passwordHash===config.passwordHash,'new root persisted while credentials preserved');
+   check((await post('/api/server/start')).status===200,'backend starts from relocated directory');
+   check((await(await request('/api/bundles')).json()).ok,'bundle adapter follows relocated directory');
+   await post('/api/server/stop');
+  }finally{
+   await post('/api/server/stop');
+   await rename(movedRoot,oldRoot);
+   const restored=await post('/api/server-path',{serverRoot:oldRoot});check(restored.status===200,'restored directory can be saved again');
+  }
   const adminCookies=new Map(cookies);const adminCsrf=csrf;
   const restrictedPassword='disposable-reader-password';
   check((await post('/api/users/save',{username:'reader',password:restrictedPassword,permissions:['console.read','bundles.read'],create:true})).status===200,'admin can create restricted account');
@@ -106,7 +129,7 @@ try {
   check((await post('/api/login',{username:'reader',password:restrictedPassword})).status===200,'restricted user login accepted');csrf=(await(await request('/api/session')).json()).csrf;
   const readerCookies=new Map(cookies);const readerCsrf=csrf;
   check((await request('/api/bundles')).status===200,'bundle-read permission allows list');
-  for(const route of ['/api/command','/api/bundles/fixture-bundle/start','/api/bundles/fixture-bundle/stop','/api/bundles/fixture-bundle/restart','/api/server/start','/api/server/stop','/api/server/restart','/api/server/force-stop','/api/settings','/api/users/save','/api/bridge/settings','/api/server-updates/check','/api/server-updates/download','/api/server-updates/apply','/api/updates/check','/api/updates/download','/api/updates/apply'])check((await post(route,{text:'echo forbidden',autoStartServer:true})).status===403,'restricted account denied '+route);
+  for(const route of ['/api/command','/api/bundles/fixture-bundle/start','/api/bundles/fixture-bundle/stop','/api/bundles/fixture-bundle/restart','/api/server/start','/api/server/stop','/api/server/restart','/api/server/force-stop','/api/settings','/api/server-path','/api/users/save','/api/bridge/settings','/api/server-updates/check','/api/server-updates/download','/api/server-updates/apply','/api/updates/check','/api/updates/download','/api/updates/apply'])check((await post(route,{text:'echo forbidden',autoStartServer:true})).status===403,'restricted account denied '+route);
   check((await request('/api/logs')).status===403&&(await request('/api/users')).status===403,'logs and user administration separately restricted');
   check((await request('/api/diagnostics?source=console')).status===200&&(await request('/api/diagnostics?source=log')).status===403&&(await request('/api/diagnostics?source=all')).status===403,'diagnostic sources respect separate read permissions');
   check((await request('/api/server-updates')).status===403,'server update metadata requires settings permission');

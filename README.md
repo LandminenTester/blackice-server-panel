@@ -64,7 +64,7 @@ sudo chmod 700 /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blacki
 stat -c %g /var/run/docker.sock
 ```
 
-Edit `.env`: set `PANEL_STATE=/srv/blackice-panel/state`, `PANEL_RUNTIME=/srv/blackice-panel/runtime`, `SERVER_PATH=/srv/blackice-server`, `DOCKER_GID` to the printed socket group ID, and keep `PANEL_VERSION=1.1.0`. Then:
+Edit `.env`: set `PANEL_STATE=/srv/blackice-panel/state`, `PANEL_RUNTIME=/srv/blackice-panel/runtime`, `SERVER_PATH=/srv/blackice-server`, `DOCKER_GID` to the printed socket group ID, and keep `PANEL_VERSION=1.2.2`. Then:
 
 ```sh
 docker compose --env-file .env -f deploy/compose.yaml up -d
@@ -74,6 +74,9 @@ docker compose --env-file .env -f deploy/compose.yaml logs supervisor
 Open localhost:20772, use the logged setup key, select Docker and `/server`. Only the Supervisor receives the powerful Docker socket; Webhost does not. Game files and panel state persist in host directories. Stop with `docker compose --env-file .env -f deploy/compose.yaml down`. [Docker details](docs/docker.md).
 
 ## Operation and updates
+
+Settings → General can check and save a moved native server directory while the server is stopped. Missing directories/executables are shown in the global header and block Start/Restart. No files are moved. Docker mounts are changed through deployment.
+
 
 - Header: status, Start, Restart and Stop. Graceful Stop waits up to 30 seconds; Force Stop is separate. Bundle actions wait for server confirmation.
 - Users: individual rights for server controls, console, logs, bundles, settings and account administration. Give console-write access only to trusted operators.

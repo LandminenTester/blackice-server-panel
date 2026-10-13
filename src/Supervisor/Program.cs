@@ -44,18 +44,21 @@ void Activate(){
 }
 if(config.Configured){Activate();if(config.AutoStartServer&&backend!.Status().State=="stopped"){try{await backend.StartAsync();}catch(Exception e){Console.Error.WriteLine(e);}}}
 using var shutdown=new CancellationTokenSource();
+using var locationGate=new SemaphoreSlim(1);
 Console.CancelKeyPress+=(_,e)=>{e.Cancel=true;shutdown.Cancel();};
 using var terminate=OperatingSystem.IsWindows()?null:System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM,c=>{c.Cancel=true;shutdown.Cancel();});
 Console.WriteLine("BlackICE supervisor ready.");
 try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
     using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);timeout.CancelAfter(TimeSpan.FromSeconds(config.StopTimeoutSeconds+15));
     using var reader=new StreamReader(stream,leaveOpen:true);using var writer=new StreamWriter(stream,leaveOpen:true){AutoFlush=true};
-    Reply reply;string? requestAction=null;
+    Reply reply;string? requestAction=null;bool locationLease=false;
     try {
         var line=await reader.ReadLineAsync(timeout.Token);if(line is null||line.Length>16384)throw new InvalidOperationException("request.invalid");
         var request=JsonSerializer.Deserialize<Request>(line,PanelConfig.Json)??throw new InvalidOperationException("request.invalid");
         requestAction=request.Action;
-        if(serverUpdates.Applying&&request.Action is "start" or "stop" or "restart" or "force-stop" or "command" or "bundle-action" or "bridge-settings" or "update-apply" or "shutdown")throw new InvalidOperationException("serverUpdate.busy");
+        if(request.Action is not ("authenticate" or "account-session" or "bootstrap" or "users" or "setup-banner" or "update-status")){await locationGate.WaitAsync(timeout.Token);locationLease=true;}
+        if(ServerLocation.Issue(config) is {} issue && request.Action is "start" or "restart" or "command" or "bundle-action" or "server-config-save" or "server-update-download" or "server-update-apply")throw new InvalidOperationException(issue);
+        if(serverUpdates.Applying&&request.Action is "start" or "stop" or "restart" or "force-stop" or "command" or "bundle-action" or "bridge-settings" or "update-apply" or "server-path" or "shutdown")throw new InvalidOperationException("serverUpdate.busy");
         string Enc(object value)=>JsonSerializer.Serialize(value,PanelConfig.Json);
         switch(request.Action) {
             case "bootstrap":reply=new(true,Lines:[Enc(new {configured=config.Configured,dashboardName=config.DashboardName,backend=config.Backend,locale=config.Locale,version=PanelUpdates.RunningVersion,defaultServerRoot=config.Configured?null:setup.DefaultRoot()})]);break;
@@ -92,6 +95,16 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
             case "update-download":reply=new(true,Lines:[Enc(await updates.Download(timeout.Token))]);break;
             case "update-cancel":await updates.Cancel();reply=new(true,Lines:[Enc(updates.Status())]);break;
             case "update-apply":reply=new(true,Lines:[Enc(await updates.Apply())]);break;
+            case "server-path": {
+                if(!config.Configured||backend is null)throw new InvalidOperationException("setup.required");
+                if(serverUpdates.Status().Job?.State is "downloading" or "ready" or "applying")throw new InvalidOperationException("serverUpdate.busy");
+                var next=ServerLocation.Validate(config,request.Command??"",backend.Status());
+                var previous=config.ServerRoot;await backend.DisposeAsync();
+                var persisted=false;config.ServerRoot=next;
+                try{PanelConfig.Save(configPath,config);persisted=true;Activate();}
+                catch{config.ServerRoot=previous;if(persisted)PanelConfig.Save(configPath,config);Activate();throw;}
+                reply=new(true,Status:backend!.Status());break;
+            }
             case "server-config":if(!config.Configured)throw new InvalidOperationException("setup.required");reply=new(true,Lines:[Enc(ServerConfig.Read(config.ServerRoot,backend?.Status().State=="running"))]);break;
             case "server-config-save":{if(!config.Configured)throw new InvalidOperationException("setup.required");ServerConfig.Write(config.ServerRoot,JsonSerializer.Deserialize<ServerConfigValues>(request.Command!,PanelConfig.Json)!);reply=new(true,Lines:[Enc(ServerConfig.Read(config.ServerRoot,backend?.Status().State=="running"))]);break;}
             case "settings": { lock(config) {
@@ -106,7 +119,8 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
         }
     }catch(Exception e){Console.Error.WriteLine($"{requestAction}: {e.GetType().Name}: {ErrorCodes.From(e)}");if(Environment.GetEnvironmentVariable("REPLAY_PANEL_TRACE_ERRORS")=="1")Console.Error.WriteLine(e);reply=new(false,Error:ErrorCodes.From(e));}
     if(reply.Ok && requestAction is "stop" or "force-stop")await NativeConsole.CloseServer(config);
-    if(reply.Status is {} status)reply=reply with{Status=status with{AutoStartServer=config.AutoStartServer}};
+    if(reply.Status is {} status)reply=reply with{Status=status with{AutoStartServer=config.AutoStartServer,PathIssue=ServerLocation.Issue(config)}};
+    if(locationLease)locationGate.Release();
     await writer.WriteLineAsync(JsonSerializer.Serialize(reply,PanelConfig.Json));
 },shutdown.Token);}catch(OperationCanceledException){}
 await serverUpdates.DisposeAsync();if(backend is not null)await backend.DisposeAsync();

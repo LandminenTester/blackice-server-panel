@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 namespace ReplayPanel.Shared;
 public sealed record Request(string Action, string? Command = null, string? ShutdownMode = null, bool? AutoStartServer = null, string? Locale = null);
 public sealed record Reply(bool Ok, string? Error = null, ServerStatus? Status = null, string[]? Lines = null);
-public sealed record ServerStatus(string State, int? Pid, string ServerRoot, string ShutdownMode, string? Detail = null, bool AutoStartServer = true);
+public sealed record ServerStatus(string State, int? Pid, string ServerRoot, string ShutdownMode, string? Detail = null, bool AutoStartServer = true, string? PathIssue = null);
 public sealed class PanelConfig
 {
     public List<PanelUser>? Users { get; set; }

@@ -58,5 +58,12 @@ try {
  ServerConfig.Write(cfgRoot,new("New name","A description","ep1","DEU","[::]:20770","",true,"[::]:20771",true,true,"alpha",true,"auto"));
  var settingsText=File.ReadAllText(Path.Combine(cfgRoot,"settings","server.settings.json"));
  Check(settingsText.Contains("\"auto_update\": true")&&File.ReadAllText(Path.Combine(cfgRoot,"cfg","server.cfg")).Contains("sv_privacy true")&&ServerConfig.Read(cfgRoot,false).Values.AutoUpdate,"server settings json and extra cfg keys written");
+ var location=new PanelConfig{ServerRoot=Path.Combine(root,"gone"),PasswordHash="present",Backend=OperatingSystem.IsWindows()?"windows":"linux"};
+ Check(ServerLocation.Issue(location)=="serverPath.missing","missing server directory is diagnosed");
+ location.ServerRoot=cfgRoot;Check(ServerLocation.Issue(location)=="serverPath.files","missing executable is diagnosed");
+ File.WriteAllText(Path.Combine(cfgRoot,OperatingSystem.IsWindows()?"REServer.exe":"REServer"),"fixture");
+ Check(ServerLocation.Issue(location) is null,"available runtime clears path diagnosis");
+ Reject(()=>ServerLocation.Validate(location,cfgRoot,new("external",1,cfgRoot,"keep-running")),"external process cannot be rebound");
+ location.Backend="docker";Reject(()=>ServerLocation.Validate(location,cfgRoot,new("stopped",null,cfgRoot,"keep-running")),"Docker mount rebinding requires deployment");
  Console.WriteLine(passed+" core checks passed");
 }finally{Directory.Delete(root,true);}
