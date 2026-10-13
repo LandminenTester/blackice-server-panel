@@ -61,6 +61,7 @@ try {
  var location=new PanelConfig{ServerRoot=Path.Combine(root,"gone"),PasswordHash="present",Backend=OperatingSystem.IsWindows()?"windows":"linux"};
  Check(ServerLocation.Issue(location)=="serverPath.missing","missing server directory is diagnosed");
  location.ServerRoot=cfgRoot;Check(ServerLocation.Issue(location)=="serverPath.files","missing executable is diagnosed");
+ var nativeBackend=location.Backend;location.Backend="docker";Check(ServerLocation.Issue(location) is null,"Docker mount may await first-start runtime seeding");location.Backend=nativeBackend;
  File.WriteAllText(Path.Combine(cfgRoot,OperatingSystem.IsWindows()?"REServer.exe":"REServer"),"fixture");
  Check(ServerLocation.Issue(location) is null,"available runtime clears path diagnosis");
  Reject(()=>ServerLocation.Validate(location,cfgRoot,new("external",1,cfgRoot,"keep-running")),"external process cannot be rebound");
