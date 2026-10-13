@@ -6,6 +6,7 @@ using ReplayPanel.Shared;
 namespace ReplayPanel.Web;
 
 public sealed record ConfigPath(string Value);
+public sealed record NameBody(string Name);
 
 /// <summary>HTTP surface of the EXPERIMENTAL bundle tools. Thin proxy: the supervisor owns all logic and enforces the master switch.</summary>
 public static class BundleToolsEndpoints
@@ -77,6 +78,15 @@ public static class BundleToolsEndpoints
         app.MapPost("/api/bundle-tools/tools/install", async (JsonElement body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-tool-install", body.GetRawText()), ct))).RequireAuthorization("settings.write");
         app.MapPost("/api/bundle-tools/tools/remove", async (JsonElement body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-tool-remove", body.GetRawText()), ct))).RequireAuthorization("settings.write");
         app.MapGet("/api/bundle-tools/tools/latest", async (PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-tool-latest"), ct))).RequireAuthorization("settings.write");
+        app.MapGet("/api/bundle-tools/projects", async (PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-projects"), ct))).RequireAuthorization("bundles.build");
+        app.MapPost("/api/bundle-tools/projects/create", async (JsonElement body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-project-create", body.GetRawText()), ct))).RequireAuthorization("bundles.build");
+        foreach (var action in new[] { "build", "rollback", "remove" })
+        {
+            var name = action;
+            app.MapPost("/api/bundle-tools/projects/" + name, async (NameBody body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-project-" + name, body.Name), ct))).RequireAuthorization("bundles.build");
+        }
+        app.MapPost("/api/bundle-tools/packages/info", async (JsonElement body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-packages-info", body.GetRawText()), ct))).RequireAuthorization("bundles.build");
+        app.MapPost("/api/bundle-tools/packages/set", async (JsonElement body, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-packages-set", body.GetRawText()), ct))).RequireAuthorization("bundles.build");
         app.MapGet("/api/bundle-tools/jobs/{id}", async (string id, PipeClient pipe, CancellationToken ct) => Data(await pipe.Call(new("bundle-tools-job", id), ct))).RequireAuthorization("bundles.read");
     }
 }

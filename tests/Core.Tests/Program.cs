@@ -170,6 +170,57 @@ try {
   Reject(()=>toolService.ToolInstall("{\"id\":\"../../evil\"}"),"unknown tool ids are refused");
   Check((await toolService.Tools.LatestVersionsAsync(CancellationToken.None))["dotnet"]=="10.9.9","latest tool versions are read from the official metadata on demand");
  }
+ // ---- project templates
+ {
+  var combos=new (string Id,UiOptions? Ui)[]{("none",null),("svelte-ts",new("svelte",true,false,true,true)),("svelte-js",new("svelte",false,false,false,false)),("vue-ts",new("vue",true,true,true,true)),("vue-js",new("vue",false,false,false,false)),("react-ts",new("react",true,true,true,true)),("react-js",new("react",false,false,false,false))};
+  foreach(var (id,ui) in combos){
+   var rendered=BundleTemplates.Render(new NewProject("demo-"+id,"Test Author","A \"quoted\" description","1.1.0",ui));
+   Check(rendered.ContainsKey("sv/sv.csproj")&&rendered["sv/sv.csproj"].Contains("replay.blackice.server\" Version=\"1.1.0\"")&&rendered["data/config.toml"].Contains("config_version = \"alpha_playtest\"")&&TomlDoc.Parse(rendered["data/config.toml"]).String("General","description")=="A \"quoted\" description","template "+id+" renders a complete C# project and a readable manifest");
+   if(ui is not null)Check(rendered.ContainsKey("ui/package.json")&&rendered.ContainsKey("ui/index.html")&&rendered["ui/vite.config."+(ui.TypeScript?"ts":"js")].Contains("base: './'")&&TomlDoc.Parse(rendered["data/config.toml"]).Array("ReUi","files").SequenceEqual(["ui/**"])&&TomlDoc.Parse(rendered["data/config.toml"]).String("ReUi","content_root")=="ui/","template "+id+" has a relative-path Vite UI wired into the manifest");
+   if(Environment.GetEnvironmentVariable("PANEL_DUMP_TEMPLATES") is {Length:>0} dump)foreach(var (path,content) in rendered){var file=Path.Combine(dump,id,path);Directory.CreateDirectory(Path.GetDirectoryName(file)!);File.WriteAllText(file,content);}
+  }
+  Check(BundleTemplates.Render(new NewProject("x","a","d","1.1.0",null)).Keys.All(k=>!k.StartsWith("ui/")),"projects without a UI contain no ui folder");
+ }
+ // ---- source projects: create from template, package versions, rollback
+ {
+  var nugetHandler=new ToolHandler();
+  foreach(var id in new[]{"replay.blackice.server","replay.blackice.client","replay.blackice.shared"})nugetHandler.Add(NuGetService.FlatContainer+id+"/index.json","{\"versions\":[\"1.0.2\",\"1.1.0\",\"1.2.0-rc.1\"]}");
+  nugetHandler.Add(NuGetService.FlatContainer+"replay.blackice.server/1.0.2/replay.blackice.server.nuspec","<package xmlns=\"http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd\"><metadata><dependencies><group><dependency id=\"Microsoft.DotNet.ILCompiler.LLVM\" version=\"10.0.0-rc.1.11111.1\" /></group></dependencies></metadata></package>");
+  var projConfigPath=Path.Combine(btRoot,"proj-state","projects-panel.json");Directory.CreateDirectory(Path.GetDirectoryName(projConfigPath)!);var projConfig=new PanelConfig{ServerRoot=Path.Combine(btRoot,"server"),PasswordHash="x"};PanelConfig.Save(projConfigPath,projConfig);
+  using var projService=new BundleToolsService(projConfig,projConfigPath,()=>null,new HttpClient(nugetHandler));
+  Reject(()=>projService.Projects.List(),"project actions are refused while the feature is off");
+  projService.ApplySettings("{\"enabled\":true,\"sourcesEnabled\":true}");
+  async Task<BundleJob> Wait(BundleJob job){for(var i=0;i<400&&projService.Jobs.Get(job.Id)!.State=="running";i++)await Task.Delay(25);return projService.Jobs.Get(job.Id)!;}
+  var created=await Wait(projService.Projects.Create("{\"name\":\"my-mode\",\"author\":\"Ann\",\"description\":\"My mode\",\"build\":false,\"ui\":{\"framework\":\"vue\",\"typeScript\":true,\"router\":true,\"state\":true,\"tailwind\":false}}"));
+  var src=BundleLayout.SourceDir(projConfig,"my-mode");
+  Check(created.State=="succeeded"&&File.Exists(Path.Combine(src,"sv","sv.csproj"))&&File.Exists(Path.Combine(src,"ui","package.json"))&&File.ReadAllText(Path.Combine(src,"sv","sv.csproj")).Contains("Version=\"1.1.0\"")&&projService.Projects.Registry.Get("my-mode") is {UiFramework:"vue"},"a new project is written to panel_src with the newest stable package version");
+  Check(NuGetService.Read(src).Select(p=>p.Version).Distinct().SequenceEqual(["1.1.0"])&&!NuGetService.Read(src).Any(p=>p.Floating),"package references are read from the sources");
+  Reject(()=>projService.Projects.Create("{\"name\":\"my-mode\",\"build\":false}"),"a project cannot be created over existing sources");
+  Reject(()=>projService.Projects.Create("{\"name\":\"../x\",\"build\":false}"),"invalid project names are refused");
+  var info=System.Text.Json.JsonSerializer.Serialize(await projService.Projects.PackagesInfo("{\"name\":\"my-mode\"}",CancellationToken.None));
+  Check(info.Contains("\"1.0.2\"")&&info.Contains("\"1.1.0\"")&&!info.Contains("rc.1"),"stable package versions are offered by default");
+  await projService.Projects.PackagesSet("{\"name\":\"my-mode\",\"version\":\"1.0.2\"}",CancellationToken.None);
+  Check(NuGetService.Read(src).All(p=>p.Version=="1.0.2"),"a chosen package version is applied to every project file");
+  File.WriteAllText(Path.Combine(src,"sv","sv.csproj"),File.ReadAllText(Path.Combine(src,"sv","sv.csproj")).Replace("Version=\"1.0.2\"","Version=\"*\""));
+  Check(NuGetService.Read(src).Any(p=>p.Floating),"floating versions are flagged");
+  var pinned=new Dictionary<string,string>{["Microsoft.DotNet.ILCompiler.LLVM"]="10.0.0-rc.1.11111.1"};
+  File.WriteAllText(Path.Combine(src,"cl","cl.csproj"),"<Project><ItemGroup><PackageReference Include=\"replay.blackice.client\" Version=\"1.1.0\" /><PackageReference Include=\"Microsoft.DotNet.ILCompiler.LLVM\" Version=\"[9.0.0]\" PrivateAssets=\"all\" /></ItemGroup></Project>");
+  NuGetService.Apply(src,"1.0.2",pinned);var clText=File.ReadAllText(Path.Combine(src,"cl","cl.csproj"));
+  Check(clText.Contains("replay.blackice.client\" Version=\"1.0.2\"")&&clText.Contains("ILCompiler.LLVM\" Version=\"[10.0.0-rc.1.11111.1]\""),"compiler pins follow the chosen version and keep their range brackets");
+  Reject(()=>projService.Projects.PackagesSet("{\"name\":\"my-mode\",\"version\":\"9.9.9\"}",CancellationToken.None).GetAwaiter().GetResult(),"a package version that does not exist is refused");
+  Check(NuGetService.Compare("1.10.0","1.9.9")>0&&NuGetService.Compare("1.1.0-rc.1","1.1.0")<0,"package versions sort numerically with pre-releases first");
+  var noTools=await Wait(projService.Projects.Build("my-mode"));
+  Check(noTools.State=="failed"&&noTools.Error=="bundleTools.needDotnet","a build without installed tools reports what is missing");
+  var bundleFolder=BundleLayout.BundleDir(projConfig,"my-mode");Directory.CreateDirectory(bundleFolder);File.WriteAllText(Path.Combine(bundleFolder,"config.toml"),"[Meta]\nconfig_version = \"alpha_playtest\"\n");File.WriteAllText(Path.Combine(bundleFolder,"sv.wasm"),"build 1");
+  BundleSwap.Backup(bundleFolder,BundleLayout.Backups(projConfigPath),"my-mode",3,_=>{});File.WriteAllText(Path.Combine(bundleFolder,"sv.wasm"),"build 2 (bad)");
+  var rolled=await Wait(projService.Projects.Rollback("my-mode"));
+  Check(rolled.State=="succeeded"&&File.ReadAllText(Path.Combine(bundleFolder,"sv.wasm"))=="build 1"&&Directory.Exists(src),"a rollback restores the previous build and keeps the sources");
+  var listed=System.Text.Json.JsonSerializer.Serialize(projService.Projects.List());
+  Directory.CreateDirectory(Path.Combine(BundleLayout.BundleDir(projConfig,"manual"),"panel_src"));
+  Check(listed.Contains("my-mode")&&System.Text.Json.JsonSerializer.Serialize(projService.Projects.List()).Contains("\"manual\""),"existing panel_src folders show up as projects");
+  projService.Projects.RemoveSource("my-mode");
+  Check(!Directory.Exists(src)&&File.Exists(Path.Combine(bundleFolder,"config.toml"))&&projService.Projects.Registry.Get("my-mode") is null,"removing the sources keeps the built bundle");
+ }
  Console.WriteLine(passed+" core checks passed");
 }finally{Directory.Delete(root,true);}
 sealed class ToolHandler:HttpMessageHandler{

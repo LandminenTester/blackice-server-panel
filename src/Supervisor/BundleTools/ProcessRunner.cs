@@ -36,7 +36,8 @@ public static class ProcessRunner
         }
         process.OutputDataReceived += (_, e) => Line(e.Data);
         process.ErrorDataReceived += (_, e) => Line(e.Data);
-        if (!process.Start()) throw new InvalidOperationException("bundleTools.process");
+        try { if (!process.Start()) throw new InvalidOperationException("bundleTools.process"); }
+        catch (System.ComponentModel.Win32Exception) { throw new InvalidOperationException("bundleTools.process"); }
         try { if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux()) process.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
         process.StandardInput.Close();
         process.BeginOutputReadLine();

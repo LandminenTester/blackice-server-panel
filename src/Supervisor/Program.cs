@@ -123,6 +123,13 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
             case "bundle-tools-tool-install":reply=new(true,Lines:[Enc(bundleTools.ToolInstall(request.Command!))]);break;
             case "bundle-tools-tool-remove":reply=new(true,Lines:[Enc(bundleTools.ToolRemove(request.Command!))]);break;
             case "bundle-tools-tool-latest":reply=new(true,Lines:[Enc(await bundleTools.ToolLatest(timeout.Token))]);break;
+            case "bundle-tools-projects":reply=new(true,Lines:[Enc(bundleTools.Projects.List())]);break;
+            case "bundle-tools-project-create":reply=new(true,Lines:[Enc(bundleTools.Projects.Create(request.Command!))]);break;
+            case "bundle-tools-project-build":reply=new(true,Lines:[Enc(bundleTools.Projects.Build(request.Command!))]);break;
+            case "bundle-tools-project-rollback":reply=new(true,Lines:[Enc(bundleTools.Projects.Rollback(request.Command!))]);break;
+            case "bundle-tools-project-remove":reply=new(true,Lines:[Enc(bundleTools.Projects.RemoveSource(request.Command!))]);break;
+            case "bundle-tools-packages-info":reply=new(true,Lines:[Enc(await bundleTools.Projects.PackagesInfo(request.Command!,timeout.Token))]);break;
+            case "bundle-tools-packages-set":reply=new(true,Lines:[Enc(await bundleTools.Projects.PackagesSet(request.Command!,timeout.Token))]);break;
             case "bundle-tools-job":reply=new(true,Lines:[Enc(bundleTools.JobInfo(request.Command!))]);break;
             case "bundle-action":if(bundles is null)throw new InvalidOperationException("setup.required");var action=JsonSerializer.Deserialize<string[]>(request.Command!)!;reply=new(true,Lines:[Enc(await bundles.Action(action[0],action[1],timeout.Token))]);break;
             default:if(adapter is null){reply=new(true,Status:new("unconfigured",null,"",config.ShutdownMode));break;}reply=await adapter.Call(request,timeout.Token);break;

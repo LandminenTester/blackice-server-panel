@@ -117,3 +117,7 @@ body::before{opacity:.5}
 .job-log{display:grid;gap:8px}.job-state{margin:0}.job-badge{padding:1px 8px;border:1px solid var(--line);font-size:12px}.job-badge.succeeded{border-color:var(--cyan);color:var(--cyan)}.job-badge.failed{border-color:var(--red);color:var(--red)}
 .job-lines{margin:0;padding:12px;max-height:260px;overflow:auto;background:#0c1016;color:var(--cyan);font:12px/1.6 'IBM Plex Mono',monospace;white-space:pre-wrap;word-break:break-word}
 .tool-list{list-style:none;margin:8px 0;padding:0;display:grid;gap:8px}.tool-list li{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:10px 12px;border:1px solid var(--line);background:rgba(25,23,30,.5)}.tool-list .actions{margin:0}
+.project-list{list-style:none;margin:12px 0;padding:0;display:grid;gap:12px}.project-list>li{padding:14px 16px;border:1px solid var(--line);background:rgba(25,23,30,.55)}
+.project-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.project-head .actions{margin:0;gap:8px}.project-meta{margin:8px 0 0;font-size:13px}
+.package-panel{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+dialog.create-project{width:min(560px,92vw)}dialog.create-project .config-grid{max-width:none}.ui-options{display:grid;gap:12px;padding:12px;border:1px solid var(--line)}

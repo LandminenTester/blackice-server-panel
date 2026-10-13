@@ -10,6 +10,7 @@
   import ServerConfig from "./ServerConfig.svelte";
   import BundleToolsSettings from "./BundleToolsSettings.svelte";
   import BundleUpload from "./BundleUpload.svelte";
+  import BundleProjects from "./BundleProjects.svelte";
   import Bridge from "./Bridge.svelte";
   import HexBackground from "./HexBackground.svelte";
   import DiagnosticStream from "./DiagnosticStream.svelte";
@@ -926,10 +927,13 @@
         {#if btState?.enabled && (can("bundles.upload") || can("bundles.build"))}
           <div class="subtabs" role="tablist" aria-label={t.bundles}>
             <button role="tab" aria-selected={bundleView === "list"} class:active={bundleView === "list"} onclick={() => (bundleView = "list")}>{t.bvList}</button>
+            {#if btState.settings.sourcesEnabled && can("bundles.build")}<button role="tab" aria-selected={bundleView === "projects"} class:active={bundleView === "projects"} onclick={() => (bundleView = "projects")}>{t.bvProjects}<span class="exp-tag">{t.experimental}</span></button>{/if}
             {#if btState.settings.uploadEnabled && can("bundles.upload")}<button role="tab" aria-selected={bundleView === "upload"} class:active={bundleView === "upload"} onclick={() => (bundleView = "upload")}>{t.bvUpload}<span class="exp-tag">{t.experimental}</span></button>{/if}
           </div>
         {/if}
-        {#if bundleView === "upload" && btState?.enabled}
+        {#if bundleView === "projects" && btState?.enabled}
+          <BundleProjects {t} {locale} {request} tools={btState.toolchain} onChanged={loadBundles} />
+        {:else if bundleView === "upload" && btState?.enabled}
           <BundleUpload {t} {locale} {request} upload={uploadBundle} maxMb={btState.uploadMaxMb} onInstalled={loadBundles} />
         {:else}
         <section class="bundle-panel" aria-busy={bundleLoading}>

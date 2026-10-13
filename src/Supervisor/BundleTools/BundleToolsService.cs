@@ -18,8 +18,10 @@ public sealed class BundleToolsService : IDisposable
         this.bundles = bundles;
         var client = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(45) };
         if (http is null) client.DefaultRequestHeaders.UserAgent.ParseAdd("BlackICE-Panel/" + PanelUpdates.RunningVersion);
+        Http = client;
         Tools = new Toolchain(BundleLayout.Toolchain(this.configPath), client);
         Secrets = new SecretStore(BundleLayout.StateDir(this.configPath));
+        Projects = new BundleProjects(this);
         Redactor = new Redactor();
         Jobs = new BundleJobs(BundleLayout.Jobs(this.configPath), Redactor);
         foreach (var account in config.BundleTools.Accounts)
@@ -27,6 +29,8 @@ public sealed class BundleToolsService : IDisposable
     }
 
     public Toolchain Tools { get; }
+    public HttpClient Http { get; }
+    public BundleProjects Projects { get; }
     public SecretStore Secrets { get; }
     public Redactor Redactor { get; }
     public BundleJobs Jobs { get; }
