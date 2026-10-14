@@ -14,7 +14,7 @@ public sealed class ServerUpdates : IAsyncDisposable {
  int disposed;
  public bool Applying=>job?.State=="applying";
  string Platform=>config.Backend=="windows"?"server_windows":"server_linux";
- public ServerUpdates(PanelConfig config,string configPath,Func<IServerBackend?> backend,HttpClient? http=null){this.config=config;this.backend=backend;state=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(configPath))!,"server-updates");record=Path.Combine(state,"job.json");this.http=http??new(){Timeout=TimeSpan.FromMinutes(20)};Directory.CreateDirectory(state);
+ public ServerUpdates(PanelConfig config,string configPath,Func<IServerBackend?> backend,HttpClient? http=null){this.config=config;this.backend=backend;state=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(configPath))!,"server-updates");record=Path.Combine(state,"job.json");this.http=http??OutboundHttp.Create(TimeSpan.FromMinutes(20));Directory.CreateDirectory(state);
   if(!OperatingSystem.IsWindows())File.SetUnixFileMode(state,UnixFileMode.UserRead|UnixFileMode.UserWrite|UnixFileMode.UserExecute);
   if(File.Exists(record))try{job=JsonSerializer.Deserialize<ServerUpdateJob>(File.ReadAllText(record),PanelConfig.Json);if(job?.State is "downloading" or "ready" or "applying")job=job with{State="failed",Error="serverUpdate.interrupted"};}catch(JsonException){}
  }

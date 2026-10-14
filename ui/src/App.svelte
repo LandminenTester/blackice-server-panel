@@ -1,7 +1,11 @@
 <script lang="ts">
+import BundleManage from "./BundleManage.svelte";
+import SearchSelect from "./components/SearchSelect.svelte";
+let bundleManage=$state<BundleManage>();let bundleSearch=$state(""),bundleCategory=$state(""),bundleMetadata=$state<Record<string,{tags:string[];autostartDisabled:boolean}>>({});
   import { onMount } from "svelte";
   import { catalog, type Locale } from "./locales";
   import Select from "./components/Select.svelte";
+  import Experimental from "./components/Experimental.svelte";
   import Toggle from "./components/Toggle.svelte";
   import Users from "./Users.svelte";
   import Updates from "./Updates.svelte";
@@ -89,7 +93,7 @@
     serverBuild = $state(""),
     panelUpdate = $state(false),
     serverUpdate = $state(false);
-  let settingsTabs = $derived(can("settings.write") ? ["general", "updates", "bridge", "server", "bundles"] : ["general"]);
+  let settingsTabs = $derived(["general",...(can("settings.write")?["updates","bridge","server"]:[]),...(["bundles.settings","bundles.tools","bundles.accounts.manage"].some(can)?["bundles"]:[])]);
   async function loadVersions() {
     if (!can("settings.write")) return;
     try {
@@ -285,6 +289,7 @@
     if (data.ok) {
       bundles = data.bundles;
       checked = data.checkedAt;
+      request("/api/bundles/metadata").then(meta=>bundleMetadata=meta).catch(e=>bundleError=(e as Error).message);
     }
   }
   async function loadBundles() {
@@ -849,7 +854,7 @@
             ]}</button
           >{/each}
       </div>
-      <div class="nav-foot"><strong>BlackICE</strong><span>{t.unofficial}</span>{#if panelVersion}<button type="button" class="build" onclick={openUpdates} title={panelUpdate ? t.updateBadge : ""}>{t.panelBuild} {panelVersion}{#if panelVersion.includes("-")}<span class="exp-tag">{t.experimental}</span>{/if}{#if panelUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}{#if serverBuild}<button type="button" class="build" onclick={openUpdates} title={serverUpdate ? t.updateBadge : ""}>{t.serverBuild} {serverBuild.slice(0, 8)}{#if serverUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}<span class="links"><a href="https://github.com/LandminenTester/blackice-server-panel" target="_blank" rel="noopener noreferrer">GitHub ↗</a><a href="https://discord.gg/k6ttXWdAyP" target="_blank" rel="noopener noreferrer">Discord ↗</a></span></div>
+      <div class="nav-foot"><strong>BlackICE</strong><span>{t.unofficial}</span>{#if panelVersion}{#if panelVersion.includes("-")}<span class="nav-experimental"><Experimental label={t.experimental} hint={t.experimentalHint}/></span>{/if}<button type="button" class="build" onclick={openUpdates} title={panelUpdate ? t.updateBadge : ""}>{t.panelBuild} {panelVersion}{#if panelUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}{#if serverBuild}<button type="button" class="build" onclick={openUpdates} title={serverUpdate ? t.updateBadge : ""}>{t.serverBuild} {serverBuild.slice(0, 8)}{#if serverUpdate}<i class="dot" aria-label={t.updateBadge}></i>{/if}</button>{/if}<span class="links"><a href="https://github.com/LandminenTester/blackice-server-panel" target="_blank" rel="noopener noreferrer">GitHub ↗</a><a href="https://discord.gg/k6ttXWdAyP" target="_blank" rel="noopener noreferrer">Discord ↗</a></span></div>
     </nav>
     <div
       class="workspace"
@@ -944,7 +949,7 @@
           </div>
         {/if}
         {#if bundleView === "projects" && btState?.enabled}
-          <BundleProjects {t} {locale} {request} tools={btState.toolchain} accounts={btState.accounts} onChanged={loadBundles} />
+          <BundleProjects {t} {locale} {request} tools={btState.toolchain} accounts={btState.accounts} {can} onChanged={loadBundles} />
         {:else if bundleView === "upload" && btState?.enabled}
           <BundleUpload {t} {locale} {request} upload={uploadBundle} maxMb={btState.uploadMaxMb} onInstalled={loadBundles} />
         {:else}
@@ -955,15 +960,13 @@
               >{bundleLoading ? t.loading : t.refresh}</button
             >
           </div>
-          {#if checked}<p class="muted">
-              {t.checked}: {new Date(checked).toLocaleString(locale)}
-            </p>{/if}{#if bundleError}<p class="error" role="status">
+          <div class="bundle-search-toolbar"><label class="bundle-search-field"><span class="sr-only">{t.bundleSearch}</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input type="search" bind:value={bundleSearch} placeholder={t.bundleSearch}/></label><SearchSelect value={bundleCategory} label={t.bundleCategories} options={[{value:'',label:t.bundleAllCategories},...[...new Set(Object.values(bundleMetadata).flatMap(m=>m.tags))].sort().map(v=>({value:v,label:v}))]} onchange={v=>bundleCategory=v}/>{#if checked}<div class="bundle-checked-at"><span>{t.checked}</span><time datetime={checked}>{new Date(checked).toLocaleString(locale)}</time></div>{/if}</div>{#if bundleError}<p class="error" role="status">
               {message(bundleError)}
             </p>{/if}{#if !bundleLoading && !bundles.length}<p class="empty">
               {t.emptyBundles}
             </p>{/if}
           <ul class="bundle-list">
-            {#each bundles as bundle (bundle.name)}<li>
+            {#each bundles.filter(b=>b.name.toLowerCase().includes(bundleSearch.toLowerCase())&&(!bundleCategory||bundleMetadata[b.name]?.tags.includes(bundleCategory))) as bundle (bundle.name)}<li>
                 <div>
                   <strong>{bundle.name}</strong><span
                     class="bundle-state"
@@ -981,7 +984,7 @@
                     ]}</span
                   >
                   {#if bundle.version}<small class="bundle-meta">v{bundle.version}</small>{/if}{#if bundle.author}<small class="bundle-meta">{t.bundleBy} {bundle.author}</small>{/if}
-                  {#if bundle.description}<p class="muted bundle-desc">{bundle.description}</p>{/if}
+                  <div class="project-badges">{#each bundleMetadata[bundle.name]?.tags??[] as tag}<span class="job-badge">{tag}</span>{/each}{#if bundleMetadata[bundle.name]?.autostartDisabled}<span class="job-badge">{t.bundleAutoDisabledTag}</span>{/if}</div>{#if bundle.description}<p class="muted bundle-desc">{bundle.description}</p>{/if}
                 </div>
                 <div
                   class="actions"
@@ -1010,9 +1013,11 @@
                         !connected ||
                         bundle.state !== "stopped"}>{t.start}</button
                     >{/if}
+                  {#if can('bundles.tags')||can('bundles.autostart')||can('bundles.delete')}<button onclick={()=>bundleManage?.open(bundle.name,bundleMetadata[bundle.name])}>{t.bundleManage}</button>{/if}
                 </div>
               </li>{/each}
           </ul>
+          <BundleManage bind:this={bundleManage} {t} {request} {can} onChanged={loadBundles}/>
           {#if busy}<p role="status">{t.actionPending}</p>{/if}
         </section>
         {/if}
@@ -1035,8 +1040,8 @@
             <ServerUpdates {t} {locale} {request} installAllowed={can("users.manage")} onchanged={refreshVersions} />
           {:else if settingsTab === "bridge" && can("settings.write")}
             <Bridge {t} {locale} {request} settings {backend} />
-          {:else if settingsTab === "bundles" && can("settings.write")}
-            <BundleToolsSettings {t} {request} onchanged={loadBundleTools} />
+          {:else if settingsTab === "bundles" && ["bundles.settings","bundles.tools","bundles.accounts.manage"].some(can)}
+            <BundleToolsSettings {t} {request} {can} onchanged={loadBundleTools} />
           {:else if settingsTab === "server" && can("settings.write")}
             <ServerConfig {t} {locale} {request} {backend} onsaved={loadServerName} />
           {:else}

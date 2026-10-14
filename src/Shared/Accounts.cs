@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 namespace ReplayPanel.Shared;
 public static class Permissions {
- public static readonly string[] All=["server.start","server.stop","server.restart","server.force-stop","console.read","console.write","logs.read","bundles.read","bundles.start","bundles.stop","bundles.restart","bundles.upload","bundles.build","settings.write","users.manage"];
+ public static readonly string[] All=["server.start","server.stop","server.restart","server.force-stop","console.read","console.write","logs.read","bundles.read","bundles.start","bundles.stop","bundles.restart","bundles.upload","bundles.build","bundles.settings","bundles.tools","bundles.accounts.manage","bundles.accounts.use","bundles.git.write","bundles.review","bundles.merge","bundles.packages","bundles.autostart","bundles.tags","bundles.delete","bundles.sources.delete","bundles.data.delete","settings.write","users.manage"];
 }
 public sealed class PanelUser {
  public string Username {get;set;}="";
@@ -15,7 +15,7 @@ public sealed class PanelUser {
  public string Stamp {get;set;}=Guid.NewGuid().ToString("N");
  public void SetPassword(string password){PasswordSalt=Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));PasswordHash=Convert.ToBase64String(Rfc2898DeriveBytes.Pbkdf2(password,Convert.FromBase64String(PasswordSalt),210000,HashAlgorithmName.SHA256,32));}
  public bool Verify(string password)=>Enabled&&CryptographicOperations.FixedTimeEquals(Rfc2898DeriveBytes.Pbkdf2(password,Convert.FromBase64String(PasswordSalt),210000,HashAlgorithmName.SHA256,32),Convert.FromBase64String(PasswordHash));
- public UserView View()=>new(Username,Permissions,Enabled,Stamp);
+ public UserView View()=>new(Username,Permissions.Contains("users.manage")&&Permissions.Contains("settings.write")?Permissions.Union(ReplayPanel.Shared.Permissions.All).ToArray():Permissions,Enabled,Stamp);
 }
 public sealed record UserView(string Username,string[] Permissions,bool Enabled,string Stamp);
 public sealed record UserChange(string Username,string? Password,string[] Permissions,bool Enabled=true,bool Create=false);

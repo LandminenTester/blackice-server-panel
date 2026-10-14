@@ -149,7 +149,7 @@ public sealed class SetupService(PanelConfig config, string configPath)
     private async Task DownloadWindows(string staging,CancellationToken ct)
     {
         const string prefix = "https://artifacts.replay.re/server_windows/alpha/";
-        using var client = new HttpClient { Timeout=TimeSpan.FromMinutes(30) };
+        using var client = OutboundHttp.Create(TimeSpan.FromMinutes(30));
         using var version = JsonDocument.Parse(await client.GetStringAsync(prefix + "version.json", ct));
         var commit = version.RootElement.GetProperty("commit").GetString()!;
         if (!System.Text.RegularExpressions.Regex.IsMatch(commit, "^[a-f0-9]{8,40}$")) throw new InvalidOperationException("install.failed");

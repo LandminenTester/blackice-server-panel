@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Security.Cryptography;
 namespace ReplayPanel.Shared;
-public sealed record Request(string Action, string? Command = null, string? ShutdownMode = null, bool? AutoStartServer = null, string? Locale = null, bool? AutoUpdateChecks = null, string? UpdateChannel = null);
+public sealed record Request(string Action, string? Command = null, string? ShutdownMode = null, bool? AutoStartServer = null, string? Locale = null, bool? AutoUpdateChecks = null, string? UpdateChannel = null, bool UseAccounts = true);
 public sealed record Reply(bool Ok, string? Error = null, ServerStatus? Status = null, string[]? Lines = null);
 public sealed record ServerStatus(string State, int? Pid, string ServerRoot, string ShutdownMode, string? Detail = null, bool AutoStartServer = true, string? PathIssue = null, bool AutoUpdateChecks = true, string UpdateChannel = "stable");
 public sealed class PanelConfig
@@ -81,6 +81,9 @@ public sealed class BundleToolsSettings
     public int KeepBackups { get; set; } = 3;
     public int MaxUploadMb { get; set; } = 512;
     public string CommitName { get; set; } = "BlackICE Panel";
+    public string Workflow {get;set;}="review";
+    public string DevelopmentBranch {get;set;}="dev";
+    public string ProductionBranch {get;set;}="main";
     public string CommitEmail { get; set; } = "panel@localhost";
     public List<GitAccount> Accounts { get; set; } = [];
 }

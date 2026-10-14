@@ -10,6 +10,7 @@ public static class BundleSwap
 
     public static string? Backup(string target, string backupsRoot, string name, int keep, Action<string> log)
     {
+        BundlePaths.Tree(target);BundlePaths.Require(backupsRoot);
         if (!Directory.Exists(target)) return null;
         var entries = new DirectoryInfo(target).GetFileSystemInfos().Where(e => !Preserved(e.Name)).ToArray();
         if (entries.Length == 0) return null;
@@ -31,6 +32,7 @@ public static class BundleSwap
     /// <summary>Replaces the artifacts in <paramref name="target"/> with the content of <paramref name="stage"/>.</summary>
     public static void Apply(string stage, string target, Action<string> log)
     {
+        BundlePaths.Tree(target);BundlePaths.Tree(stage);
         Directory.CreateDirectory(target);
         foreach (var existing in new DirectoryInfo(target).GetFileSystemInfos().Where(e => !Preserved(e.Name)))
         {
@@ -59,6 +61,7 @@ public static class BundleSwap
 
     private static void SeedMissing(DirectoryInfo source, string destination)
     {
+        BundlePaths.Require(destination);BundlePaths.Require(source.FullName);
         Directory.CreateDirectory(destination);
         foreach (var file in source.GetFiles()) { var path = Path.Combine(destination, file.Name); if (!File.Exists(path)) file.CopyTo(path); }
         foreach (var dir in source.GetDirectories()) SeedMissing(dir, Path.Combine(destination, dir.Name));
@@ -66,6 +69,7 @@ public static class BundleSwap
 
     private static void CopyEntry(FileSystemInfo entry, string destination)
     {
+        BundlePaths.Require(entry.FullName);BundlePaths.Require(destination);
         if (entry is FileInfo file) { Directory.CreateDirectory(Path.GetDirectoryName(destination)!); file.CopyTo(destination, true); return; }
         var directory = (DirectoryInfo)entry;
         Directory.CreateDirectory(destination);

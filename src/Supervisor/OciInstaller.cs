@@ -1,3 +1,4 @@
+using ReplayPanel.Shared;
 using System.Text.Json;
 using System.IO.Compression;
 using System.Formats.Tar;
@@ -9,7 +10,7 @@ public static class OciInstaller
 {
     public static async Task ExtractSeed(string target, Action<long> progress, CancellationToken ct)
     {
-        using var http=new HttpClient {Timeout=TimeSpan.FromMinutes(30)};
+        using var http=OutboundHttp.Create(TimeSpan.FromMinutes(30));
         var auth=await http.GetStringAsync("https://ghcr.io/token?service=ghcr.io&scope=repository:replayre/server:pull",ct);
         http.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",JsonDocument.Parse(auth).RootElement.GetProperty("token").GetString());
         http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json");

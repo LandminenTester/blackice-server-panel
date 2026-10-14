@@ -1,22 +1,27 @@
 <script lang="ts">
 import {onMount} from 'svelte';
 import type {Catalog} from './locales';
+import Select from './components/Select.svelte';
 import Toggle from './components/Toggle.svelte';
 import Experimental from './components/Experimental.svelte';
 import JobLog from './components/JobLog.svelte';
-let {t,request,onchanged=()=>{}}=$props<{t:Catalog;request:(url:string,body?:object)=>Promise<any>;onchanged?:()=>void}>();
-type Settings={uploadEnabled:boolean;sourcesEnabled:boolean;restartAfterBuild:boolean;buildUi:boolean;keepBackups:number;maxUploadMb:number;commitName:string;commitEmail:string};
+let {t,request,can=(_:string)=>true,onchanged=()=>{}}=$props<{t:Catalog;request:(url:string,body?:object)=>Promise<any>;can?:(permission:string)=>boolean;onchanged?:()=>void}>();
+type Settings={uploadEnabled:boolean;sourcesEnabled:boolean;restartAfterBuild:boolean;buildUi:boolean;keepBackups:number;maxUploadMb:number;commitName:string;commitEmail:string;workflow:string;developmentBranch:string;productionBranch:string};
 type Tool={id:string;installed:boolean;version:string|null;source:string;sizeMb:number;installable:boolean;note:string|null};
 type Account={id:string;type:string;baseUrl:string;label:string;username:string;hasToken:boolean};
 type State={enabled:boolean;settings:Settings;sourceFolder:string;toolchain:Tool[];accounts:Account[];job?:{id:string;state:string}|null};
 let st=$state<State|null>(null),busy=$state(false),error=$state(''),saved=$state(false),keep=$state(3),max=$state(512),name=$state(''),email=$state('');
 let account=$state({id:'',type:'github',baseUrl:'',label:'',username:'',token:''}),accountMessage=$state(''),accountOpen=$state(false);
+let tab=$state('general');
+const tabs=$derived([...(can('bundles.settings')?['general']:[]),...(can('bundles.tools')?['tools']:[]),...(can('bundles.accounts.manage')?['accounts']:[])]);
+$effect(()=>{if(!tabs.includes(tab))tab=tabs[0]??'general';});
+function tabKey(e:KeyboardEvent){const index=tabs.indexOf(tab);const next=e.key==='Home'?0:e.key==='End'?tabs.length-1:e.key==='ArrowRight'?(index+1)%tabs.length:e.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:-1;if(next<0)return;e.preventDefault();tab=tabs[next];(e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role=tab]')[next]?.focus();}
 let dialog=$state<HTMLDialogElement>()!,toolJob=$state(''),latest=$state<Record<string,string|null>>({}),checking=$state(false);
 function adopt(s:State){st=s;keep=s.settings.keepBackups;max=s.settings.maxUploadMb;name=s.settings.commitName;email=s.settings.commitEmail;}
 async function load(){try{adopt(await request('/api/bundle-tools'));}catch(e){error=(e as Error).message;}}
 async function patch(body:object){busy=true;error='';saved=false;try{adopt(await request('/api/bundle-tools/settings',body));saved=true;onchanged();}catch(e){error=(e as Error).message;}finally{busy=false;}}
 async function toolAction(kind:'install'|'remove',id:string){error='';try{const r=await request('/api/bundle-tools/tools/'+kind,{id});if(kind==='install')toolJob=r.id;else adopt(r);}catch(e){error=(e as Error).message;}}
-async function checkLatest(){checking=true;error='';try{latest=await request('/api/bundle-tools/tools/latest');}catch(e){error=(e as Error).message;}finally{checking=false;}}
+async function checkLatest(){checking=true;error='';try{latest=await request('/api/bundle-tools/tools/latest');st=await request('/api/bundle-tools');}catch(e){error=(e as Error).message;}finally{checking=false;}}
 function toolDone(){toolJob='';load();}
 async function saveAccount(e:SubmitEvent){e.preventDefault();error='';accountMessage='';try{await request('/api/bundle-tools/accounts/save',{id:account.id||null,type:account.type,baseUrl:account.baseUrl||null,label:account.label,username:account.username,token:account.token||null});account={id:'',type:'github',baseUrl:'',label:'',username:'',token:''};accountOpen=false;await load();}catch(err){error=(err as Error).message;}}
 async function removeAccount(id:string){error='';try{await request('/api/bundle-tools/accounts/delete',{name:id});await load();}catch(err){error=(err as Error).message;}}
@@ -28,9 +33,14 @@ onMount(load);
 <section class="update-panel bundle-tools" aria-label={t.bundleToolsTitle}>
 <div class="update-heading"><h2>{t.bundleToolsTitle} <Experimental label={t.experimental} hint={t.experimentalHint}/></h2></div>
 <p class="muted">{t.bundleToolsIntro}</p>
-<Toggle checked={st?.enabled??false} label={t.bundleToolsEnable} disabled={busy||!st} onchange={toggleMaster}/>
+<Toggle checked={st?.enabled??false} label={t.bundleToolsEnable} disabled={busy||!st||!can('bundles.settings')} onchange={toggleMaster}/>
 {#if st?.enabled}
 <div class="bundle-tools-options">
+<div class="subtabs bundle-settings-tabs" role="tablist" tabindex="-1" aria-label={t.bundleToolsTitle} onkeydown={tabKey}>{#each tabs as name}<button type="button" id={"bundle-settings-"+name} role="tab" aria-selected={tab===name} aria-controls="bundle-settings-content" tabindex={tab===name?0:-1} class:active={tab===name} onclick={()=>tab=name}>{name==='general'?t.setGeneral:name==='tools'?t.btTools:t.gaTitle}</button>{/each}</div>
+<div id="bundle-settings-content" role="tabpanel" aria-labelledby={"bundle-settings-"+tab}>
+{#if tab==='general'}
+<h3>{t.bxWorkflowDefault}</h3>
+<div class="config-grid"><div class="field"><span>{t.mergePolicy}</span><Select value={st.settings.workflow??'review'} label={t.mergePolicy} options={[{value:'review',label:t.mergeReviewMode},{value:'direct',label:t.mergeDirectMode},{value:'branches',label:t.mergeDisabled}]} disabled={busy} onchange={v=>patch({workflow:v})}/></div><label>{t.bxDevDefault}<input value={st.settings.developmentBranch??'dev'} disabled={busy} onchange={e=>patch({developmentBranch:e.currentTarget.value})}/></label><label>{t.bxLiveDefault}<input value={st.settings.productionBranch??'main'} disabled={busy} onchange={e=>patch({productionBranch:e.currentTarget.value})}/></label></div><p class="muted">{t.mergeHint}</p>
 <h3>{t.btFeatures}</h3>
 <Toggle checked={st.settings.uploadEnabled} label={t.btUpload} disabled={busy} onchange={v=>patch({uploadEnabled:v})}/>
 <Toggle checked={st.settings.sourcesEnabled} label={t.btSources} disabled={busy} onchange={v=>patch({sourcesEnabled:v})}/>
@@ -46,27 +56,31 @@ onMount(load);
 <div class="actions"><button class="primary" disabled={busy}>{t.btSave}</button></div>
 </form>
 <p class="muted">{t.btLayout.replace('{folder}',st.sourceFolder)}</p>
+{:else if tab==='tools'}
 <h3>{t.btTools}</h3>
 <p class="muted">{t.btToolsHint}</p>
 <ul class="tool-list">{#each st.toolchain as tool (tool.id)}<li>
-<div><strong>{t['toolName_'+tool.id as keyof typeof t]}</strong> <span class={'job-badge '+(tool.installed?'succeeded':'')}>{tool.installed?t.toolInstalled+(tool.version?' '+tool.version:'')+(tool.source==='system'?' ('+t.toolSystem+')':''):t.toolMissing}</span>{#if latest[tool.id]}<small class="muted"> {t.toolLatest}: {latest[tool.id]}</small>{/if}<br/><small class="muted">{t.toolSize.replace('{mb}',String(tool.sizeMb))}{tool.note?' · '+tool.note:''}</small></div>
-<div class="actions">{#if tool.installable}<button disabled={!!toolJob||busy} onclick={()=>toolAction('install',tool.id)}>{tool.installed?t.toolUpdate:t.toolInstall}</button>{/if}{#if tool.installed&&tool.source==='panel'}<button disabled={!!toolJob||busy} onclick={()=>toolAction('remove',tool.id==='wasi'?'wasi':tool.id)}>{t.toolRemove}</button>{/if}</div>
+<div><strong>{t['toolName_'+tool.id as keyof typeof t]}</strong> <span class={'job-badge '+(tool.installed?'succeeded':'')}>{tool.installed?t.toolInstalled+(tool.version?' '+tool.version:'')+(tool.source==='system'?' ('+t.toolSystem+')':''):t.toolMissing}</span>{#if latest[tool.id]}<small class="muted"> {t.toolLatest}: {latest[tool.id]}</small>{/if}<br/><small class="muted">{t.toolSize.replace('{mb}',String(tool.sizeMb))}{tool.id==='node'?' · '+t.toolNodeHint:tool.id==='wasi'?' · '+t.toolWasiHint:''}</small></div>
+<div class="actions">{#if tool.installable}<button disabled={!!toolJob||busy} onclick={()=>toolAction('install',tool.id)}>{tool.installed?(tool.source==='system'?t.toolInstallPanel:t.toolUpdate):t.toolInstall}</button>{/if}{#if tool.installed&&tool.source==='panel'}<button disabled={!!toolJob||busy} onclick={()=>toolAction('remove',tool.id==='wasi'?'wasi':tool.id)}>{t.toolRemove}</button>{/if}</div>
 </li>{/each}</ul>
 <div class="actions"><button disabled={checking||!!toolJob} onclick={checkLatest}>{checking?t.toolBusy:t.toolCheck}</button></div>
 {#if toolJob}<JobLog {t} {request} jobId={toolJob} ondone={toolDone}/>{/if}
+{:else}
 <h3>{t.gaTitle}</h3>
-<p class="muted">{t.gaHint}</p>
+<p class="muted">{t.bxShared}</p><p class="muted">{t.gaHint}</p>
 {#if !st.accounts.length}<p class="muted">{t.gaNone}</p>{/if}
-<ul class="tool-list">{#each st.accounts as a (a.id)}<li><div><strong>{a.label}</strong> <span class="job-badge">{t['gaType_'+a.type as keyof typeof t]}</span>{#if a.hasToken}<span class="job-badge succeeded">{t.gaHasToken}</span>{/if}<br/><small class="muted">{a.baseUrl}{a.username?' · '+a.username:''}</small></div><div class="actions"><button onclick={()=>testAccount(a.id)}>{t.gaTest}</button><button onclick={()=>editAccount(a)}>{t.btSave}…</button><button onclick={()=>removeAccount(a.id)}>{t.gaDelete}</button></div></li>{/each}</ul>
+<ul class="tool-list">{#each st.accounts as a (a.id)}<li><div><div class="account-badges"><strong>{a.label}</strong><span class="job-badge">{t['gaType_'+a.type as keyof typeof t]}</span>{#if a.hasToken}<span class="job-badge succeeded">{t.gaHasToken}</span>{/if}</div><small class="muted">{a.baseUrl}{a.username?' · '+a.username:''}</small></div><div class="actions"><button onclick={()=>testAccount(a.id)}>{t.gaTest}</button><button onclick={()=>editAccount(a)}>{t.gaEdit}</button><button onclick={()=>removeAccount(a.id)}>{t.gaDelete}</button></div></li>{/each}</ul>
 {#if accountMessage}<p class="notice" role="status">{accountMessage}</p>{/if}
 {#if accountOpen}<form class="config-grid" onsubmit={saveAccount}>
-<label>{t.gaType}<select bind:value={account.type} disabled={!!account.id}><option value="github">{t.gaType_github}</option><option value="gitlab">{t.gaType_gitlab}</option><option value="gitea">{t.gaType_gitea}</option></select></label>
+<label>{t.gaType}<Select value={account.type} label={t.gaType} disabled={!!account.id} options={[{value:'github',label:t.gaType_github},{value:'gitlab',label:t.gaType_gitlab},{value:'gitea',label:t.gaType_gitea}]} onchange={v=>account.type=v}/></label>
 <label>{t.gaBase}<input type="url" bind:value={account.baseUrl} placeholder={account.type==='github'?'https://github.com':account.type==='gitlab'?'https://gitlab.com':'https://codeberg.org'}/></label>
 <label>{t.gaLabel}<input bind:value={account.label} maxlength="60"/></label>
 <label>{t.gaUser}<input bind:value={account.username} maxlength="100" autocomplete="off"/></label>
 <label>{t.gaToken}<input type="password" bind:value={account.token} autocomplete="new-password" required={!account.id} placeholder={account.id?t.gaTokenKeep:''}/></label>
 <div class="actions"><button type="button" onclick={()=>{accountOpen=false;account={id:'',type:'github',baseUrl:'',label:'',username:'',token:''};}}>{t.cancel}</button><button class="primary">{t.gaSave}</button></div></form>
 {:else}<div class="actions"><button onclick={()=>accountOpen=true}>{t.gaNew}</button></div>{/if}
+{/if}
+</div>
 </div>
 {/if}
 {#if saved}<p class="notice" role="status">{t.btSaved}</p>{/if}

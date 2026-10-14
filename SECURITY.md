@@ -16,7 +16,13 @@ The latest stable release is the supported version. Reports are handled by the m
 
 ## Bundle tools (experimental)
 
-Bundle tools are off by default. Building a project executes project code (MSBuild targets, analyzers, npm packages, with install scripts disabled) with the rights of the panel user, so only enable them for repositories you trust and run the panel as a low-privilege OS user. Git tokens are stored encrypted in the state directory, are never returned to the browser and are redacted from job logs. Nothing is pulled, built or updated automatically. See [docs/bundle-tools.md](docs/bundle-tools.md).
+Bundle tools are off by default. **A build is code execution, not a sandbox.** MSBuild targets, analyzers and the chosen web build run with the panel OS user's rights; disabling npm install scripts does not make untrusted source safe. A malicious build can read files available to that OS user, including panel state or the credentials needed to decrypt stored tokens. Grant build access only to trusted developers, use narrowly scoped repository tokens and a low-privilege OS account, and separate development from a live-player server. Panel permissions do not isolate processes running under the same OS account.
+
+Provider accounts belong to the **server installation**, not to the person who added them. Tokens are encrypted at rest, omitted from browser responses and redacted from job logs. Operators can replace a token, but there is no token-reveal/export action. Account management and account use are separately authorized; repository writes, build tools and bundle preferences also have their own permissions. A user-management administrator can grant these capabilities, so user management remains a trusted role. Back up the state directory and encryption keys together and protect both from unrelated OS users.
+
+Managed outbound HTTP for setup, updates, package metadata and provider calls requires HTTPS and validates/pins DNS connections to public addresses. Provider authentication does not follow redirects. Git remote operations validate and pin public DNS addresses, disable proxies/redirects and keep TLS verification on. This intentionally excludes HTTP/private-network Git providers from dashboard workflows. These network guards do not constrain arbitrary code executed by a trusted build.
+
+Nothing is pulled, built or updated automatically. Use private reports for suspected credential exposure and rotate affected provider tokens. See [Bundle Tools](docs/bundle-tools.md) and the [permission reference](docs/users.md).
 
 ## Deutsch
 
@@ -29,3 +35,13 @@ Bundle tools are off by default. Building a project executes project code (MSBui
 - **Server-Binary.** Unter Linux führt die Prüfung `ldd` auf der gewählten `REServer`-Datei aus, nachdem sie als nicht gruppen-/weltbeschreibbar bestätigt wurde. Das Panel startet diese Datei ohnehin; nur vertrauenswürdige Dateien auswählen.
 - **Updates.** Panel- und Server-Updates werden gegen SHA-256-Prüfsummen geprüft (Integrität), nicht gegen eine Herausgeber-Signatur. Release-Dateien enthalten `SHA256SUMS.txt` und eine GitHub-Build-Provenance-Attestierung; prüfen mit `gh attestation verify <Datei> --repo LandminenTester/blackice-server-panel`. Automatische Update-Prüfungen (GitHub, artifacts.replay.re) lassen sich unter **Einstellungen → Allgemein** abschalten.
 - **Konsolenzugriff.** Wer *Konsole schreiben* hat, kann beliebige REServer-Befehle senden; nur an vertrauenswürdige Betreiber vergeben.
+
+### Bundle-Tools (experimentell)
+
+Bundle-Tools sind standardmäßig aus. **Ein Build führt Code aus und ist keine Sandbox.** MSBuild, Analyzer und Web-Builds laufen mit den Rechten des Panel-Betriebssystemkontos. Fremder Projektcode kann dessen erreichbare Dateien einschließlich Panelzustand und Token-Schlüsseln lesen. Buildrechte nur vertrauenswürdigen Entwicklern geben, Tokens eng begrenzen, das Panel mit einem eingeschränkten Betriebssystemkonto betreiben und Entwicklung vom Live-Server trennen.
+
+Git-Konten gehören zur **Serverinstallation**, nicht einzelnen Panelbenutzern. Tokens werden verschlüsselt gespeichert, nicht an den Browser zurückgegeben und in Joblogs geschwärzt. Verwaltung, Nutzung und Repository-Schreibzugriff sind getrennte Berechtigungen. Das verhindert keinen Zugriff durch privilegierte Betriebssystembenutzer oder bösartigen Buildcode. Zustand und Schlüssel gemeinsam geschützt sichern; bei Verdacht Tokens widerrufen und privat melden. Details in [Bundle-Tools](docs/bundle-tools.md) und [Berechtigungen](docs/users.md).
+
+### Remote merges and bundle lifecycle
+
+Direct merge, review creation, package proposals, startup editing, categories and deletion have separate server-side capabilities. Operations do not retry remote writes after ambiguous failures. Runtime deletion preserves data by default; optional data deletion is restricted to the bundle's exclusive local non-linked VFS directory. Keep backups before irreversible actions. New APIs retain origin-bound credentials, outbound destination checks, CSRF protection and plain-text redacted logs.

@@ -66,7 +66,7 @@ sudo chmod 700 /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blacki
 stat -c %g /var/run/docker.sock
 ```
 
-In `.env` eintragen: `PANEL_STATE=/srv/blackice-panel/state`, `PANEL_RUNTIME=/srv/blackice-panel/runtime`, `SERVER_PATH=/srv/blackice-server`, `DOCKER_GID` mit der ausgegebenen Socket-Gruppen-ID und `PANEL_VERSION=1.2.2`. Dann:
+In `.env` eintragen: `PANEL_STATE=/srv/blackice-panel/state`, `PANEL_RUNTIME=/srv/blackice-panel/runtime`, `SERVER_PATH=/srv/blackice-server`, `DOCKER_GID` mit der ausgegebenen Socket-Gruppen-ID und `PANEL_VERSION` passend zur Version des heruntergeladenen Docker-Archivs (zum Beispiel `1.4.0`). Dann:
 
 ```sh
 docker compose --env-file .env -f deploy/compose.yaml up -d
@@ -91,6 +91,10 @@ Unter Einstellungen → Allgemein lässt sich der neue native Serverordner prüf
 
 Standardmäßig folgt das Panel nur stabilen Releases. Unter **Einstellungen → Updates** kann auf den Kanal **Experimentell** gewechselt werden, um Vorabversionen (`vX.Y.Z-experimental.N`) mit neuen, unfertigen Funktionen zu erhalten; siehe [docs/updates.md](docs/updates.md). Für Produktivserver wird Stabil empfohlen.
 
+### Experimentelle Bundle-Tools
+
+Der experimentelle Kanal ergänzt Bundle-ZIP-Uploads, vertrauenswürdige Quellprojekte und Builds, gemeinsame Git-Konten, Repositorysuche und Reviewabläufe. Standardmäßig deaktiviert. Die getrennten Rechte für Einstellungen, Werkzeuge, Konten und Builds nur vertrauenswürdigen Betreibern geben; Builds führen Projektcode auf dem Panel-Host aus. [Bundle-Tools und Sicherheitsgrenzen](docs/bundle-tools.md).
+
 ## Server-Updates und Bridge-Diagnose
 
 REServer-Updates stehen jetzt unter Einstellungen bereit: offizielles Alpha prüfen, Dateien verifizieren und mit Laufzeitsicherung sowie Start-Rollback installieren. Aktuelles Alpha oder zuvor lokal gesicherten Build auswählen. [Serverupdate-Anleitung](docs/server-updates.md).
@@ -106,3 +110,5 @@ Die optionale LAN-Bridge ergänzt Health, Serverphase, Commit/Tick, zugeordnete 
 [BlackICE von REPLAY.re](https://replay.re/) · [Offizielle Dokumentation](https://docs.replay.re/) · [Offizielles Account-/Serverpanel](https://panel.replay.re/) · [Forum](https://forum.replay.re/)
 
 Community-Projekt unter MIT-Lizenz; keine Verbindung zu oder offizielle Unterstützung durch REPLAY.re, BlackICE oder CD PROJEKT RED. Eigenes Cyberpunk-inspiriertes Design; [visuelle Referenz](https://www.artstation.com/artwork/18mLB8), deren Bilder nicht ausgeliefert werden.
+
+Experimentelle Bundle-Tools bieten Branch-Vergleich und Review-/Direkt-Merges, Review-Branches für Paketupdates, Kategorien und Suche sowie wiederherstellbare Autostart-Einstellungen und ausdrückliche Löschumfänge. Details: [Bundle-Tools](docs/bundle-tools.md) und [Berechtigungen](docs/users.md).

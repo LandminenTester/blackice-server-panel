@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using ReplayPanel.Shared;
 namespace ReplayPanel.Supervisor.BundleTools;
 
-public sealed record GitInfo(string? Branch, string? Commit, bool Dirty, int Ahead, int Behind, string[] Incoming, string? Remote);
+public sealed record GitInfo(string? Branch, string? Commit, bool Dirty, int Ahead, int Behind, string[] Incoming, string? Remote,string? Tag=null);
 public sealed record GitRefs(string[] Branches, string[] Tags, string? Current);
 
 /// <summary>
@@ -21,7 +21,7 @@ public sealed partial class GitService(BundleToolsService service)
     {
         if (string.IsNullOrWhiteSpace(url) || url.Length > 300 || url.Any(c => char.IsControl(c) || char.IsWhiteSpace(c))) throw new InvalidOperationException("bundleTools.remote");
         if (AllowFileRemotes && Directory.Exists(url)) return url;
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("https" or "http") || uri.UserInfo.Length > 0 || uri.Host.Length == 0 || url.Contains('"') || url.StartsWith('-')) throw new InvalidOperationException("bundleTools.remote");
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.UserInfo.Length > 0 || uri.Host.Length == 0 || uri.Query.Length>0 || uri.Fragment.Length>0 || (System.Net.IPAddress.TryParse(uri.Host,out var ip)&&!OutboundHttp.PublicAddress(ip)) || url.Contains('"') || url.StartsWith('-')) throw new InvalidOperationException("bundleTools.remote");
         return uri.ToString();
     }
 
@@ -34,17 +34,20 @@ public sealed partial class GitService(BundleToolsService service)
     public GitAccount? AccountFor(string? id, string url)
     {
         var accounts = service.Config.BundleTools.Accounts;
-        if (!string.IsNullOrEmpty(id)) return accounts.FirstOrDefault(a => a.Id == id) ?? throw new InvalidOperationException("bundleTools.account");
+        if (!string.IsNullOrEmpty(id)){var account=accounts.FirstOrDefault(a => a.Id == id) ?? throw new InvalidOperationException("bundleTools.account");if(!GitProviders.Matches(account,url))throw new InvalidOperationException("bundleTools.accountOrigin");return account;}
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
-        return accounts.FirstOrDefault(a => Uri.TryCreate(a.BaseUrl, UriKind.Absolute, out var b) && b.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) && a.TokenProtected.Length > 0);
+        return accounts.FirstOrDefault(a => GitProviders.Matches(a,url) && a.TokenProtected.Length > 0);
     }
 
-    private Dictionary<string, string> Environment_(GitAccount? account, string url)
+    private Dictionary<string, string> Environment_(GitAccount? account, string url,string? resolved=null)
     {
         var env = service.Tools.BuildEnvironment();
         var count = 0;
         void Config(string key, string value) { env[$"GIT_CONFIG_KEY_{count}"] = key; env[$"GIT_CONFIG_VALUE_{count}"] = value; count++; }
         Config("credential.helper", "");
+        Config("http.followRedirects","false");
+        Config("http.proxy","");Config("http.sslVerify","true");
+        if(resolved is not null)Config("http.curloptResolve",resolved);
         Config("core.hooksPath", Path.Combine(BundleLayout.Toolchain(service.ConfigPath), "no-hooks"));
         Config("core.fsmonitor", "false");
         Config("protocol.allow", AllowFileRemotes ? "always" : "never");
@@ -55,6 +58,7 @@ public sealed partial class GitService(BundleToolsService service)
         Config("advice.detachedHead", "false");
         if (account is { TokenProtected.Length: > 0 } && Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
+            if(!GitProviders.Matches(account,url))throw new InvalidOperationException("bundleTools.accountOrigin");
             var token = service.Secrets.Unprotect(account.TokenProtected);
             service.Redactor.Add(token);
             var user = account.Username.Length > 0 ? account.Username : account.Type == "gitlab" ? "oauth2" : account.Type == "github" ? "x-access-token" : "token";
@@ -70,8 +74,14 @@ public sealed partial class GitService(BundleToolsService service)
     {
         var git = service.Tools.GitExe ?? throw new InvalidOperationException("bundleTools.needGit");
         Directory.CreateDirectory(Path.Combine(BundleLayout.Toolchain(service.ConfigPath), "no-hooks"));
+        string? resolved=null;
+        if(Uri.TryCreate(url,UriKind.Absolute,out var remote)&&remote.Scheme=="https"){
+            ValidateRemote(url);var addresses=await System.Net.Dns.GetHostAddressesAsync(remote.Host,ct);
+            if(addresses.Length==0||addresses.Any(a=>!OutboundHttp.PublicAddress(a)))throw new InvalidOperationException("bundleTools.remote");
+            resolved=remote.IdnHost+":"+remote.Port+":"+string.Join(",",addresses.Select(address=>address.AddressFamily==System.Net.Sockets.AddressFamily.InterNetworkV6?"["+address+"]":address.ToString()));
+        }
         var lines = new List<string>();
-        var result = await ProcessRunner.Run(git, args, workingDirectory, Environment_(account, url), line => { lines.Add(line); log?.Invoke(line); }, ct, timeout ?? TimeSpan.FromMinutes(20));
+        var result = await ProcessRunner.Run(git, args, workingDirectory, Environment_(account, url,resolved), line => { lines.Add(line); log?.Invoke(line); }, ct, timeout ?? TimeSpan.FromMinutes(20));
         if (result.TimedOut) throw new InvalidOperationException("bundleTools.timeout");
         return (result.ExitCode, [.. lines]);
     }
@@ -102,7 +112,8 @@ public sealed partial class GitService(BundleToolsService service)
         if (counts == 0 && First(count).Split('\t', ' ') is { Length: >= 2 } parts) { int.TryParse(parts[0], out ahead); int.TryParse(parts[^1], out behind); }
         var incoming = Array.Empty<string>();
         if (behind > 0) { var (_, diff) = await RunAsync(["diff", "--name-status", "HEAD..@{u}"], source, account, "", ct); incoming = [.. diff.Take(200)]; }
-        return new(First(branch), First(commit), dirty.Any(l => l.Trim().Length > 0), ahead, behind, incoming, First(remote));
+        string? tag=null;if(First(branch)=="HEAD"){var result=await RunAsync(["describe","--tags","--exact-match","HEAD"],source,null,"",ct);if(result.ExitCode==0)tag=First(result.Lines);}
+        return new(First(branch), First(commit), dirty.Any(l => l.Trim().Length > 0), ahead, behind, incoming, First(remote),tag);
     }
 
     public async Task FetchAsync(string source, GitAccount? account, string url, JobContext? ctx, CancellationToken ct)

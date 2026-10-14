@@ -53,12 +53,20 @@ public sealed partial class NuGetService(HttpClient http)
             var c = (i < x.Length ? x[i] : 0).CompareTo(i < y.Length ? y[i] : 0);
             if (c != 0) return c;
         }
-        return IsStable(a).CompareTo(IsStable(b));
+        var stable=IsStable(a).CompareTo(IsStable(b));if(stable!=0)return stable;
+        var ap=a.Split('+')[0].Split('-',2);var bp=b.Split('+')[0].Split('-',2);
+        if(ap.Length<2||bp.Length<2)return 0;
+        var al=ap[1].Split('.');var bl=bp[1].Split('.');
+        for(var i=0;i<Math.Min(al.Length,bl.Length);i++){
+            var an=long.TryParse(al[i],out var av);var bn=long.TryParse(bl[i],out var bv);
+            var comparison=an&&bn?av.CompareTo(bv):an!=bn?(an?-1:1):StringComparer.OrdinalIgnoreCase.Compare(al[i],bl[i]);
+            if(comparison!=0)return comparison;
+        }return al.Length.CompareTo(bl.Length);
     }
 
     public async Task<string[]> VersionsAsync(string id, bool includePrerelease, CancellationToken ct)
     {
-        if (!id.StartsWith("replay.blackice.", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("bundleTools.package");
+        if (!ReplayIds.Contains(id.ToLowerInvariant())) throw new InvalidOperationException("bundleTools.package");
         using var doc = JsonDocument.Parse(await http.GetStringAsync(FlatContainer + id.ToLowerInvariant() + "/index.json", ct));
         var versions = doc.RootElement.GetProperty("versions").EnumerateArray().Select(v => v.GetString()!).Where(v => includePrerelease || IsStable(v)).ToList();
         versions.Sort(Compare);

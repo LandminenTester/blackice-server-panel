@@ -37,7 +37,8 @@ public static partial class BundleLayout
         var root = UgcRoot(config);
         var directory = Path.GetFullPath(Path.Combine(root, name));
         if (!directory.StartsWith(root + Path.DirectorySeparatorChar, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) throw new InvalidOperationException("bundle.invalid");
-        if (Directory.Exists(directory) && new DirectoryInfo(directory).LinkTarget is not null) throw new InvalidOperationException("bundleTools.path");
+        BundlePaths.Require(directory);
+        BundlePaths.Require(directory);
         return directory;
     }
 

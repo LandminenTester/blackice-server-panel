@@ -13,7 +13,7 @@ public sealed record ToolInfo(string Id, bool Installed, string? Version, string
 /// Node (only needed for a web UI) and the WASI SDK (fetched by the Replay NuGet package into a panel-owned folder on the first build).
 /// Downloads come from fixed official hosts and are verified against the hashes the vendors publish.
 /// </summary>
-public sealed class Toolchain(string directory, HttpClient http)
+public sealed class Toolchain(string directory, HttpClient http, bool useSystemTools = true)
 {
     public const string DotnetMetadata = "https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json";
     public const string GitReleases = "https://api.github.com/repos/git-for-windows/git/releases/latest";
@@ -24,33 +24,37 @@ public sealed class Toolchain(string directory, HttpClient http)
     private static bool Windows => OperatingSystem.IsWindows();
 
     // ---------------------------------------------------------------- locations
-    public string DotnetRoot => Dir("dotnet");
-    public string? DotnetExe => Existing(Path.Combine(DotnetRoot, Windows ? "dotnet.exe" : "dotnet"));
-    public string? NodeExe => Existing(Windows ? Path.Combine(Dir("node"), "node.exe") : Path.Combine(Dir("node"), "bin", "node"));
-    public string? NpmCli => Existing(Windows ? Path.Combine(Dir("node"), "node_modules", "npm", "bin", "npm-cli.js") : Path.Combine(Dir("node"), "lib", "node_modules", "npm", "bin", "npm-cli.js"));
-    public string WasiRoot => Dir("wasi-sdk");
-    public string NuGetPackages => Path.Combine(directory, "nuget-packages");
-    public string Home => Path.Combine(directory, "home");
-
-    private static string? Existing(string path) => File.Exists(path) ? path : null;
-
-    private string? systemGit;
-    private DateTime systemGitChecked;
-    public string? GitExe
-    {
-        get
-        {
-            var managed = Existing(Path.Combine(Dir("git"), "cmd", Windows ? "git.exe" : "git"));
-            if (managed is not null) return managed;
-            // Developer/test override: use an explicitly named git program (never set by the panel itself).
-            if (Environment.GetEnvironmentVariable("PANEL_GIT_EXE") is { Length: > 0 } custom && File.Exists(custom)) return custom;
-            if (Windows) return null;
-            if (DateTime.UtcNow - systemGitChecked < TimeSpan.FromSeconds(30)) return systemGit;
-            systemGitChecked = DateTime.UtcNow;
-            systemGit = new[] { "/usr/bin/git", "/usr/local/bin/git", "/bin/git" }.FirstOrDefault(File.Exists);
-            return systemGit;
+    private readonly object discoveryGate=new();
+    private DateTime discoveredAt;private Dictionary<string,(string Path,string? Version)> discovered=new();
+    private Dictionary<string,(string Path,string? Version)> System(){
+        lock(discoveryGate){
+            if(!useSystemTools)return new();
+            if(discoveredAt!=default&&DateTime.UtcNow-discoveredAt<TimeSpan.FromSeconds(30))return discovered;
+            var next=new Dictionary<string,(string Path,string? Version)>();
+            foreach(var name in new[]{"git","dotnet","node"}){
+                foreach(var candidate in SystemTools.Candidates(name)){
+                    var version=name=="dotnet"?SystemTools.SdkVersion(Path.GetDirectoryName(SystemTools.RealPath(candidate))!):SystemTools.Probe(candidate,"--version");
+                    if(string.IsNullOrWhiteSpace(version))continue;
+                    next[name]=(candidate,name=="git"?version.Replace("git version ",""):version.TrimStart('v'));break;
+                }
+            }
+            if(SystemTools.WasiPath() is {} wasi)next["wasi"]=(wasi,SystemTools.WasiVersion(wasi));
+            discovered=next;discoveredAt=DateTime.UtcNow;return discovered;
         }
     }
+    private string? SystemPath(string id)=>System().TryGetValue(id,out var item)?item.Path:null;
+    private string? SystemVersion(string id)=>System().TryGetValue(id,out var item)?item.Version:null;
+    private static string? Existing(string path)=>File.Exists(path)?path:null;
+    private bool Owned(string path,string id)=>Path.GetFullPath(path).StartsWith(Path.GetFullPath(Dir(id)).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar,Windows?StringComparison.OrdinalIgnoreCase:StringComparison.Ordinal);
+    public string DotnetRoot=>DotnetExe is {} exe?Path.GetDirectoryName(SystemTools.RealPath(exe))!:Dir("dotnet");
+    public string? DotnetExe=>Existing(Path.Combine(Dir("dotnet"),Windows?"dotnet.exe":"dotnet"))??SystemPath("dotnet");
+    public string? NodeExe=>Existing(Windows?Path.Combine(Dir("node"),"node.exe"):Path.Combine(Dir("node"),"bin","node"))??SystemPath("node");
+    public string? NpmCli=>NodeExe is {} node?SystemTools.Npm(node):null;
+    public string WasiRoot=>SystemTools.Wasi(Dir("wasi-sdk"))?Dir("wasi-sdk"):SystemPath("wasi")??Dir("wasi-sdk");
+    public string NuGetPackages=>Path.Combine(directory,"nuget-packages");
+    public string Home=>Path.Combine(directory,"home");
+    public string? GitExe=>Existing(Path.Combine(Dir("git"),"cmd",Windows?"git.exe":"git"))??
+        (Environment.GetEnvironmentVariable("PANEL_GIT_EXE") is {Length:>0} custom&&File.Exists(custom)?custom:SystemPath("git"));
 
     private string? Marker(string id)
     {
@@ -62,28 +66,15 @@ public sealed class Toolchain(string directory, HttpClient http)
 
     public ToolInfo[] Status()
     {
-        var git = GitExe;
-        var gitManaged = git is not null && git.StartsWith(Dir("git"), StringComparison.OrdinalIgnoreCase);
-        var wasi = Directory.Exists(WasiRoot) && Directory.EnumerateDirectories(WasiRoot).Any();
-        return
-        [
-            new("git", git is not null, gitManaged ? Marker("git") : git is null ? null : GitVersion(git), gitManaged ? "panel" : git is null ? "none" : "system", 40, Windows, Windows ? null : "Install git with your package manager (for example: apt install git). The Docker image already contains it."),
-            new("dotnet", DotnetExe is not null, DotnetExe is null ? null : Marker("dotnet"), DotnetExe is null ? "none" : "panel", 300, true, null),
-            new("node", NodeExe is not null && NpmCli is not null, NodeExe is null ? null : Marker("node"), NodeExe is null ? "none" : "panel", 40, true, "Only needed for projects with a web UI (ReUi)."),
-            new("wasi", wasi, wasi ? Directory.EnumerateDirectories(WasiRoot).Select(Path.GetFileName).OrderDescending().FirstOrDefault() : null, wasi ? "panel" : "none", Windows ? 620 : 190, false, "Downloaded automatically by the first build (needs internet access)."),
+        var git=GitExe;var dotnet=DotnetExe;var node=NodeExe;var wasi=SystemTools.Wasi(WasiRoot);
+        string Source(string? path,string id)=>path is null?"none":Owned(path,id)?"panel":"system";
+        string? VersionOf(string? path,string id)=>path is null?null:Owned(path,id)?Marker(id):SystemVersion(id);
+        return [
+            new("git",git is not null,VersionOf(git,"git"),Source(git,"git"),40,Windows,null),
+            new("dotnet",dotnet is not null,VersionOf(dotnet,"dotnet"),Source(dotnet,"dotnet"),300,true,null),
+            new("node",node is not null&&NpmCli is not null,VersionOf(node,"node"),Source(node,"node"),40,true,null),
+            new("wasi",wasi,wasi?SystemTools.WasiVersion(WasiRoot):null,wasi?(Owned(WasiRoot,"wasi-sdk")||Path.GetFullPath(WasiRoot)==Path.GetFullPath(Dir("wasi-sdk"))?"panel":"system"):"none",Windows?620:190,false,null)
         ];
-    }
-
-    private static string? GitVersion(string git)
-    {
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo(git, "--version") { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true });
-            var text = process?.StandardOutput.ReadToEnd().Trim();
-            process?.WaitForExit(3000);
-            return text?.Replace("git version ", "");
-        }
-        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException) { return null; }
     }
 
     /// <summary>Scrubbed environment for build tools: nothing of the panel's own environment (tokens, config path, secrets) is passed on.</summary>
@@ -125,6 +116,7 @@ public sealed class Toolchain(string directory, HttpClient http)
             ["npm_config_fund"] = "false",
             ["npm_config_audit"] = "false",
             ["CI"] = "1",
+            ["NO_COLOR"]="1",["FORCE_COLOR"]="0",["TERM"]="dumb",
         };
         // Harmless system variables that Windows tooling needs (NuGet, MSBuild and git resolve well-known folders from them). Nothing else is inherited.
         foreach (var name in new[] { "SystemDrive", "ProgramData", "ALLUSERSPROFILE", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "CommonProgramFiles", "CommonProgramFiles(x86)", "CommonProgramW6432", "PUBLIC", "OS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER", "PROCESSOR_LEVEL", "PROCESSOR_REVISION", "NUMBER_OF_PROCESSORS", "COMPUTERNAME" })
@@ -140,6 +132,7 @@ public sealed class Toolchain(string directory, HttpClient http)
             env["PATHEXT"] = ".COM;.EXE;.BAT;.CMD";
         }
         else env["LANG"] = "C.UTF-8";
+        if(SystemTools.Wasi(WasiRoot))env["WASI_SDK_PATH"]=WasiRoot;
         return env;
     }
 

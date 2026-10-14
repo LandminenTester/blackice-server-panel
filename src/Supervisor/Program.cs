@@ -38,12 +38,13 @@ using var single=new FileStream(Path.Combine(Path.GetDirectoryName(configPath)!,
 var setup=new SetupService(config,configPath);setup.PrintKey();
 IServerBackend? backend=null;BundleManager? bundles=null;PipeClient? adapter=null;
 using var bundleTools=new ReplayPanel.Supervisor.BundleTools.BundleToolsService(config,configPath,()=>bundles);
+var bundleAdmin=new ReplayPanel.Supervisor.BundleTools.BundleAdministration(config,configPath,bundleTools);
 await using var serverUpdates=new ServerUpdates(config,configPath,()=>backend);
 void Activate(){
     backend=new BridgeBackend(config,configPath);
     adapter=new PipeClient(backend);bundles=new BundleManager(adapter,config);
 }
-if(config.Configured){Activate();if(config.AutoStartServer&&backend!.Status().State=="stopped"){try{await backend.StartAsync();}catch(Exception e){Console.Error.WriteLine(e);}}}
+if(config.Configured){Activate();if(config.AutoStartServer&&backend!.Status().State=="stopped"){try{bundleAdmin.BeforeStart();await backend.StartAsync();}catch(Exception e){Console.Error.WriteLine(e);}}}
 using var shutdown=new CancellationTokenSource();
 using var locationGate=new SemaphoreSlim(1);
 Console.CancelKeyPress+=(_,e)=>{e.Cancel=true;shutdown.Cancel();};
@@ -58,8 +59,10 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
         var request=JsonSerializer.Deserialize<Request>(line,PanelConfig.Json)??throw new InvalidOperationException("request.invalid");
         requestAction=request.Action;
         if(request.Action is not ("authenticate" or "account-session" or "bootstrap" or "users" or "setup-banner" or "update-status")){await locationGate.WaitAsync(timeout.Token);locationLease=true;}
+        if(bundleTools.Jobs.Current is {Kind:"bundle-delete",State:"running"} && request.Action is "start" or "restart" or "command" or "bundle-action" or "server-path" or "server-config-save" or "bundle-tags" or "bundle-autostart")throw new InvalidOperationException("bundleTools.busy");
         if(ServerLocation.Issue(config) is {} issue && request.Action is "start" or "restart" or "command" or "bundle-action" or "server-config-save" or "server-update-download" or "server-update-apply")throw new InvalidOperationException(issue);
         if(serverUpdates.Applying&&request.Action is "start" or "stop" or "restart" or "force-stop" or "command" or "bundle-action" or "bridge-settings" or "update-apply" or "server-path" or "shutdown")throw new InvalidOperationException("serverUpdate.busy");
+        if(request.Action is "start" or "restart")bundleAdmin.BeforeStart();
         string Enc(object value)=>JsonSerializer.Serialize(value,PanelConfig.Json);
         switch(request.Action) {
             case "bootstrap":reply=new(true,Lines:[Enc(new {configured=config.Configured,dashboardName=config.DashboardName,backend=config.Backend,locale=config.Locale,version=PanelUpdates.RunningVersion,defaultServerRoot=config.Configured?null:setup.DefaultRoot()})]);break;
@@ -70,7 +73,7 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
             case "setup-install":reply=new(true,Lines:[Enc(setup.Start(JsonSerializer.Deserialize<InstallInput>(request.Command!,PanelConfig.Json)!))]);break;
             case "setup-job":setup.Authorize(request.Command!);reply=new(true,Lines:[Enc(setup.Status()??new InstallJob("","idle","idle",0))]);break;
             case "setup-cancel":setup.Authorize(request.Command!);setup.Cancel();reply=new(true);break;
-            case "setup-finish":await setup.Finish(JsonSerializer.Deserialize<SetupInput>(request.Command!,PanelConfig.Json)!);Activate();if(config.AutoStartServer){try{await backend!.StartAsync();}catch(Exception e){Console.Error.WriteLine(e);}}reply=new(true);break;
+            case "setup-finish":await setup.Finish(JsonSerializer.Deserialize<SetupInput>(request.Command!,PanelConfig.Json)!);Activate();if(config.AutoStartServer){try{bundleAdmin.BeforeStart();await backend!.StartAsync();}catch(Exception e){Console.Error.WriteLine(e);}}reply=new(true);break;
             case "authenticate": {var input=JsonSerializer.Deserialize<string[]>(request.Command!)!;var user=Accounts.Authenticate(config,input[0],input[1]);reply=user is null?new(false):new(true,Lines:[Enc(user)]);break;}
             case "account-session": {var input=JsonSerializer.Deserialize<string[]>(request.Command!)!;var user=Accounts.Session(config,input[0],input[1]);reply=user is null?new(false):new(true,Lines:[Enc(user)]);break;}
             case "users":reply=new(true,Lines:[Enc(Accounts.List(config))]);break;
@@ -118,21 +121,35 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
             case "bundles":if(bundles is null)throw new InvalidOperationException("setup.required");reply=new(true,Lines:[Enc(await bundles.List(timeout.Token))]);break;
             case "bundle-tools-status":reply=new(true,Lines:[Enc(bundleTools.Status())]);break;
             case "bundle-tools-settings":reply=new(true,Lines:[Enc(bundleTools.ApplySettings(request.Command!))]);break;
+            case "bundle-tools-upload-exists":reply=new(true,Lines:[Enc(bundleTools.ExistsCheck(request.Command!))]);break;
             case "bundle-tools-upload-inspect":reply=new(true,Lines:[Enc(bundleTools.UploadInspect(request.Command!))]);break;
             case "bundle-tools-upload-install":reply=new(true,Lines:[Enc(bundleTools.UploadInstall(request.Command!))]);break;
             case "bundle-tools-tool-install":reply=new(true,Lines:[Enc(bundleTools.ToolInstall(request.Command!))]);break;
             case "bundle-tools-tool-remove":reply=new(true,Lines:[Enc(bundleTools.ToolRemove(request.Command!))]);break;
             case "bundle-tools-tool-latest":reply=new(true,Lines:[Enc(await bundleTools.ToolLatest(timeout.Token))]);break;
             case "bundle-tools-projects":reply=new(true,Lines:[Enc(await bundleTools.Projects.ListAsync(timeout.Token))]);break;
-            case "bundle-tools-project-import":reply=new(true,Lines:[Enc(bundleTools.Projects.Import(request.Command!))]);break;
-            case "bundle-tools-project-check":reply=new(true,Lines:[Enc(await bundleTools.Projects.Check(request.Command!,timeout.Token))]);break;
-            case "bundle-tools-project-pull":reply=new(true,Lines:[Enc(bundleTools.Projects.Pull(request.Command!))]);break;
-            case "bundle-tools-project-refs":reply=new(true,Lines:[Enc(await bundleTools.Projects.Refs(request.Command!,timeout.Token))]);break;
+            case "bundle-tools-project-import":reply=new(true,Lines:[Enc(bundleTools.Projects.Import(request.Command!,request.UseAccounts))]);break;
+            case "bundle-tools-project-check":reply=new(true,Lines:[Enc(await bundleTools.Projects.Check(request.Command!,timeout.Token,request.UseAccounts))]);break;
+            case "bundle-tools-project-pull":reply=new(true,Lines:[Enc(bundleTools.Projects.Pull(request.Command!,request.UseAccounts))]);break;
+            case "bundle-tools-project-refs":reply=new(true,Lines:[Enc(await bundleTools.Projects.Refs(request.Command!,timeout.Token,request.UseAccounts))]);break;
             case "bundle-tools-project-checkout":reply=new(true,Lines:[Enc(bundleTools.Projects.Checkout(request.Command!))]);break;
             case "bundle-tools-account-save":reply=new(true,Lines:[Enc(bundleTools.AccountSave(request.Command!))]);break;
             case "bundle-tools-account-delete":reply=new(true,Lines:[Enc(bundleTools.AccountDelete(request.Command!))]);break;
             case "bundle-tools-account-test":reply=new(true,Lines:[Enc(await bundleTools.AccountTest(request.Command!,timeout.Token))]);break;
-            case "bundle-tools-project-create":reply=new(true,Lines:[Enc(bundleTools.Projects.Create(request.Command!))]);break;
+            case "bundle-tools-remote-owners":reply=new(true,Lines:[Enc(await bundleTools.Remote("owners",request.Command!,timeout.Token))]);break;
+            case "bundle-tools-remote-repositories":reply=new(true,Lines:[Enc(await bundleTools.Remote("repositories",request.Command!,timeout.Token))]);break;
+            case "bundle-tools-workflow":reply=new(true,Lines:[Enc(bundleTools.Projects.SetWorkflow(request.Command!))]);break;
+            case "bundle-metadata":reply=new(true,Lines:[Enc(bundleAdmin.Read())]);break;
+            case "bundle-tags":reply=new(true,Lines:[Enc(bundleAdmin.Tags(request.Command!))]);break;
+            case "bundle-autostart":reply=new(true,Lines:[Enc(bundleAdmin.Autostart(request.Command!))]);break;
+            case "bundle-delete-info":reply=new(true,Lines:[Enc(bundleAdmin.DeleteInfo(request.Command!))]);break;
+            case "bundle-delete":reply=new(true,Lines:[Enc(bundleAdmin.Delete(request.Command!))]);break;
+            case "bundle-tools-compare":reply=new(true,Lines:[Enc(await bundleTools.Projects.Compare(request.Command!,timeout.Token))]);break;
+            case "bundle-tools-merge":reply=new(true,Lines:[Enc(bundleTools.Projects.Merge(request.Command!,true))]);break;
+            case "bundle-tools-review":reply=new(true,Lines:[Enc(bundleTools.Projects.Merge(request.Command!,false))]);break;
+            case "bundle-tools-package-review":reply=new(true,Lines:[Enc(bundleTools.Projects.PackageReview(request.Command!))]);break;
+            case "bundle-tools-delivery":reply=new(true,Lines:[Enc(bundleTools.Projects.Delivery(request.Command!))]);break;
+            case "bundle-tools-project-create":reply=new(true,Lines:[Enc(bundleTools.Projects.Create(request.Command!,request.UseAccounts))]);break;
             case "bundle-tools-project-build":reply=new(true,Lines:[Enc(bundleTools.Projects.Build(request.Command!))]);break;
             case "bundle-tools-project-rollback":reply=new(true,Lines:[Enc(bundleTools.Projects.Rollback(request.Command!))]);break;
             case "bundle-tools-project-remove":reply=new(true,Lines:[Enc(bundleTools.Projects.RemoveSource(request.Command!))]);break;

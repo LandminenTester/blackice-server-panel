@@ -41,7 +41,7 @@ public static class BundleZip
     private static bool Glob(string pattern, string path)
     {
         var regex = "^" + Regex.Escape(pattern).Replace(@"\*\*", "\u0001").Replace(@"\*", "[^/]*").Replace("\u0001", ".*").Replace(@"\?", "[^/]") + "$";
-        return Regex.IsMatch(path, regex);
+        return pattern.Length<=500&&Regex.IsMatch(path,regex,RegexOptions.NonBacktracking,TimeSpan.FromMilliseconds(100));
     }
 
     public static ZipReport Inspect(string zipPath, string? originalFileName, long maxBytes)

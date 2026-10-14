@@ -1,113 +1,96 @@
 <script lang="ts">
-import {onMount} from 'svelte';
-import type {Catalog,Locale} from './locales';
-import Toggle from './components/Toggle.svelte';
-import Select from './components/Select.svelte';
-import Experimental from './components/Experimental.svelte';
-import JobLog from './components/JobLog.svelte';
-let {t,locale,request,tools,accounts,onChanged=()=>{}}=$props<{t:Catalog;locale:Locale;request:(url:string,body?:object)=>Promise<any>;tools:{id:string;installed:boolean}[];accounts:{id:string;type:string;label:string;hasToken:boolean}[];onChanged?:()=>void}>();
-type Pkg={file:string;id:string;version:string;floating:boolean};
-type Git={branch:string|null;commit:string|null;dirty:boolean;ahead:number;behind:number;incoming:string[];remote:string|null};
-type Project={name:string;source:string;remote?:string|null;branch?:string|null;build?:{time:string;ok:boolean;error?:string|null}|null;hasSource:boolean;hasBuild:boolean;ui?:string|null;packages:Pkg[];hasBackup:boolean;git:Git|null};
-let projects=$state<Project[]>([]),loading=$state(true),error=$state(''),jobId=$state(''),jobName=$state(''),busy=$state(false);
-let createDialog=$state<HTMLDialogElement>()!,importDialog=$state<HTMLDialogElement>()!,removeDialog=$state<HTMLDialogElement>()!,removing=$state('');
-let form=$state({name:'',author:'',description:'',withUi:false,framework:'svelte',typeScript:true,router:false,state:false,tailwind:false,build:true,repo:false,account:'',visibility:'private'});
-let imp=$state({name:'',url:'',branch:'',account:'',build:false});
-let pkg=$state<{name:string;current:Pkg[];versions:string[];latest:string|null;selected:string;pre:boolean;loading:boolean}|null>(null);
-let refs=$state<{name:string;branches:string[];tags:string[];current:string;selected:string;loading:boolean}|null>(null);
-let incoming=$state<{name:string;files:string[]}|null>(null);
-let discard=$state<Record<string,boolean>>({});
-let missing=$derived(tools.filter((x:{id:string;installed:boolean})=>!x.installed&&x.id==='dotnet').map((x:{id:string})=>t['toolName_'+x.id as keyof typeof t] as string));
-let gitMissing=$derived(!tools.find((x:{id:string;installed:boolean})=>x.id==='git')?.installed);
-let nameValid=$derived(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(form.name));
-let importValid=$derived(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(imp.name)&&/^https?:\/\/\S+$/.test(imp.url));
-const stateLib=$derived(form.framework==='vue'?'Pinia':form.framework==='react'?'Zustand':'Svelte stores');
-const accountOptions=$derived([{value:'',label:t.bpAccountAuto},...accounts.filter((a:{hasToken:boolean})=>a.hasToken).map((a:{id:string;label:string;type:string})=>({value:a.id,label:a.label+' ('+a.type+')'}))]);
-const repoAccounts=$derived(accounts.filter((a:{hasToken:boolean})=>a.hasToken).map((a:{id:string;label:string;type:string})=>({value:a.id,label:a.label+' ('+a.type+')'})));
-const when=(v:string)=>new Date(v).toLocaleString(locale);
-async function load(){loading=true;try{const r=await request('/api/bundle-tools/projects');projects=r.map((x:{project:Project;git:Git|null})=>({...x.project,git:x.git}));}catch(e){error=(e as Error).message;}finally{loading=false;}}
-async function run(url:string,body:object,name:string){error='';busy=true;try{const job=await request(url,body);jobId=job.id;jobName=name;}catch(e){error=(e as Error).message;busy=false;}}
-function done(state:string){busy=false;load();onChanged();}
-async function create(e:SubmitEvent){
-  e.preventDefault();createDialog.close();
-  const ui=form.withUi?{framework:form.framework,typeScript:form.typeScript,router:form.router&&form.framework!=='svelte',state:form.state,tailwind:form.tailwind}:null;
-  const repo=form.repo&&form.account?{accountId:form.account,visibility:form.visibility}:null;
-  await run('/api/bundle-tools/projects/create',{name:form.name,author:form.author,description:form.description,build:form.build,ui,repo},form.name);
-}
-async function importRepo(e:SubmitEvent){e.preventDefault();importDialog.close();await run('/api/bundle-tools/projects/import',{name:imp.name,url:imp.url,branch:imp.branch||null,accountId:imp.account||null,build:imp.build},imp.name);}
-async function check(p:Project){busy=true;error='';try{const g=await request('/api/bundle-tools/projects/check',{name:p.name});p.git=g;projects=[...projects];incoming={name:p.name,files:g.incoming};}catch(e){error=(e as Error).message;}finally{busy=false;}}
-async function loadRefs(p:Project){refs={name:p.name,branches:[],tags:[],current:'',selected:'',loading:true};try{const r=await request('/api/bundle-tools/projects/refs',{name:p.name});refs={name:p.name,branches:r.branches,tags:r.tags,current:r.current,selected:'',loading:false};}catch(e){error=(e as Error).message;refs=null;}}
-async function checkout(build:boolean){if(!refs||!refs.selected)return;const [kind,ref]=refs.selected.split(':');await run('/api/bundle-tools/projects/checkout',{name:refs.name,kind,ref,build},refs.name);refs=null;}
-async function loadPackages(p:Project,pre=false){
-  pkg={name:p.name,current:p.packages,versions:[],latest:null,selected:'',pre,loading:true};
-  try{const r=await request('/api/bundle-tools/packages/info',{name:p.name,includePrerelease:pre});pkg={name:p.name,current:r.current,versions:r.versions,latest:r.latest,selected:r.latest??'',pre,loading:false};}
-  catch(e){error=(e as Error).message;pkg=null;}
-}
-async function applyPackages(){
-  if(!pkg||!pkg.selected)return;busy=true;error='';
-  try{const r=await request('/api/bundle-tools/packages/set',{name:pkg.name,version:pkg.selected,includePrerelease:pkg.pre});pkg={...pkg,current:r.current};await load();}
-  catch(e){error=(e as Error).message;}finally{busy=false;}
-}
-async function removeSource(){removeDialog.close();busy=true;try{const r=await request('/api/bundle-tools/projects/remove',{name:removing});projects=r.map((x:{project:Project;git:Git|null})=>({...(x.project??x),git:x.git??null}));onChanged();await load();}catch(e){error=(e as Error).message;}finally{busy=false;}}
-onMount(load);
+import {onMount} from 'svelte';import type {Catalog,Locale} from './locales';
+import Toggle from './components/Toggle.svelte';import Select from './components/Select.svelte';import SearchSelect from './components/SearchSelect.svelte';import RemoteRepositories from './components/RemoteRepositories.svelte';import Experimental from './components/Experimental.svelte';import JobLog from './components/JobLog.svelte';
+type Account={id:string;type:string;label:string;hasToken:boolean};type Pkg={file:string;id:string;version:string;floating:boolean};type Git={branch:string|null;commit:string|null;dirty:boolean;ahead:number;behind:number;incoming:string[];remote:string|null;tag?:string|null};
+type Project={name:string;source:string;remote?:string|null;accountId?:string|null;branch?:string|null;build?:{time:string;ok:boolean;error?:string|null}|null;hasSource:boolean;hasBuild:boolean;ui?:string|null;packages:Pkg[];hasBackup:boolean;git:Git|null;workflow:string;workflowOverride?:string|null;developmentBranch:string;productionBranch:string};
+let {t,locale,request,tools,accounts,can=(_:string)=>true,onChanged=()=>{}}=$props<{t:Catalog;locale:Locale;request:(url:string,body?:object)=>Promise<any>;tools:{id:string;installed:boolean}[];accounts:Account[];can?:(permission:string)=>boolean;onChanged?:()=>void}>();
+let projects=$state<Project[]>([]),loading=$state(true),error=$state(''),busy=$state(false),search=$state(''),jobId=$state('');
+let createDialog:HTMLDialogElement,importDialog:HTMLDialogElement,detailsDialog:HTMLDialogElement,removeDialog:HTMLDialogElement,operationDialog:HTMLDialogElement,packageDialog:HTMLDialogElement,mergeDialog:HTMLDialogElement;
+let detailTab=$state('project'),comparison=$state<any>(null),mergeSource=$state(''),mergeTarget=$state(''),specificVersion=$state(false),packageBranch=$state('');
+let details=$state<Project|null>(null),removing=$state(''),discard=$state(false),importOpen=$state(false);
+let form=$state({name:'',author:'',description:'',withUi:false,framework:'svelte',typeScript:true,router:false,state:false,tailwind:false,packages:[] as string[],stateLibrary:'none',build:true,repo:false,account:'',owner:'',visibility:'private'});
+let imp=$state({name:'',url:'',branch:'',account:'',build:false});let owners=$state<{id:string;name:string}[]>([]),ownersBusy=$state(false);let ownerGeneration=0;
+let refs=$state<{branches:string[];tags:string[];current:string;selected:string}|null>(null),refBusy=$state(false);
+let pkg=$state<{current:Pkg[];versions:string[];latest:string|null;selected:string;pre:boolean}|null>(null),pkgBusy=$state(false);
+let workflow=$state('inherit'),devBranch=$state('dev'),targetBranch=$state('main'),commitMessage=$state(''),reviewTitle=$state(''),mainConfirmed=$state(false);
+const visible=$derived(projects.filter(p=>(p.name+' '+(p.remote??'')).toLowerCase().includes(search.toLowerCase())));
+const repoAccounts=$derived(can('bundles.accounts.use')?accounts.filter((a:Account)=>a.hasToken).map((a:Account)=>({value:a.id,label:a.label+' · '+a.type})):[]);
+const gitMissing=$derived(!tools.find((x:{id:string;installed:boolean})=>x.id==='git')?.installed);const nameValid=$derived(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(form.name));const importValid=$derived(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(imp.name)&&/^https:\/\/\S+$/.test(imp.url));
+const extras=$derived([{id:'zod',label:t.bxValidation},{id:'icons',label:t.bxIcons},{id:'query',label:t.bxQuery},{id:'clsx',label:t.bxClasses},{id:'dayjs',label:t.bxDates},{id:'@floating-ui/dom',label:t.bxFloating},{id:'vitest',label:t.bxTests},{id:'prettier',label:t.bxFormatting}]);
+function detailKeys(e:KeyboardEvent){const buttons=[...(e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role=tab]')];const current=buttons.indexOf(document.activeElement as HTMLButtonElement);const next=e.key==='Home'?0:e.key==='End'?buttons.length-1:e.key==='ArrowRight'?(current+1)%buttons.length:e.key==='ArrowLeft'?(current+buttons.length-1)%buttons.length:-1;if(next>=0){e.preventDefault();buttons[next].click();buttons[next].focus();}}
+const when=(v:string)=>new Date(v).toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit'})+', '+new Date(v).toLocaleDateString(locale);const errorText=(code:string)=>t.errors[code as keyof typeof t.errors]??t.errors['request.failed'];
+async function load(){loading=true;try{const r=await request('/api/bundle-tools/projects');projects=r.map((x:{project:Project;git:Git|null})=>({...x.project,git:x.git}));if(details)details=projects.find(p=>p.name===details?.name)??null;}catch(e){error=(e as Error).message;}finally{loading=false;}}
+async function run(url:string,body:object){busy=true;error='';try{const job=await request(url,body);jobId=job.id;createDialog.close();importDialog.close();detailsDialog.close();operationDialog.showModal();}catch(e){error=(e as Error).message;busy=false;}}
+function done(){busy=false;comparison=null;load();onChanged();}
+async function create(e:SubmitEvent){e.preventDefault();const ui=form.withUi?{framework:form.framework,typeScript:form.typeScript,router:form.router&&form.framework!=='svelte',state:form.stateLibrary!=='none',stateLibrary:form.stateLibrary,tailwind:form.tailwind,packages:form.packages}:null;const repo=form.repo&&form.account?{accountId:form.account,owner:form.owner||null,visibility:form.visibility}:null;await run('/api/bundle-tools/projects/create',{name:form.name,author:form.author,description:form.description,build:form.build,ui,repo});}
+async function ownerAccount(id:string){form.account=id;form.owner='';owners=[];ownersBusy=true;const gen=++ownerGeneration;try{const r=await request('/api/bundle-tools/remote/owners',{accountId:id,write:true});if(gen===ownerGeneration)owners=r;}catch(e){error=(e as Error).message;}finally{if(gen===ownerGeneration)ownersBusy=false;}}
+async function importRepo(e:SubmitEvent){e.preventDefault();await run('/api/bundle-tools/projects/import',{name:imp.name,url:imp.url,branch:imp.branch||null,accountId:imp.account||null,build:imp.build});}
+async function openDetails(p:Project){details=p;detailTab='project';refs=null;pkg=null;comparison=null;mergeSource=p.developmentBranch??p.git?.branch??'';mergeTarget=p.productionBranch??'main';discard=false;workflow=p.workflowOverride??'inherit';devBranch=p.developmentBranch??'dev';targetBranch=p.productionBranch??'main';mainConfirmed=false;reviewTitle='';detailsDialog.showModal();if(p.git)await loadRefs(p);}
+async function check(){if(!details)return;busy=true;error='';try{const g=await request('/api/bundle-tools/projects/check',{name:details.name});details.git=g;await loadRefs(details);}catch(e){error=(e as Error).message;}finally{busy=false;}}
+async function loadRefs(p:Project){refBusy=true;try{const r=await request('/api/bundle-tools/projects/refs',{name:p.name});if(details?.name===p.name)refs={...r,selected:''};}catch(e){error=(e as Error).message;}finally{refBusy=false;}}
+async function checkout(build:boolean){if(!details||!refs?.selected)return;const split=refs.selected.indexOf(':');await run('/api/bundle-tools/projects/checkout',{name:details.name,kind:refs.selected.slice(0,split),ref:refs.selected.slice(split+1),build});}
+async function loadPackages(pre=false){if(!details)return;const p=details;pkgBusy=true;try{const r=await request('/api/bundle-tools/packages/info',{name:p.name,includePrerelease:pre});if(details?.name===p.name){pkg={...r,selected:r.latest??'',pre};specificVersion=false;packageBranch=p.git?.branch&&refs?.branches.includes(p.git.branch)?p.git.branch:refs?.branches[0]??'';packageDialog.showModal();}}catch(e){error=(e as Error).message;}finally{pkgBusy=false;}}
+async function removeSource(){busy=true;try{await request('/api/bundle-tools/projects/remove',{name:removing});removeDialog.close();detailsDialog.close();await load();onChanged();}catch(e){error=(e as Error).message;}finally{busy=false;}}
+async function saveWorkflow(){if(!details)return;busy=true;try{await request('/api/bundle-tools/projects/workflow',{name:details.name,mode:workflow,developmentBranch:workflow==='inherit'?null:devBranch,productionBranch:workflow==='inherit'?null:targetBranch});await load();if(details){workflow=details.workflowOverride??'inherit';devBranch=details.developmentBranch;targetBranch=details.productionBranch;}}catch(e){error=(e as Error).message;}finally{busy=false;}}
+async function compareBranches(){if(!details)return;busy=true;comparison=null;try{comparison=await request('/api/bundle-tools/projects/compare',{name:details.name,branch:mergeSource,target:mergeTarget});}catch(e){error=(e as Error).message;}finally{busy=false;}}
+async function deliver(){if(!details||!comparison)return;const action=details.workflow==='direct'?'merge':'review';await run('/api/bundle-tools/projects/'+action,{name:details.name,branch:comparison.branch,target:comparison.target,sourceCommit:comparison.sourceCommit,targetCommit:comparison.targetCommit,title:reviewTitle||null,confirm:action==='merge'});mergeDialog.close();}
+async function packageReview(){if(!details||!pkg)return;await run('/api/bundle-tools/packages/review',{name:details.name,version:pkg.selected,branch:packageBranch,includePrerelease:pkg.pre});packageDialog.close();}
+const stateOptions=$derived(form.framework==='react'?[{value:'none',label:t.stateNone},{value:'zustand',label:'Zustand'},{value:'jotai',label:'Jotai'},{value:'nanostores',label:'Nano Stores'}]:form.framework==='vue'?[{value:'none',label:t.stateNone},{value:'pinia',label:'Pinia'},{value:'nanostores',label:'Nano Stores'}]:[{value:'none',label:t.stateLocal},{value:'runes',label:t.stateShared},{value:'nanostores',label:'Nano Stores'}]);
+onMount(()=>{load();request('/api/bundle-tools').then((state:{job?:{id:string;kind:string;state:string}|null})=>{if(state.job&&state.job.kind!=='upload'&&state.job.kind!=='tool-install'){jobId=state.job.id;busy=state.job.state==='running';}}).catch(()=>{});});
 </script>
 <section class="bundle-panel bundle-projects" aria-label={t.bpTitle}>
-<div class="section-heading"><h2>{t.bpTitle} <Experimental label={t.experimental} hint={t.experimentalHint}/></h2><div class="actions"><button onclick={load} disabled={loading||busy}>{t.refresh}</button><button onclick={()=>importDialog.showModal()} disabled={busy}>{t.bpImport}</button><button class="primary" onclick={()=>createDialog.showModal()} disabled={busy}>{t.bpNew}</button></div></div>
-<div class="bundle-upload-body">
-<p class="muted">{t.bpIntro}</p>
-{#if missing.length}<p class="error" role="status">{t.bpToolsMissing.replace('{tools}',missing.join(', '))}</p>{/if}
+<div class="section-heading"><div><h2>{t.bpTitle} <Experimental label={t.experimental} hint={t.experimentalHint}/></h2><p class="muted">{t.bpIntro}</p></div><div class="actions"><button onclick={load} disabled={loading||busy}>{t.refresh}</button><button onclick={()=>{importOpen=true;importDialog.showModal();}} disabled={busy||gitMissing}>{t.bpImport}</button><button class="primary" onclick={()=>createDialog.showModal()} disabled={busy}>{t.bpNew}</button></div></div>
+<div class="project-workspace"><label class="project-search"><span class="sr-only">{t.bxSearch}</span><input type="search" bind:value={search} placeholder={t.bxSearch}/></label>
+{#if loading&&!projects.length}<p role="status">{t.loading}</p>{/if}
 {#if !loading&&!projects.length}<p class="empty">{t.bpEmpty}</p>{/if}
-<ul class="project-list">{#each projects as p (p.name)}<li>
-<div class="project-head"><div><strong>{p.name}</strong> <span class="job-badge">{t['bpSource_'+p.source as keyof typeof t]??p.source}</span>{#if p.ui}<span class="job-badge">{t.bpUi}: {p.ui}</span>{/if}{#if p.git?.dirty}<span class="job-badge failed">{t.bpLocalChanges}</span>{/if}{#if p.git&&p.git.behind>0}<span class="job-badge">{t.bpBehind.replace('{n}',String(p.git.behind))}</span>{/if}</div>
-<div class="actions"><button class="primary" disabled={busy||!p.hasSource} onclick={()=>run('/api/bundle-tools/projects/build',{name:p.name},p.name)}>{t.bpBuild}</button>{#if p.git}<button disabled={busy} onclick={()=>check(p)}>{t.bpCheck}</button><button disabled={busy} onclick={()=>run('/api/bundle-tools/projects/pull',{name:p.name,build:false,discard:!!discard[p.name]},p.name)}>{t.bpPull}</button><button disabled={busy} onclick={()=>run('/api/bundle-tools/projects/pull',{name:p.name,build:true,discard:!!discard[p.name]},p.name)}>{t.bpPullBuild}</button><button disabled={busy} onclick={()=>loadRefs(p)}>{t.bpVersion}</button>{/if}<button disabled={busy||!p.hasSource} onclick={()=>loadPackages(p)}>{t.bpPackages}</button>{#if p.hasBackup}<button disabled={busy} onclick={()=>run('/api/bundle-tools/projects/rollback',{name:p.name},p.name)}>{t.bpRollback}</button>{/if}<button disabled={busy} onclick={()=>{removing=p.name;removeDialog.showModal();}}>{t.bpRemove}</button></div></div>
-{#if p.git}<p class="muted project-meta">{p.git.branch} @ {p.git.commit}{#if p.remote} · {p.remote}{/if}{#if p.git.dirty} · <label class="inline-check"><input type="checkbox" checked={!!discard[p.name]} onchange={(e)=>discard[p.name]=(e.currentTarget as HTMLInputElement).checked}/> {t.bpDiscard}</label>{/if}</p>{/if}
-<p class="muted project-meta">{t.bpLastBuild}: {#if p.build}<span class={'job-badge '+(p.build.ok?'succeeded':'failed')}>{p.build.ok?t.bpOk:t.bpFailed}</span> {when(p.build.time)}{#if p.build.error} · {t.errors[p.build.error as keyof typeof t.errors]??p.build.error}{/if}{:else}{t.bpNever}{/if}{#if p.packages.length} · replay.blackice.* {[...new Set(p.packages.map(x=>x.version))].join(', ')}{/if}</p>
-{#if incoming&&incoming.name===p.name}<div class="package-panel"><strong>{incoming.files.length?t.bpIncoming:t.bpUpToDate}</strong>{#if incoming.files.length}<pre class="job-lines">{incoming.files.join('\n')}</pre>{/if}</div>{/if}
-{#if refs&&refs.name===p.name}<div class="package-panel">{#if refs.loading}<p class="muted">{t.loading}</p>{:else}
-<div class="channel-row"><span>{t.bpCurrentRef}: <strong>{refs.current}</strong></span><Select value={refs.selected} label={t.bpVersion} options={[{value:'',label:t.bpChooseRef},...refs.branches.map(b=>({value:'branch:'+b,label:t.bpBranch+': '+b})),...refs.tags.map(x=>({value:'tag:'+x,label:t.bpTag+': '+x}))]} onchange={v=>{if(refs)refs.selected=v;}}/><button disabled={busy||!refs.selected} onclick={()=>checkout(false)}>{t.bpSwitch}</button><button disabled={busy||!refs.selected} onclick={()=>checkout(true)}>{t.bpSwitchBuild}</button></div>
-<p class="muted">{t.bpNoAuto}</p>{/if}</div>{/if}
-{#if pkg&&pkg.name===p.name}<div class="package-panel">
-{#if !pkg.current.length}<p class="muted">{t.bpVersionNone}</p>{:else}
-<ul class="checks">{#each pkg.current as c}<li class={c.floating?'warn':'ok'}><span aria-hidden="true">{c.floating?'!':'✓'}</span><span>{c.file}: {c.id} {c.version}{c.floating?' — '+t.bpFloating:''}</span></li>{/each}</ul>
-<div class="channel-row"><Toggle checked={pkg.pre} label={t.bpIncludePre} disabled={pkg.loading} onchange={v=>loadPackages(p,v)}/></div>
-{#if pkg.loading}<p class="muted">{t.loading}</p>{:else if pkg.versions.length}
-<div class="channel-row"><span>{t.bpVersionNow}: <strong>{[...new Set(pkg.current.map(x=>x.version))].join(', ')}</strong> · {t.toolLatest}: <strong>{pkg.latest}</strong></span><Select value={pkg.selected} label={t.bpVersionApply} options={[...pkg.versions].reverse().map(v=>({value:v,label:v}))} onchange={v=>{if(pkg)pkg.selected=v;}}/><button disabled={busy||!pkg.selected} onclick={applyPackages}>{t.bpVersionApply}</button></div>{/if}
-<p class="muted">{t.bpNoAuto}</p>{/if}
-</div>{/if}
-</li>{/each}</ul>
-{#if jobId}<h3>{jobName}</h3><JobLog {t} {request} {jobId} ondone={done}/>{/if}
-{#if error}<p class="error" role="alert">{t.errors[error as keyof typeof t.errors]??t.errors['request.failed']}</p>{/if}
-</div>
+<ul class="project-list">{#each visible as p(p.name)}<li><div class="project-identity"><strong>{p.name}</strong><div class="project-badges">{#if p.ui}<span class="job-badge">{t.bpUi}: {p.ui}</span>{/if}{#if p.git?.dirty}<span class="job-badge failed">{t.bpLocalChanges}</span>{/if}{#if p.git?.branch}<span class="job-badge">{p.git.tag??p.git.branch} · {p.git.commit}</span>{/if}</div><p class="project-meta muted"><span>{t.bpLastBuild}: {#if p.build}{when(p.build.time)} &ndash;{:else}{t.bpNever}{/if}</span>{#if p.build}<span class={'job-badge '+(p.build.ok?'succeeded':'failed')}>{p.build.ok?t.bpOk:t.bpFailed}</span>{/if}</p></div><div class="actions"><button disabled={busy||!p.hasSource} onclick={()=>openDetails(p)}>{t.bxDetails}</button><button class="primary" disabled={busy||!p.hasSource} onclick={()=>run('/api/bundle-tools/projects/build',{name:p.name})}>{t.bpBuild}</button></div></li>{/each}</ul>
+{#if jobId}<div class="operation-shortcut"><span>{t.bxJob}</span><button onclick={()=>operationDialog.showModal()}>{t.bxDetails}</button></div>{/if}
+{#if error}<p class="error" role="alert">{errorText(error)}</p>{/if}
+</div></section>
+<dialog bind:this={detailsDialog} class="project-dialog" aria-labelledby="project-detail-title">
+{#if details}<header class="dialog-heading"><div><h2 id="project-detail-title">{details.name}</h2><p class="muted">{t.bxDetails}</p></div><button onclick={()=>detailsDialog.close()}>{t.bxClose}</button></header>
+<div class="subtabs detail-tabs" role="tablist" tabindex="-1" aria-label={t.bxDetails} onkeydown={detailKeys}><button role="tab" id="project-overview-tab" aria-controls="project-detail-content" type="button" tabindex={detailTab==='project'?0:-1} aria-selected={detailTab==='project'} class:active={detailTab==='project'} onclick={()=>detailTab='project'}>{t.bxOverview}</button>{#if details.git}<button role="tab" id="project-delivery-tab" aria-controls="project-detail-content" type="button" tabindex={detailTab==='delivery'?0:-1} aria-selected={detailTab==='delivery'} class:active={detailTab==='delivery'} onclick={()=>detailTab='delivery'}>{t.mergeBranches}</button>{/if}</div>
+<div class="project-detail-grid" role="tabpanel" id="project-detail-content" aria-labelledby={detailTab==='project'?'project-overview-tab':'project-delivery-tab'}>
+{#if detailTab==='project'}
+<section><h3>{t.bxSource}</h3><dl class="detail-facts"><dt>{t.bpRepoUrl}</dt><dd class="path">{details.remote??'—'}</dd><dt>{t.bpCurrentRef}</dt><dd>{details.git?.branch??'—'} · {details.git?.commit??'—'}</dd><dt>{t.bpLastBuild}</dt><dd>{details.build?when(details.build.time):t.bpNever}</dd></dl>
+{#if details.git}<div class="actions"><button disabled={busy} onclick={check}>{t.bpCheck}</button><button disabled={busy} onclick={()=>run('/api/bundle-tools/projects/pull',{name:details!.name,build:false,discard})}>{t.bpPull}</button><button disabled={busy} onclick={()=>run('/api/bundle-tools/projects/pull',{name:details!.name,build:true,discard})}>{t.bpPullBuild}</button></div>
+{#if details.git.dirty}<Toggle checked={discard} label={t.bpDiscard} disabled={busy} onchange={v=>discard=v}/>{/if}
+{#if refBusy}<p role="status">{t.loading}</p>{:else if refs}<div class="field"><span>{t.bpChooseRef}</span><SearchSelect value={refs.selected} label={t.bpChooseRef} options={[...refs.branches.map(b=>({value:'branch:'+b,label:t.bpBranch+': '+b})),...refs.tags.map(b=>({value:'tag:'+b,label:t.bpTag+': '+b}))]} disabled={busy} onchange={v=>{if(refs)refs.selected=v;}}/></div><div class="actions"><button disabled={busy||!refs.selected} onclick={()=>checkout(false)}>{t.bpSwitch}</button><button disabled={busy||!refs.selected} onclick={()=>checkout(true)}>{t.bpSwitchBuild}</button></div>{/if}
+{#if details.git.incoming?.length}<h4>{t.bpIncoming}</h4><pre class="file-changes">{details.git.incoming.join('\n')}</pre>{/if}{/if}
 </section>
-<dialog bind:this={createDialog} aria-labelledby="bp-create-title" class="create-project"><form onsubmit={create}><h2 id="bp-create-title">{t.bpNew} <Experimental label={t.experimental} hint={t.experimentalHint}/></h2>
-<div class="config-grid">
-<label>{t.bpName}<input bind:value={form.name} maxlength="128" required aria-invalid={form.name!==''&&!nameValid}/></label>
-<label>{t.bpAuthor}<input bind:value={form.author} maxlength="80"/></label>
-<label>{t.bpDesc}<input bind:value={form.description} maxlength="300"/></label>
-<Toggle checked={form.withUi} label={t.bpWithUi} onchange={v=>form.withUi=v}/>
-{#if form.withUi}<div class="ui-options">
-<div class="field"><span>{t.bpFramework}</span><Select value={form.framework} label={t.bpFramework} options={[{value:'svelte',label:'Svelte'},{value:'vue',label:'Vue'},{value:'react',label:'React'}]} onchange={v=>{form.framework=v;if(v==='svelte')form.router=false;}}/></div>
-<Toggle checked={form.typeScript} label={t.bpTs} onchange={v=>form.typeScript=v}/>
-{#if form.framework!=='svelte'}<Toggle checked={form.router} label={t.bpRouter+(form.framework==='vue'?' (Vue Router)':' (React Router)')} onchange={v=>form.router=v}/>{/if}
-<Toggle checked={form.state} label={t.bpState.replace('{lib}',stateLib)} onchange={v=>form.state=v}/>
-<Toggle checked={form.tailwind} label={t.bpTailwind} onchange={v=>form.tailwind=v}/>
-</div>{/if}
-{#if repoAccounts.length&&!gitMissing}<Toggle checked={form.repo} label={t.bpCreateRepo} onchange={v=>{form.repo=v;if(v&&!form.account)form.account=repoAccounts[0].value;}}/>
-{#if form.repo}<div class="ui-options"><div class="field"><span>{t.bpAccount}</span><Select value={form.account} label={t.bpAccount} options={repoAccounts} onchange={v=>form.account=v}/></div><div class="field"><span>{t.bpVisibility}</span><Select value={form.visibility} label={t.bpVisibility} options={[{value:'private',label:t.bpPrivate},{value:'public',label:t.bpPublic}]} onchange={v=>form.visibility=v}/></div></div>{/if}
-{:else}<p class="muted">{gitMissing?t.bpNoGit:t.bpNoAccount}</p>{/if}
-<Toggle checked={form.build} label={t.bpBuildNow} onchange={v=>form.build=v}/>
-<p class="muted">{t.bpBuildHint}</p>
+<section><h3>{t.bxPackages}</h3><ul class="package-summary">{#each details.packages as p}<li><strong>{p.id}</strong><span>{p.version}</span></li>{/each}</ul>
+<button disabled={pkgBusy||busy||!details.packages.length} onclick={()=>loadPackages()}>{pkgBusy?t.loading:t.packageCheck}</button>
+{#if details.hasBackup}<h3>{t.bpRollback}</h3><button disabled={busy} onclick={()=>run('/api/bundle-tools/projects/rollback',{name:details!.name})}>{t.bpRollback}</button>{/if}
+</section>
+{:else}
+{#if details.git}<section class="project-delivery"><h3>{t.mergeBranches}</h3><p class="muted">{t.mergeHint}</p>
+{#if can('bundles.settings')}<div class="workflow-policy"><div class="field"><span>{t.mergePolicy}</span><Select value={workflow} label={t.mergePolicy} options={[{value:'inherit',label:t.bxInherit},{value:'review',label:t.mergeReviewMode},{value:'direct',label:t.mergeDirectMode},{value:'branches',label:t.mergeDisabled}]} disabled={busy} onchange={v=>workflow=v}/></div><button disabled={busy} onclick={saveWorkflow}>{t.bxSaveWorkflow}</button></div>{/if}
+<div class="merge-select-grid"><label>{t.mergeSource}<SearchSelect value={mergeSource} label={t.mergeSource} options={(refs?.branches??[]).map(b=>({value:b,label:b}))} disabled={busy||refBusy} onchange={v=>{mergeSource=v;comparison=null;}}/></label><label>{t.mergeTarget}<SearchSelect value={mergeTarget} label={t.mergeTarget} options={(refs?.branches??[]).map(b=>({value:b,label:b}))} disabled={busy||refBusy} onchange={v=>{mergeTarget=v;comparison=null;}}/></label></div>
+<button disabled={busy||!mergeSource||!mergeTarget||mergeSource===mergeTarget||!can('bundles.accounts.use')} onclick={compareBranches}>{t.mergeCheck}</button>
+{#if comparison}<dl class="detail-facts"><dt>{t.mergeSourceCommit}</dt><dd>{comparison.sourceCommit}</dd><dt>{t.mergeTargetCommit}</dt><dd>{comparison.targetCommit}</dd></dl><h4>{t.mergeChanges}</h4><pre class="file-changes">{comparison.commits.join('\n')}
+{comparison.files.join('\n')}</pre>{#if comparison.conflict}<p class="error">{t.mergeConflict}</p>{/if}<label>{t.mergeTitle}<input bind:value={reviewTitle} maxlength="200" placeholder={'Merge '+mergeSource+' → '+mergeTarget}/></label>
+<button class="primary" disabled={busy||comparison.conflict||!comparison.commits.length||details.workflow==='branches'||!can('bundles.git.write')||!can('bundles.accounts.use')||!can(details.workflow==='direct'?'bundles.merge':'bundles.review')} onclick={()=>{if(details?.workflow==='direct')mergeDialog.showModal();else deliver();}}>{details.workflow==='direct'?t.mergeDirect:t.mergeReview}</button>{/if}</section>{/if}
+{/if}
 </div>
-<div class="actions"><button type="button" onclick={()=>createDialog.close()}>{t.cancel}</button><button class="primary" disabled={!nameValid}>{t.bpCreate}</button></div></form></dialog>
-<dialog bind:this={importDialog} aria-labelledby="bp-import-title" class="create-project"><form onsubmit={importRepo}><h2 id="bp-import-title">{t.bpImport} <Experimental label={t.experimental} hint={t.experimentalHint}/></h2>
-<div class="config-grid">
-<label>{t.bpName}<input bind:value={imp.name} maxlength="128" required/></label>
-<label>{t.bpRepoUrl}<input type="url" bind:value={imp.url} placeholder="https://github.com/owner/repo.git" required/></label>
-<label>{t.bpBranchOptional}<input bind:value={imp.branch} maxlength="100" placeholder="main"/></label>
-<div class="field"><span>{t.bpAccount}</span><Select value={imp.account} label={t.bpAccount} options={accountOptions} onchange={v=>imp.account=v}/></div>
-{#if gitMissing}<p class="error">{t.bpNoGit}</p>{/if}
-<Toggle checked={imp.build} label={t.bpBuildAfter} onchange={v=>imp.build=v}/>
-<p class="muted">{t.bpImportHint}</p>
-</div>
-<div class="actions"><button type="button" onclick={()=>importDialog.close()}>{t.cancel}</button><button class="primary" disabled={!importValid||gitMissing}>{t.bpImportGo}</button></div></form></dialog>
-<dialog bind:this={removeDialog} aria-labelledby="bp-remove-title"><h2 id="bp-remove-title">{t.bpRemove}</h2><p>{t.bpRemoveConfirm.replace('{name}',removing)}</p><div class="actions"><button onclick={()=>removeDialog.close()}>{t.cancel}</button><button class="danger" onclick={removeSource}>{t.bpRemove}</button></div></dialog>
+{#if error}<p class="error" role="alert">{errorText(error)}</p>{/if}
+<footer class="dialog-actions"><button class="danger" disabled={busy||!can('bundles.sources.delete')} onclick={()=>{removing=details!.name;removeDialog.showModal();}}>{t.bpRemove}</button><button class="primary" disabled={busy||!details.hasSource} onclick={()=>run('/api/bundle-tools/projects/build',{name:details!.name})}>{t.bpBuild}</button></footer>{/if}
+</dialog>
+<dialog bind:this={createDialog} aria-labelledby="bp-create-title" class="project-dialog create-project-dialog"><form onsubmit={create}>
+<header class="creation-heading"><h2 id="bp-create-title">{t.bpNew}</h2><div class="creation-actions"><button type="button" onclick={()=>createDialog.close()}>{t.bxClose}</button><button class="primary" disabled={busy||!nameValid||ownersBusy||(form.repo&&(!form.account||!owners.length))}>{t.bpCreate}</button></div></header>
+<div class="creation-identity"><label>{t.bpName}<input bind:value={form.name} maxlength="128" required aria-invalid={form.name!==''&&!nameValid}/></label><label>{t.bpAuthor}<input bind:value={form.author} maxlength="80"/></label></div>
+<div class="project-form-grid"><section><label>{t.bpDesc}<textarea bind:value={form.description} maxlength="300" rows="2"></textarea></label><Toggle checked={form.build} label={t.bpBuildNow} onchange={v=>form.build=v}/><small>{t.bpBuildHint}</small>
+<Toggle checked={form.repo} label={t.bpCreateRepo} disabled={busy||gitMissing||!repoAccounts.length||!can('bundles.git.write')} onchange={v=>{form.repo=v;form.account='';form.owner='';owners=[];if(v&&repoAccounts.length)ownerAccount(repoAccounts[0].value);}}/>
+<div class="field"><span>{t.bpAccount}</span><SearchSelect value={form.repo?form.account:''} label={t.bpAccount} options={repoAccounts} disabled={!form.repo||busy||ownersBusy} onchange={ownerAccount}/></div><div class="field"><span>{t.bxOwner}</span><SearchSelect value={form.repo?form.owner:''} label={t.bxOwner} options={form.repo?owners.map(o=>({value:o.id,label:o.name})):[]} disabled={!form.repo||busy||ownersBusy} onchange={v=>form.owner=v}/></div><div class="field"><span>{t.bpVisibility}</span><Select value={form.repo?form.visibility:''} label={t.bpVisibility} options={[{value:'private',label:t.bpPrivate},{value:'public',label:t.bpPublic}]} disabled={!form.repo||busy} onchange={v=>form.visibility=v}/></div>
+{#if gitMissing||!repoAccounts.length}<p class="muted">{gitMissing?t.bpNoGit:t.bpNoAccount}</p>{/if}</section><section><h3>{t.bxWeb}</h3><Toggle checked={form.withUi} label={t.bpWithUi} onchange={v=>form.withUi=v}/>{#if form.withUi}<div class="field"><span>{t.bpFramework}</span><Select value={form.framework} label={t.bpFramework} options={[{value:'svelte',label:'Svelte'},{value:'vue',label:'Vue'},{value:'react',label:'React'}]} onchange={v=>{form.framework=v;form.stateLibrary='none';if(v==='svelte')form.router=false;}}/></div><div class="web-package-grid"><Toggle checked={form.typeScript} label={t.bpTs} onchange={v=>form.typeScript=v}/>{#if form.framework!=='svelte'}<Toggle checked={form.router} label={t.bpRouter} onchange={v=>form.router=v}/>{/if}<div class="field state-choice"><span>{t.stateLibrary}</span><Select value={form.stateLibrary} label={t.stateLibrary} options={stateOptions} onchange={v=>form.stateLibrary=v}/></div><Toggle checked={form.tailwind} label={t.bpTailwind} onchange={v=>form.tailwind=v}/>{#each extras as extra}<Toggle checked={form.packages.includes(extra.id)} label={extra.label} onchange={v=>form.packages=v?[...form.packages,extra.id]:form.packages.filter(p=>p!==extra.id)}/>{/each}</div><p class="muted">{t.bxOptional}</p>{/if}</section></div>{#if error}<p class="error" role="alert">{errorText(error)}</p>{/if}</form></dialog>
+<dialog bind:this={importDialog} aria-labelledby="bp-import-title" class="project-dialog"><header class="dialog-heading"><h2 id="bp-import-title">{t.bpImport}</h2><button onclick={()=>importDialog.close()}>{t.bxClose}</button></header><div class="project-form-grid">
+{#if can('bundles.accounts.use')&&importOpen}<RemoteRepositories {t} {request} {accounts} onchoose={(repo,accountId)=>{imp={...imp,name:repo.name.replace(/[^A-Za-z0-9_.-]/g,'-'),url:repo.cloneUrl,branch:repo.defaultBranch,account:accountId};}}/>{/if}
+<form onsubmit={importRepo}><h3>{t.bxManual}</h3><label>{t.bpName}<input bind:value={imp.name} maxlength="128" required/></label><label>{t.bpRepoUrl}<input type="url" bind:value={imp.url} placeholder="https://github.com/owner/repo.git" required/></label><label>{t.bpBranchOptional}<input bind:value={imp.branch} maxlength="100" placeholder="main"/></label>{#if repoAccounts.length}<div class="field"><span>{t.bpAccount}</span><SearchSelect value={imp.account} label={t.bpAccount} options={[{value:'',label:t.bpAccountAuto},...repoAccounts]} onchange={v=>imp.account=v}/></div>{/if}<Toggle checked={imp.build} label={t.bpBuildAfter} onchange={v=>imp.build=v}/><p class="muted">{t.bpImportHint}</p><button class="primary" disabled={busy||!importValid||gitMissing}>{t.bpImportGo}</button></form></div>{#if error}<p class="error" role="alert">{errorText(error)}</p>{/if}</dialog>
+<dialog bind:this={operationDialog} class="operation-dialog" aria-labelledby="operation-title"><header class="dialog-heading"><h2 id="operation-title">{t.bxJob}</h2><button onclick={()=>operationDialog.close()}>{t.bxClose}</button></header>{#if jobId}<JobLog {t} {request} {jobId} ondone={done}/>{/if}</dialog>
+<dialog bind:this={removeDialog} aria-labelledby="bp-remove-title"><h2 id="bp-remove-title">{t.bpRemove}</h2><p>{t.bpRemoveConfirm.replace('{name}',removing)}</p><div class="actions"><button onclick={()=>removeDialog.close()}>{t.cancel}</button><button class="danger" disabled={busy} onclick={removeSource}>{t.bpRemove}</button></div></dialog>
+
+<dialog bind:this={mergeDialog}><h2>{t.mergeBranches}</h2><p>{t.mergeConfirm.replace('{source}',mergeSource).replace('{target}',mergeTarget)}</p><div class="actions"><button onclick={()=>mergeDialog.close()}>{t.cancel}</button><button class="primary" disabled={busy} onclick={deliver}>{t.mergeDirect}</button></div></dialog>
+<dialog bind:this={packageDialog} class="project-dialog" aria-labelledby="package-dialog-title"><header class="dialog-heading"><h2 id="package-dialog-title">{t.bxPackages}</h2><button onclick={()=>packageDialog.close()}>{t.bxClose}</button></header>
+{#if pkg}<div class="project-form-grid"><section><h3>{t.packageCurrent}</h3><ul class="package-summary">{#each pkg.current as p}<li><strong>{p.id}</strong><span>{p.version}</span></li>{/each}</ul><p>{t.packageLatest}: <strong>{pkg.latest??t.bpVersionNone}</strong></p><Toggle checked={pkg.pre} label={t.bpIncludePre} disabled={pkgBusy||busy} onchange={v=>loadPackages(v)}/></section>
+<section><p class="muted">{t.packageHint}</p><div class="actions"><button disabled={busy||pkgBusy||!pkg.latest} onclick={()=>{specificVersion=false;if(pkg)pkg.selected=pkg.latest??'';}}>{t.packageUpdate}</button><button disabled={busy||pkgBusy||!pkg.versions.length} onclick={()=>specificVersion=true}>{t.packageSpecific}</button></div>
+{#if specificVersion}<label>{t.bpVersion}<SearchSelect value={pkg.selected} label={t.bpVersion} options={[...pkg.versions].reverse().map(v=>({value:v,label:v}))} onchange={v=>{if(pkg)pkg.selected=v;}}/></label>{/if}<label>{t.packageBranch}<SearchSelect value={packageBranch} label={t.packageBranch} options={(refs?.branches??[]).map(b=>({value:b,label:b}))} onchange={v=>packageBranch=v}/></label><button class="primary" disabled={busy||pkgBusy||!pkg.selected||!packageBranch||!details?.remote||!can('bundles.packages')||!can('bundles.review')||!can('bundles.accounts.use')||!can('bundles.git.write')} onclick={packageReview}>{t.packageRequest} · {pkg.selected}</button>{#if !details?.remote}<p class="muted">{t.packageNoRemote}</p>{/if}</section></div>{/if}
+{#if error}<p class="error" role="alert">{errorText(error)}</p>{/if}</dialog>

@@ -13,7 +13,7 @@ const suffix=process.platform==='win32'?'.exe':'';
 const password = 'disposable-fixture-password';
 const salt = randomBytes(16);
 const configPath = resolve(folder, 'panel.json');
-const config = { schemaVersion:2,autoStartServer:false, backend:process.platform==='win32'?'windows':'linux', serverRoot: resolve(root, '.local/fixture'), pipeName: 'replay-panel-test-' + process.pid, shutdownMode:'keep-running', stopTimeoutSeconds:10, autoRestart:false, url:'http://127.0.0.1:20774', passwordSalt:salt.toString('base64'), passwordHash:pbkdf2Sync(password,salt,210000,32,'sha256').toString('base64') };
+const config = { schemaVersion:2,autoStartServer:false, backend:process.platform==='win32'?'windows':'linux', serverRoot: resolve(root, '.local/fixture'), pipeName: 'replay-panel-test-' + process.pid, shutdownMode:'keep-running', stopTimeoutSeconds:10, autoRestart:false, url:'http://127.0.0.1:'+(process.env.PANEL_TEST_PORT??'20784'), passwordSalt:salt.toString('base64'), passwordHash:pbkdf2Sync(password,salt,210000,32,'sha256').toString('base64') };
 await writeFile(configPath, JSON.stringify(config));
 await mkdir(resolve(config.serverRoot,'cfg'),{recursive:true});await writeFile(resolve(config.serverRoot,'cfg/server.cfg'),'# Test fixture only\n');
 for (const name of ['fixture-bundle','parked-bundle','broken-bundle']) {
@@ -146,7 +146,60 @@ try {
   check((await post('/api/users/delete',{username:'reader'})).status===200,'admin can delete user');
   cookies.clear();for(const [k,v] of changedCookies)cookies.set(k,v);check((await request('/api/status')).status===401,'deleted account session rejected');
   cookies.clear();for(const [k,v] of adminCookies)cookies.set(k,v);csrf=adminCsrf;
-  if(process.argv.includes('--review')) { console.log('Review fixture ready on http://127.0.0.1:20774. Test-only password: disposable-fixture-password'); await new Promise(resolve=>process.once('SIGINT',resolve)); }
+  // Experimental Bundle Tools use separate capabilities, not generic settings access.
+  check((await post('/api/bundle-tools/settings',{enabled:true,sourcesEnabled:true})).status===200,'admin can enable Bundle Tools');
+  const accountResponse=await post('/api/bundle-tools/accounts/save',{type:'github',label:'Fixture account',username:'fixture',token:'test-only-never-a-real-token'});
+  check(accountResponse.status===200,'server-wide test account can be stored');
+  const accountViews=await accountResponse.json();
+  check(!JSON.stringify(accountViews).includes('test-only-never-a-real-token')&&accountViews[0].hasToken,'stored token is not returned to administrator');
+  check((await request('/api/bundle-tools/projects')).status===200,'build administrator can list projects');
+  check((await request('/api/bundle-tools/tools/latest',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status===400,'bundle mutation surface rejects missing CSRF');
+  check((await post('/api/users/save',{username:'bundle-reader',password:'bundle-reader-password',permissions:['bundles.read','settings.write'],enabled:true,create:true})).status===200,'ordinary settings operator can be created without experimental privileges');
+  cookies.clear();csrf=(await(await request('/api/session')).json()).csrf;
+  check((await post('/api/login',{username:'bundle-reader',password:'bundle-reader-password'})).status===200,'ordinary settings operator signs in');csrf=(await(await request('/api/session')).json()).csrf;
+  const limitedState=await(await request('/api/bundle-tools')).json();
+  check(limitedState.accounts.length===0&&!('jobs' in limitedState)&&!('job' in limitedState),'bundle-read status hides shared account metadata and job history');
+  for(const route of ['/api/bundle-tools/settings','/api/bundle-tools/tools/install','/api/bundle-tools/tools/remove','/api/bundle-tools/accounts/save','/api/bundle-tools/accounts/delete','/api/bundle-tools/accounts/test','/api/bundle-tools/projects/create','/api/bundle-tools/projects/import','/api/bundle-tools/projects/pull','/api/bundle-tools/projects/checkout','/api/bundle-tools/projects/build','/api/bundle-tools/projects/rollback','/api/bundle-tools/projects/remove','/api/bundle-tools/packages/info','/api/bundle-tools/packages/set','/api/bundle-tools/remote/owners','/api/bundle-tools/remote/repositories','/api/bundle-tools/projects/delivery','/api/bundle-tools/projects/workflow','/api/bundle-tools/projects/compare','/api/bundle-tools/projects/review','/api/bundle-tools/projects/merge','/api/bundle-tools/packages/review','/api/bundles/tags','/api/bundles/autostart','/api/bundles/delete-info','/api/bundles/delete','/api/bundle-tools/upload/exists','/api/bundle-tools/upload/install'])check((await post(route,{name:'fixture-bundle',id:'git',accountId:accountViews[0].id})).status===403,'ordinary settings permission denied '+route);
+  check((await request('/api/bundle-tools/projects')).status===403,'project sources require build permission');
+  check((await request('/api/bundle-tools/jobs/'+'a'.repeat(32))).status===403,'job output requires operation-specific permission');
+  cookies.clear();for(const [k,v] of adminCookies)cookies.set(k,v);csrf=adminCsrf;
+  check((await post('/api/users/delete',{username:'bundle-reader'})).status===200,'temporary limited operator removed');
+  await pipe('ignored',true);await sleep(500);await startWeb();
+  check((await post('/api/users/save',{username:'bundle-manager',password:'bundle-manager-password',permissions:['bundles.read','bundles.settings','bundles.tools','bundles.build'],enabled:true,create:true})).status===200,'separate experimental manager can be created');
+  cookies.clear();csrf=(await(await request('/api/session')).json()).csrf;
+  check((await post('/api/login',{username:'bundle-manager',password:'bundle-manager-password'})).status===200,'experimental manager signs in');csrf=(await(await request('/api/session')).json()).csrf;
+  const managerSettings=await post('/api/bundle-tools/settings',{keepBackups:4});check(managerSettings.status===200,'experimental settings capability works without generic settings');
+  const managerState=await managerSettings.json();check(managerState.accounts.length===0,'settings mutation response hides Git accounts without account permission');
+  const removedTool=await post('/api/bundle-tools/tools/remove',{id:'node'});check(removedTool.status===200&&(await removedTool.json()).accounts.length===0,'tool removal response hides Git account metadata and preserves system tools');
+  check((await post('/api/bundle-tools/accounts/save',{type:'github',token:'forbidden-token'})).status===403,'tool/settings manager cannot manage shared accounts');
+  check((await post('/api/bundle-tools/remote/owners',{accountId:accountViews[0].id})).status===403,'tool/settings manager cannot use shared credentials');
+  check((await post('/api/bundle-tools/projects/create',{name:'must-not-create-remote',build:false,repo:{accountId:accountViews[0].id,visibility:'private'}})).status===403,'build permission alone cannot create a provider repository');
+  check((await post('/api/bundle-tools/projects/import',{name:'must-not-use-token',url:'https://github.com/example/repo.git',accountId:accountViews[0].id,build:false})).status===403,'build permission alone cannot import using an explicit shared account');
+  check((await post('/api/bundle-tools/projects/delivery',{name:'fixture-bundle',action:'push'})).status===403,'build permission alone cannot push or create review requests');
+  cookies.clear();for(const [k,v] of adminCookies)cookies.set(k,v);csrf=(await(await request('/api/session')).json()).csrf;
+  check((await post('/api/users/delete',{username:'bundle-manager'})).status===200,'temporary experimental manager removed');
+  check((await post('/api/users/save',{username:'legacy-writer',password:'legacy-writer-password',permissions:['bundles.read','bundles.build','bundles.git.write','bundles.accounts.use'],enabled:true,create:true})).status===200,'legacy Git writer created without new workflow rights');
+  check((await post('/api/login',{username:'legacy-writer',password:'legacy-writer-password'})).status===200,'legacy Git writer signs in');csrf=(await(await request('/api/session')).json()).csrf;
+  for(const route of ['/api/bundle-tools/projects/review','/api/bundle-tools/projects/merge','/api/bundle-tools/packages/review','/api/bundle-tools/projects/remove','/api/bundles/delete'])check((await post(route,{name:'parked-bundle',branch:'dev',target:'main'})).status===403,'legacy Git rights do not grant '+route);
+  cookies.clear();for(const [k,v] of adminCookies)cookies.set(k,v);csrf=(await(await request('/api/session')).json()).csrf;
+  check((await post('/api/users/delete',{username:'legacy-writer'})).status===200,'temporary legacy writer removed');
+  check((await post('/api/bundles/tags',{name:'parked-bundle',tags:['API','Jobs']})).status===200,'admin assigns server-wide bundle categories');
+  check((await(await request('/api/bundles/metadata')).json())['parked-bundle'].tags.includes('API'),'metadata endpoint returns bundle categories');
+  await writeFile(resolve(config.serverRoot,'cfg/server.cfg'),'# Test fixture only\nstart parked-bundle\n');
+  check((await post('/api/bundles/autostart',{name:'parked-bundle',autostartDisabled:true})).status===200,'autostart can be disabled without removing bundle files');
+  check(!(await readFile(resolve(config.serverRoot,'cfg/server.cfg'),'utf8')).includes('\nstart parked-bundle'),'disabled bundle startup entry is preserved as a marker');
+  check((await post('/api/bundles/autostart',{name:'parked-bundle',autostartDisabled:false})).status===200,'bundle autostart can be restored');
+  check((await readFile(resolve(config.serverRoot,'cfg/server.cfg'),'utf8')).includes('\nstart parked-bundle'),'restored startup entry retains its original command');
+  check((await post('/api/users/save',{username:'bundle-organizer',password:'bundle-organizer-password',permissions:['bundles.read','bundles.tags','bundles.autostart','bundles.delete'],enabled:true,create:true})).status===200,'limited lifecycle operator created');
+  check((await post('/api/login',{username:'bundle-organizer',password:'bundle-organizer-password'})).status===200,'limited lifecycle operator signs in');csrf=(await(await request('/api/session')).json()).csrf;
+  check((await post('/api/bundles/tags',{name:'parked-bundle',tags:['Gameplay']})).status===200,'category permission permits only metadata editing');
+  check((await post('/api/bundles/delete',{name:'parked-bundle',sources:true})).status===403,'bundle-delete permission does not grant source deletion');
+  check((await post('/api/bundles/delete',{name:'parked-bundle',data:true})).status===403,'bundle-delete permission does not grant persistent data deletion');
+  check((await post('/api/bundle-tools/projects/merge',{name:'parked-bundle'})).status===403,'lifecycle permission does not grant Git merge');
+  cookies.clear();for(const [k,v] of adminCookies)cookies.set(k,v);csrf=(await(await request('/api/session')).json()).csrf;
+  check((await post('/api/users/delete',{username:'bundle-organizer'})).status===200,'temporary lifecycle operator removed');
+  console.log(count+' panel integration checks passed.');
+  if(process.argv.includes('--review')) { console.log(`Review fixture ready on ${config.url}. Test-only password: disposable-fixture-password`); await new Promise(resolve=>process.once('SIGINT',resolve)); }
   console.log(count+' panel integration checks passed.');
 } finally {
   try { await post('/api/server/stop'); } catch {}

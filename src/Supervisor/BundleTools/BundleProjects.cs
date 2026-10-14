@@ -13,6 +13,9 @@ public sealed class BundleProject
     public string? Remote { get; set; }
     public string? AccountId { get; set; }
     public string? Branch { get; set; }
+    public string? Workflow {get;set;}
+    public string? DevelopmentBranch {get;set;}
+    public string? ProductionBranch {get;set;}
     public string? UiFramework { get; set; }
     public DateTimeOffset Created { get; set; } = DateTimeOffset.UtcNow;
     public LastBuild? Build { get; set; }
@@ -89,7 +92,7 @@ public sealed partial class BundleProjects(BundleToolsService service)
 
     public object List()
     {
-        service.RequireEnabled();
+        service.RequireSources();
         var registered = Registry.All();
         var names = registered.Select(p => p.Name).ToList();
         var sources = BundleLayout.SourceRoot(Config);
@@ -111,6 +114,7 @@ public sealed partial class BundleProjects(BundleToolsService service)
                 p.Remote,
                 p.Branch,
                 p.AccountId,
+                workflow=p.Workflow??Config.BundleTools.Workflow,workflowOverride=p.Workflow,developmentBranch=p.DevelopmentBranch??Config.BundleTools.DevelopmentBranch,productionBranch=p.ProductionBranch??Config.BundleTools.ProductionBranch,
                 p.Build,
                 hasSource = Directory.Exists(source),
                 hasBuild = File.Exists(Path.Combine(bundle, "config.toml")),
@@ -123,12 +127,12 @@ public sealed partial class BundleProjects(BundleToolsService service)
 
     // ------------------------------------------------------------------ create from template
     private sealed record CreateArgs(string Name, string? Author, string? Description, bool Build, UiArgs? Ui, RepoArgs? Repo);
-    private sealed record RepoArgs(string AccountId, string? Visibility);
-    private sealed record UiArgs(string Framework, bool TypeScript, bool Router, bool State, bool Tailwind);
+    private sealed record RepoArgs(string AccountId, string? Visibility,string? Owner=null);
+    private sealed record UiArgs(string Framework, bool TypeScript, bool Router, bool State, bool Tailwind,string[]? Packages=null,string? StateLibrary=null);
 
-    public BundleJob Create(string json)
+    public BundleJob Create(string json,bool useAccounts=true)
     {
-        service.RequireEnabled();
+        service.RequireSources();
         if (!Config.BundleTools.SourcesEnabled) throw new InvalidOperationException("bundleTools.disabled");
         var args = JsonSerializer.Deserialize<CreateArgs>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
         var name = BundleLayout.RequireName(args.Name);
@@ -139,13 +143,15 @@ public sealed partial class BundleProjects(BundleToolsService service)
         if (args.Ui is { } u)
         {
             if (!BundleTemplates.Frameworks.Contains(u.Framework)) throw new InvalidOperationException("bundleTools.invalid");
-            ui = new UiOptions(u.Framework, u.TypeScript, u.Router && u.Framework != "svelte", u.State, u.Tailwind);
+            ui = new UiOptions(u.Framework, u.TypeScript, u.Router && u.Framework != "svelte", u.State, u.Tailwind,u.Packages,u.StateLibrary);
+            StateTemplates.Validate(ui);
         }
         var source = BundleLayout.SourceDir(Config, name);
         if (Directory.Exists(source) && Directory.EnumerateFileSystemEntries(source).Any()) throw new InvalidOperationException("bundleTools.exists");
         GitAccount? repoAccount = null;
         if (args.Repo is { } repoArgs)
         {
+            if(!useAccounts)throw new InvalidOperationException("auth.forbidden");
             repoAccount = Config.BundleTools.Accounts.FirstOrDefault(a => a.Id == repoArgs.AccountId) ?? throw new InvalidOperationException("bundleTools.account");
             if (repoAccount.TokenProtected.Length == 0) throw new InvalidOperationException("bundleTools.tokenRejected");
             if (service.Tools.GitExe is null) throw new InvalidOperationException("bundleTools.needGit");
@@ -174,7 +180,7 @@ public sealed partial class BundleProjects(BundleToolsService service)
                 var token = service.Secrets.Unprotect(repoAccount.TokenProtected);
                 service.Redactor.Add(token);
                 RepoInfo info;
-                try { info = await GitProviders.CreateRepositoryAsync(service.Http, repoAccount, token, name, description.Length > 0 ? description : name, repo.Visibility != "public", ctx.Token); }
+                try { info = await GitProviders.CreateRepositoryAsync(service.ProviderHttp, repoAccount, token, name, description.Length > 0 ? description : name, repo.Visibility != "public", ctx.Token,repo.Owner); }
                 catch (HttpRequestException) { throw new InvalidOperationException("bundleTools.providerFailed"); }
                 ctx.Log("Repository: " + info.WebUrl);
                 await service.Git.InitAndPushAsync(source, info.CloneUrl, repoAccount, ctx);
@@ -191,7 +197,7 @@ public sealed partial class BundleProjects(BundleToolsService service)
     private sealed record PullArgs(string Name, bool Build, bool Discard);
     private sealed record CheckoutArgs(string Name, string Kind, string Ref, bool Build);
 
-    private GitAccount? AccountOf(BundleProject project) => service.Git.AccountFor(project.AccountId, project.Remote ?? "");
+    private GitAccount? AccountOf(BundleProject project,bool useAccounts=true) => useAccounts?service.Git.AccountFor(project.AccountId, project.Remote ?? ""):null;
 
     public async Task<object> ListAsync(CancellationToken ct)
     {
@@ -209,15 +215,16 @@ public sealed partial class BundleProjects(BundleToolsService service)
         return result;
     }
 
-    public BundleJob Import(string json)
+    public BundleJob Import(string json,bool useAccounts=true)
     {
-        service.RequireEnabled();
+        service.RequireSources();
         if (!Config.BundleTools.SourcesEnabled) throw new InvalidOperationException("bundleTools.disabled");
         var args = JsonSerializer.Deserialize<ImportArgs>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
         var name = BundleLayout.RequireName(args.Name);
         var url = GitService.ValidateRemote(args.Url);
         var branch = string.IsNullOrWhiteSpace(args.Branch) ? null : GitService.ValidateRef(args.Branch.Trim());
-        var account = service.Git.AccountFor(args.AccountId, url);
+        if(!useAccounts&&!string.IsNullOrEmpty(args.AccountId))throw new InvalidOperationException("auth.forbidden");
+        var account = useAccounts?service.Git.AccountFor(args.AccountId,url):null;
         var source = BundleLayout.SourceDir(Config, name);
         if (Directory.Exists(source) && Directory.EnumerateFileSystemEntries(source).Any()) throw new InvalidOperationException("bundleTools.exists");
         if (service.Tools.GitExe is null) throw new InvalidOperationException("bundleTools.needGit");
@@ -235,12 +242,12 @@ public sealed partial class BundleProjects(BundleToolsService service)
         });
     }
 
-    public async Task<object> Check(string name, CancellationToken ct)
+    public async Task<object> Check(string name, CancellationToken ct,bool useAccounts=true)
     {
-        service.RequireEnabled();
+        service.RequireSources();
         var project = Registry.Get(BundleLayout.RequireName(name)) ?? throw new InvalidOperationException("bundleTools.noSource");
         var source = BundleLayout.SourceDir(Config, name);
-        var account = AccountOf(project);
+        var account = AccountOf(project,useAccounts);
         var url = project.Remote ?? "";
         if (service.Tools.GitExe is null || !Directory.Exists(Path.Combine(source, ".git"))) throw new InvalidOperationException("bundleTools.notGit");
         var (exit, _) = await service.Git.RunAsync(["fetch", "--prune", "--tags", "--quiet", "origin"], source, account, url, ct);
@@ -248,15 +255,15 @@ public sealed partial class BundleProjects(BundleToolsService service)
         return await service.Git.InfoAsync(source, account, ct);
     }
 
-    public BundleJob Pull(string json)
+    public BundleJob Pull(string json,bool useAccounts=true)
     {
-        service.RequireEnabled();
+        service.RequireSources();
         var args = JsonSerializer.Deserialize<PullArgs>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
         var project = Registry.Get(BundleLayout.RequireName(args.Name)) ?? throw new InvalidOperationException("bundleTools.noSource");
         var source = BundleLayout.SourceDir(Config, args.Name);
         if (service.Tools.GitExe is null) throw new InvalidOperationException("bundleTools.needGit");
         if (!Directory.Exists(Path.Combine(source, ".git"))) throw new InvalidOperationException("bundleTools.notGit");
-        var account = AccountOf(project);
+        var account = AccountOf(project,useAccounts);
         return service.Jobs.Start(args.Build ? "pull-build" : "pull", args.Name, async ctx =>
         {
             ctx.Phase("Pulling the latest sources");
@@ -268,17 +275,19 @@ public sealed partial class BundleProjects(BundleToolsService service)
         });
     }
 
-    public async Task<object> Refs(string name, CancellationToken ct)
+    public async Task<object> Refs(string name, CancellationToken ct,bool useAccounts=true)
     {
-        service.RequireEnabled();
+        service.RequireSources();
         var source = BundleLayout.SourceDir(Config, BundleLayout.RequireName(name));
         if (service.Tools.GitExe is null || !Directory.Exists(Path.Combine(source, ".git"))) throw new InvalidOperationException("bundleTools.notGit");
+        var project=Registry.Get(name);
+        if(project?.Remote is {} remote)await service.Git.FetchAsync(source,useAccounts?AccountOf(project):null,GitService.ValidateRemote(remote),null,ct);
         return await service.Git.RefsAsync(source, ct);
     }
 
     public BundleJob Checkout(string json)
     {
-        service.RequireEnabled();
+        service.RequireSources();
         var args = JsonSerializer.Deserialize<CheckoutArgs>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
         BundleLayout.RequireName(args.Name);
         if (args.Kind is not ("branch" or "tag")) throw new InvalidOperationException("bundleTools.ref");
@@ -295,10 +304,47 @@ public sealed partial class BundleProjects(BundleToolsService service)
         });
     }
 
+    private sealed record WorkflowArgs(string Name,string Mode,string? DevelopmentBranch,string? ProductionBranch);
+    public object SetWorkflow(string json){
+        service.RequireSources();if(service.Jobs.Busy)throw new InvalidOperationException("bundleTools.busy");var args=JsonSerializer.Deserialize<WorkflowArgs>(json,PanelConfig.Json)??throw new InvalidOperationException("request.invalid");
+        var name=BundleLayout.RequireName(args.Name);if(Registry.Get(name) is null)throw new InvalidOperationException("bundleTools.noSource");
+        if(args.Mode is not ("inherit" or "review" or "direct" or "branches"))throw new InvalidOperationException("bundleTools.invalid");
+        if(!string.IsNullOrEmpty(args.DevelopmentBranch))GitService.ValidateRef(args.DevelopmentBranch);if(!string.IsNullOrEmpty(args.ProductionBranch))GitService.ValidateRef(args.ProductionBranch);
+        Registry.Update(name,p=>{p.Workflow=args.Mode=="inherit"?null:args.Mode;p.DevelopmentBranch=string.IsNullOrEmpty(args.DevelopmentBranch)?null:args.DevelopmentBranch;p.ProductionBranch=string.IsNullOrEmpty(args.ProductionBranch)?null:args.ProductionBranch;});return List();
+    }
+    private sealed record DeliveryArgs(string Name,string Action,string? Branch,string? Target,string? Message,string? Title,bool ConfirmMain=false);
+    public BundleJob Delivery(string json){
+        service.RequireSources();var args=JsonSerializer.Deserialize<DeliveryArgs>(json,PanelConfig.Json)??throw new InvalidOperationException("request.invalid");
+        var project=Registry.Get(BundleLayout.RequireName(args.Name))??throw new InvalidOperationException("bundleTools.noSource");
+        var source=BundleLayout.SourceDir(Config,args.Name);var remote=GitService.ValidateRemote(project.Remote);var account=AccountOf(project)??throw new InvalidOperationException("bundleTools.account");
+        if(args.Action is not ("branch" or "push" or "review"))throw new InvalidOperationException("bundleTools.invalid");
+        if(args.Action is "branch" or "review")GitService.ValidateRef(args.Branch);
+        if(args.Action=="branch"&&(args.Branch is "main" or "master"||args.Branch==(project.ProductionBranch??Config.BundleTools.ProductionBranch)))throw new InvalidOperationException("bundleTools.protectedBranch");
+        if(args.Action=="review"){GitService.ValidateRef(args.Target);if((project.Workflow??Config.BundleTools.Workflow)!="review")throw new InvalidOperationException("bundleTools.workflow");}
+        if((args.Message??"").Length>200||(args.Title??"").Length>200)throw new InvalidOperationException("bundleTools.invalid");
+        return service.Jobs.Start("git-"+args.Action,args.Name,async ctx=>{
+            var info=await service.Git.InfoAsync(source,null,ctx.Token);
+            async Task Step(params string[] commands){var result=await service.Git.RunAsync(commands,source,account,remote,ctx.Token,ctx.Log);if(result.ExitCode!=0)throw new InvalidOperationException("bundleTools.gitFailed");}
+            if(args.Action=="review"){
+                ctx.Phase("Creating a review request");var token=service.Secrets.Unprotect(account.TokenProtected);service.Redactor.Add(token);
+                var url=await GitProviders.ReviewAsync(service.ProviderHttp,account,token,remote,args.Branch!,args.Target!,args.Title??"Merge "+args.Branch+" into "+args.Target,ctx.Token);ctx.Result(url);ctx.Log(url);
+            }else if(args.Action=="branch"){
+                if(info.Dirty)throw new InvalidOperationException("bundleTools.gitDirty");ctx.Phase("Creating and pushing a development branch");await Step("checkout","-b",args.Branch!);await Step("push","-u","origin",args.Branch!);Registry.Update(args.Name,p=>p.Branch=args.Branch);ctx.Result("Created "+args.Branch);
+            }else{
+                var branch=GitService.ValidateRef(info.Branch);if(branch=="HEAD"||((branch is "main" or "master"||branch==(project.ProductionBranch??Config.BundleTools.ProductionBranch))&&!args.ConfirmMain))throw new InvalidOperationException("bundleTools.protectedBranch");
+                if(string.IsNullOrWhiteSpace(args.Message)||args.Message.Any(char.IsControl))throw new InvalidOperationException("bundleTools.invalid");
+                ctx.Phase("Committing and pushing changes");await Step("add","-A");
+                var changes=await service.Git.RunAsync(["diff","--cached","--quiet"],source,null,"",ctx.Token);
+                if(changes.ExitCode==1)await Step("-c","user.name="+Config.BundleTools.CommitName,"-c","user.email="+Config.BundleTools.CommitEmail,"commit","-m",args.Message!,"--quiet");else if(changes.ExitCode!=0)throw new InvalidOperationException("bundleTools.gitFailed");
+                await Step("push","origin","HEAD:refs/heads/"+branch);ctx.Result("Pushed "+branch);
+            }
+        });
+    }
+
     // ------------------------------------------------------------------ build
     public BundleJob Build(string name)
     {
-        service.RequireEnabled();
+        service.RequireSources();
         if (!Config.BundleTools.SourcesEnabled) throw new InvalidOperationException("bundleTools.disabled");
         BundleLayout.RequireName(name);
         return service.Jobs.Start("build", name, ctx => BuildCore(name, ctx));
@@ -410,7 +456,7 @@ public sealed partial class BundleProjects(BundleToolsService service)
     // ------------------------------------------------------------------ rollback / remove
     public BundleJob Rollback(string name)
     {
-        service.RequireEnabled();
+        service.RequireSources();
         BundleLayout.RequireName(name);
         var backups = BundleLayout.Backups(service.ConfigPath);
         var latest = BundleSwap.LatestBackup(backups, name) ?? throw new InvalidOperationException("bundleTools.noBackup");
@@ -436,7 +482,7 @@ public sealed partial class BundleProjects(BundleToolsService service)
 
     public object RemoveSource(string name)
     {
-        service.RequireEnabled();
+        service.RequireSources();
         BundleLayout.RequireName(name);
         if (service.Jobs.Busy) throw new InvalidOperationException("bundleTools.busy");
         var source = BundleLayout.SourceDir(Config, name);
@@ -448,8 +494,8 @@ public sealed partial class BundleProjects(BundleToolsService service)
 
     internal static void ForceDelete(string directory)
     {
-        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)) try { File.SetAttributes(file, FileAttributes.Normal); } catch (IOException) { }
-        Directory.Delete(directory, true);
+        BundlePaths.Require(Path.GetDirectoryName(directory)!);
+        BundlePaths.Delete(directory);
     }
 
     // ------------------------------------------------------------------ package versions (never automatic)
@@ -457,7 +503,7 @@ public sealed partial class BundleProjects(BundleToolsService service)
 
     public async Task<object> PackagesInfo(string json, CancellationToken ct)
     {
-        service.RequireEnabled();
+        service.RequireSources();
         var args = JsonSerializer.Deserialize<PackageArgs>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
         var source = BundleLayout.SourceDir(Config, BundleLayout.RequireName(args.Name));
         var current = NuGetService.Read(source);
@@ -468,7 +514,7 @@ public sealed partial class BundleProjects(BundleToolsService service)
 
     public async Task<object> PackagesSet(string json, CancellationToken ct)
     {
-        service.RequireEnabled();
+        service.RequireSources();
         if (service.Jobs.Busy) throw new InvalidOperationException("bundleTools.busy");
         var args = JsonSerializer.Deserialize<PackageArgs>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
         var source = BundleLayout.SourceDir(Config, BundleLayout.RequireName(args.Name));

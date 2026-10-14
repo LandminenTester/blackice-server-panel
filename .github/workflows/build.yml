@@ -34,6 +34,7 @@ jobs:
           cache-dependency-path: ui/package-lock.json
       - run: npm --prefix ui ci
       - run: npm --prefix ui run check
+      - run: node scripts/test-locales.mjs
       - run: npm --prefix ui run build
       - name: Copy licenses
         shell: bash
@@ -157,4 +158,9 @@ jobs:
           # Tags such as v1.5.0-experimental.1 are published as pre-releases and never become "latest".
           FLAGS=""
           case "$GITHUB_REF_NAME" in *-*) FLAGS="--prerelease --latest=false";; esac
-          gh release create "$GITHUB_REF_NAME" blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --generate-notes $FLAGS
+          NOTES="docs/releases/$GITHUB_REF_NAME.md"
+          if [ -f "$NOTES" ]; then
+            gh release create "$GITHUB_REF_NAME" blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --title "BlackICE Panel $GITHUB_REF_NAME" --notes-file "$NOTES" $FLAGS
+          else
+            gh release create "$GITHUB_REF_NAME" blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --generate-notes $FLAGS
+          fi

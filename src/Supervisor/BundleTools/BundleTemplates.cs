@@ -2,7 +2,7 @@ using System.Text;
 using System.Text.Json;
 namespace ReplayPanel.Supervisor.BundleTools;
 
-public sealed record UiOptions(string Framework, bool TypeScript, bool Router, bool State, bool Tailwind);
+public sealed record UiOptions(string Framework, bool TypeScript, bool Router, bool State, bool Tailwind,string[]? Packages=null,string? StateLibrary=null);
 public sealed record NewProject(string Name, string Author, string Description, string PackageVersion, UiOptions? Ui);
 
 /// <summary>
@@ -12,6 +12,8 @@ public sealed record NewProject(string Name, string Author, string Description, 
 public static class BundleTemplates
 {
     public static readonly string[] Frameworks = ["svelte", "vue", "react"];
+
+    public static readonly Dictionary<string,string> WebPackages=new() { ["zod"]="4.6.7",["clsx"]="2.1.1",["dayjs"]="1.11.23",["@floating-ui/dom"]="1.8.0",["vitest"]="5.0.4",["prettier"]="3.9.10",["prettier-plugin-svelte"]="4.1.1",["lucide-svelte"]="1.0.1",["lucide-vue-next"]="1.0.0",["lucide-react"]="1.57.0",["@tanstack/svelte-query"]="6.3.2",["@tanstack/vue-query"]="5.104.2",["@tanstack/react-query"]="5.104.2" };
 
     // Curated JavaScript package versions (verified to build together). They change only with a panel release, never automatically.
     private const string Vite = "8.3.4", TypeScript = "6.0.3", Tailwind = "4.3.3";
@@ -40,6 +42,7 @@ public static class BundleTemplates
             ["data/config.toml"] = Manifest(p),
             ["vfs/.gitkeep"] = "",
         };
+        if(p.Ui?.Packages is {} extra&&extra.Any(x=>!WebPackages.ContainsKey(x)&&x is not ("icons" or "query")))throw new InvalidOperationException("bundleTools.package");
         if (p.Ui is not null) foreach (var (path, content) in UiFiles(p, p.Ui)) files["ui/" + path] = content;
         return files;
     }
@@ -111,6 +114,8 @@ public static class BundleTemplates
     // ------------------------------------------------------------------ ReUi starters (paths relative to ui/)
     private static Dictionary<string, string> UiFiles(NewProject p, UiOptions ui)
     {
+        StateTemplates.Validate(ui);
+        if(ui.StateLibrary is not null)ui=ui with{State=ui.StateLibrary!="none"};
         var ts = ui.TypeScript;
         var ext = ts ? "ts" : "js";
         var files = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -164,8 +169,12 @@ public static class BundleTemplates
         var entry = ui.Framework == "react" ? (ts ? "tsx" : "jsx") : ext;
         files["index.html"] = $"<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>{Html(title)}</title>\n  </head>\n  <body>\n    <div id=\"app\"></div>\n    <script type=\"module\" src=\"/src/main.{entry}\"></script>\n  </body>\n</html>\n";
         files["src/main." + entry] = main;
+        StateTemplates.Apply(ui,files,deps);
         files["src/app.css"] = css;
         files["vite.config." + ext] = $"import {{ defineConfig }} from 'vite'\n{imports}\n// Relative asset paths: the game serves this UI from the bundle folder, not from a web root.\nexport default defineConfig({{\n  base: './',\n  plugins: [{plugins}],\n  build: {{ outDir: 'dist', emptyOutDir: true }},\n}})\n";
+        foreach(var option in ui.Packages??[]){var package=option=="icons"?(ui.Framework=="vue"?"lucide-vue-next":ui.Framework=="react"?"lucide-react":"lucide-svelte"):option=="query"?"@tanstack/"+ui.Framework+"-query":option;if(!WebPackages.TryGetValue(package,out var version))throw new InvalidOperationException("bundleTools.package");if(package is "vitest" or "prettier")dev[package]=version;else deps[package]=version;}
+        if((ui.Packages??[]).Contains("vitest"))scripts["test"]="vitest run --passWithNoTests";
+        if((ui.Packages??[]).Contains("prettier")){scripts["format"]="prettier --write src";if(ui.Framework=="svelte"){dev["prettier-plugin-svelte"]=WebPackages["prettier-plugin-svelte"];files[".prettierrc.json"]="{\"plugins\":[\"prettier-plugin-svelte\"]}\n";}}
         files["package.json"] = JsonSerializer.Serialize(new Dictionary<string, object> { ["name"] = Slug(title) + "-ui", ["private"] = true, ["version"] = "0.1.0", ["type"] = "module", ["scripts"] = scripts, ["dependencies"] = deps, ["devDependencies"] = dev }, new JsonSerializerOptions { WriteIndented = true }) + "\n";
         files[".gitignore"] = "node_modules/\ndist/\n";
         return files;

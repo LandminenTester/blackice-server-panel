@@ -8,6 +8,7 @@ Directory.CreateDirectory(root);
 int passed=0;
 void Check(bool result,string label){if(!result)throw new Exception(label);passed++;Console.WriteLine("PASS "+label);}
 void Reject(Action test,string label){try{test();}catch(Exception e)when(e is InvalidOperationException or InvalidDataException or IOException){Check(true,label);return;}throw new Exception(label);}
+void RejectCode(Action test,string code,string label){try{test();}catch(InvalidOperationException e)when(e.Message==code){Check(true,label);return;}throw new Exception(label+" expected "+code);}
 try {
  var configPath=Path.Combine(root,"panel.json");
  var legacy=new {serverRoot=root,passwordHash=Convert.ToBase64String(new byte[32]),passwordSalt=Convert.ToBase64String(new byte[16]),shutdownMode="stop-server",pipeName="fixture-pipe",url="http://127.0.0.1:20772"};
@@ -152,7 +153,7 @@ try {
   toolHandler.Add(Toolchain.NodeIndex+"SHASUMS256.txt",Hex(nodeArchive,false)+"  "+nodeTop+(winHost?".zip":".tar.gz")+"\n");toolHandler.Add(Toolchain.NodeIndex+nodeTop+(winHost?".zip":".tar.gz"),nodeArchive);
   toolHandler.Add(Toolchain.GitReleases,"{\"tag_name\":\"v9.9.9.windows.1\",\"assets\":[{\"name\":\"MinGit-9.9.9-64-bit.zip\",\"browser_download_url\":\""+gitUrl+"\",\"digest\":\"sha256:"+Hex(gitArchive,false)+"\"}]}");toolHandler.Add(gitUrl,gitArchive);
   var toolConfigPath=Path.Combine(btRoot,"tools-panel.json");PanelConfig.Save(toolConfigPath,btConfig);
-  using var toolService=new BundleToolsService(btConfig,toolConfigPath,()=>null,new HttpClient(toolHandler));
+  using var toolService=new BundleToolsService(btConfig,toolConfigPath,()=>null,new HttpClient(toolHandler), useSystemTools:false);
   toolService.ApplySettings("{\"enabled\":true,\"sourcesEnabled\":true}");
   async Task<BundleJob> ToolDone(BundleJob job){for(var i=0;i<400&&toolService.Jobs.Get(job.Id)!.State=="running";i++)await Task.Delay(25);return toolService.Jobs.Get(job.Id)!;}
   var dotnetJob=await ToolDone(toolService.ToolInstall("{\"id\":\"dotnet\"}"));
@@ -188,7 +189,7 @@ try {
   foreach(var id in new[]{"replay.blackice.server","replay.blackice.client","replay.blackice.shared"})nugetHandler.Add(NuGetService.FlatContainer+id+"/index.json","{\"versions\":[\"1.0.2\",\"1.1.0\",\"1.2.0-rc.1\"]}");
   nugetHandler.Add(NuGetService.FlatContainer+"replay.blackice.server/1.0.2/replay.blackice.server.nuspec","<package xmlns=\"http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd\"><metadata><dependencies><group><dependency id=\"Microsoft.DotNet.ILCompiler.LLVM\" version=\"10.0.0-rc.1.11111.1\" /></group></dependencies></metadata></package>");
   var projConfigPath=Path.Combine(btRoot,"proj-state","projects-panel.json");Directory.CreateDirectory(Path.GetDirectoryName(projConfigPath)!);var projConfig=new PanelConfig{ServerRoot=Path.Combine(btRoot,"server"),PasswordHash="x"};PanelConfig.Save(projConfigPath,projConfig);
-  using var projService=new BundleToolsService(projConfig,projConfigPath,()=>null,new HttpClient(nugetHandler));
+  using var projService=new BundleToolsService(projConfig,projConfigPath,()=>null,new HttpClient(nugetHandler),useSystemTools:false);
   Reject(()=>projService.Projects.List(),"project actions are refused while the feature is off");
   projService.ApplySettings("{\"enabled\":true,\"sourcesEnabled\":true}");
   async Task<BundleJob> Wait(BundleJob job){for(var i=0;i<400&&projService.Jobs.Get(job.Id)!.State=="running";i++)await Task.Delay(25);return projService.Jobs.Get(job.Id)!;}
@@ -287,7 +288,102 @@ try {
   Check((await accountService.AccountTest(accountId,CancellationToken.None)).ToString()!.Contains("octo"),"a saved account can be tested");
   accountService.AccountSave("{\"id\":\""+accountId+"\",\"type\":\"github\",\"label\":\"Renamed\",\"username\":\"octo\"}");
   Check(accountConfig.BundleTools.Accounts[0].Label=="Renamed"&&accountService.Secrets.Unprotect(accountConfig.BundleTools.Accounts[0].TokenProtected)=="ghp_super_secret_token","editing an account keeps its token unless a new one is given");
+  var unchanged=File.ReadAllText(accountState);
+  Reject(()=>accountService.Git.AccountFor(accountId,"https://attacker.example/repo.git"),"selected account cannot be sent to a different host");
+  Reject(()=>accountService.Git.AccountFor(accountId,"http://github.com/octo/demo.git"),"selected account cannot be downgraded to plaintext HTTP");
+  Reject(()=>accountService.Git.AccountFor(accountId,"https://github.com:8443/octo/demo.git"),"selected account cannot be sent to another port");
+  Check(accountService.Git.AccountFor(null,"https://attacker.example/repo.git") is null,"automatic account lookup does not choose another origin");
+  Reject(()=>accountService.AccountSave(JsonSerializer.Serialize(new{id=accountId,type="github",baseUrl="https://attacker.example"})),"changing token destination requires token replacement");
+  Reject(()=>accountService.AccountSave(JsonSerializer.Serialize(new{id=accountId,type="gitlab",baseUrl="https://github.com"})),"changing provider requires token replacement");
+  Reject(()=>accountService.AccountSave(JsonSerializer.Serialize(new{type="github",token="bad token"})),"invalid new token is rejected before state mutation");
+  Check(File.ReadAllText(accountState)==unchanged&&accountConfig.BundleTools.Accounts.Count==1,"rejected account edits leave disk and memory intact");
+  Reject(()=>accountService.Projects.Import(JsonSerializer.Serialize(new{name="no-credentials",url="https://github.com/octo/demo.git",accountId,build=false}),false),"credential use is checked separately from source import");
+  providerHandler.Respond("https://api.github.com/user/orgs?per_page=100","[{\"login\":\"org-demo\"}]");
+  providerHandler.Respond("https://api.github.com/orgs/org-demo/repos","{\"clone_url\":\"https://github.com/org-demo/new.git\",\"html_url\":\"https://github.com/org-demo/new\",\"default_branch\":\"main\"}");
+  var orgRepo=await GitProviders.CreateRepositoryAsync(hub,github,"tok-github","new","desc",true,CancellationToken.None,"org-demo");
+  Check(orgRepo.CloneUrl.Contains("/org-demo/")&&providerHandler.Last("https://api.github.com/orgs/org-demo/repos").Authorization=="Bearer tok-github","organization repository creation uses authorized owner endpoint");
+  await GitProviders.CreateRepositoryAsync(hub,github,"tok-github","new","desc",true,CancellationToken.None,"unknown-org").ContinueWith(t=>Check(t.IsFaulted,"unlisted organization cannot be used for repository creation"));
+  providerHandler.Respond("https://api.github.com/repos/octo/demo/pulls","{\"html_url\":\"https://github.com/octo/demo/pull/1\"}");
+  var reviewUrl=await GitProviders.ReviewAsync(hub,github,"tok-github","https://github.com/octo/demo.git","dev","main","Review dev",CancellationToken.None);
+  Check(reviewUrl.EndsWith("/pull/1")&&providerHandler.Last("https://api.github.com/repos/octo/demo/pulls").Body.Contains("\"head\":\"dev\""),"review request targets chosen source and production branch");
+  providerHandler.Respond("https://gitlab.example.org/api/v4/user","{\"username\":\"fixture\"}");
+  providerHandler.Respond("https://gitlab.example.org/api/v4/groups?min_access_level=10&per_page=100","[{\"id\":42,\"full_path\":\"team/game\"}]");
+  providerHandler.Respond("https://gitlab.example.org/api/v4/groups/42/projects?include_subgroups=true&with_shared=false&simple=true&per_page=50&page=1&search=hud","[{\"name\":\"hud\",\"path_with_namespace\":\"team/game/hud\",\"http_url_to_repo\":\"https://gitlab.example.org/team/game/hud.git\",\"web_url\":\"https://gitlab.example.org/team/game/hud\",\"default_branch\":\"main\",\"visibility\":\"private\"}]");
+  var groupRepositories=JsonSerializer.Serialize(await GitProviders.RepositoriesAsync(hub,gitlab,"tok-gitlab","hud",1,"42",CancellationToken.None));
+  Check(groupRepositories.Contains("team/game/hud"),"GitLab repository discovery scopes search to the selected readable group");
+  accountService.Projects.Registry.Update("workflow-test",p=>p.Remote="https://github.com/octo/demo.git",()=>new BundleProject{Name="workflow-test",AccountId=accountId});
+  accountService.ApplySettings("{\"workflow\":\"branches\",\"developmentBranch\":\"develop\",\"productionBranch\":\"release\"}");
+  RejectCode(()=>accountService.Projects.Delivery("{\"name\":\"workflow-test\",\"action\":\"branch\",\"branch\":\"release\"}"),"bundleTools.protectedBranch","new branch action cannot bypass configured production protection");
+  RejectCode(()=>accountService.Projects.Delivery("{\"name\":\"workflow-test\",\"action\":\"branch\",\"branch\":\"main\"}"),"bundleTools.protectedBranch","new branch action cannot bypass main protection");
+  var listedWorkflow=JsonSerializer.Serialize(accountService.Projects.List(),PanelConfig.Json);
+  Check(listedWorkflow.Contains("\"workflow\":\"branches\"")&&listedWorkflow.Contains("\"developmentBranch\":\"develop\""),"projects inherit server workflow and branch defaults");
+  Reject(()=>accountService.Projects.Delivery("{\"name\":\"workflow-test\",\"action\":\"review\",\"branch\":\"dev\",\"target\":\"main\"}"),"branch-only policy blocks review creation server-side");
+  accountService.Projects.SetWorkflow("{\"name\":\"workflow-test\",\"mode\":\"review\",\"developmentBranch\":\"dev\",\"productionBranch\":\"main\"}");
+  Check(accountService.Projects.Registry.Get("workflow-test") is {Workflow:"review",ProductionBranch:"main"},"project workflow overrides persist independently");
+  accountService.Projects.SetWorkflow("{\"name\":\"workflow-test\",\"mode\":\"inherit\"}");
+  Check(accountService.Projects.Registry.Get("workflow-test")!.Workflow is null,"project override can return to server defaults");
+  accountService.ApplySettings("{\"sourcesEnabled\":false}");
+  RejectCode(()=>accountService.Projects.Check("workflow-test",CancellationToken.None).GetAwaiter().GetResult(),"bundleTools.disabled","source disable blocks remote checks");
+  RejectCode(()=>accountService.Projects.Pull("{\"name\":\"workflow-test\",\"build\":true}"),"bundleTools.disabled","source disable blocks pull with build");
+  RejectCode(()=>accountService.Projects.Checkout("{\"name\":\"workflow-test\",\"kind\":\"branch\",\"ref\":\"dev\",\"build\":true}"),"bundleTools.disabled","source disable blocks checkout with build");
+  RejectCode(()=>accountService.Projects.RemoveSource("workflow-test"),"bundleTools.disabled","source disable blocks source removal");
+  accountService.ApplySettings("{\"sourcesEnabled\":true}");
   accountService.AccountDelete(accountId);Check(accountConfig.BundleTools.Accounts.Count==0,"accounts can be deleted");
+ }
+ // Outbound destination, package and link defenses.
+ foreach(var ip in new[]{"127.0.0.1","10.0.0.1","172.16.0.1","192.168.1.1","169.254.169.254","100.64.0.1","0.0.0.0","::1","fd00::1","fe80::1","::ffff:127.0.0.1","::10.0.0.1","64:ff9b::a00:1","2002:0a00:0001::"})Check(!OutboundHttp.PublicAddress(System.Net.IPAddress.Parse(ip)),"private outbound destination rejected: "+ip);
+ Check(OutboundHttp.PublicAddress(System.Net.IPAddress.Parse("1.1.1.1"))&&OutboundHttp.PublicAddress(System.Net.IPAddress.Parse("2606:4700:4700::1111")),"public IPv4 and IPv6 destinations accepted");
+ using(var guarded=OutboundHttp.Create(TimeSpan.FromSeconds(3))){
+  try{await guarded.GetAsync("http://example.com");throw new Exception("plaintext accepted");}catch(HttpRequestException){Check(true,"managed HTTP rejects plaintext before transmission");}
+  try{await guarded.GetAsync("https://127.0.0.1:9");throw new Exception("loopback accepted");}catch(HttpRequestException){Check(true,"managed HTTPS refuses loopback before connection");}
+ }
+ Reject(()=>GitService.ValidateRemote("http://example.com/repo.git"),"Git remotes require HTTPS");
+ Reject(()=>GitService.ValidateRemote("https://169.254.169.254/repo.git"),"Git rejects metadata IP remotes");
+ Reject(()=>GitProviders.NormalizeBase("github","http://example.com"),"credential providers require HTTPS");
+ using(var noNetwork=new HttpClient(new ToolHandler()))Reject(()=>new NuGetService(noNetwork).VersionsAsync("replay.blackice.x/../../evil",false,CancellationToken.None).GetAwaiter().GetResult(),"NuGet package URLs use exact package allowlist");
+ foreach(var framework in BundleTemplates.Frameworks){
+  var extra=BundleTemplates.Render(new NewProject("extras","a","d","1.1.0",new UiOptions(framework,true,false,false,false,["zod","icons","query","clsx","dayjs","@floating-ui/dom","vitest","prettier"])));
+  Check(extra["ui/package.json"].Contains("lucide-")&&extra["ui/package.json"].Contains("@tanstack/"+framework+"-query")&&extra["ui/package.json"].Contains("vitest run"),"curated extra packages map to "+framework+" without arbitrary package input");
+  if(Environment.GetEnvironmentVariable("PANEL_TEST_WEB_TEMPLATES")=="1"){
+   var appRoot=Path.Combine(root,"web-smoke",framework);Directory.CreateDirectory(appRoot);foreach(var (file,content) in extra.Where(x=>x.Key.StartsWith("ui/"))){var output=Path.Combine(appRoot,file[3..]);Directory.CreateDirectory(Path.GetDirectoryName(output)!);File.WriteAllText(output,content);}
+   using var webHttp=new HttpClient();var webTools=new Toolchain(Path.Combine(root,"web-smoke-tools"),webHttp);var environment=webTools.BuildEnvironment();
+   var outputLines=new List<string>();
+   async Task Step(string label,params string[] args){outputLines.Clear();var result=await ProcessRunner.Run(webTools.NodeExe??throw new Exception("Node required"),[webTools.NpmCli??throw new Exception("npm required"),..args],appRoot,environment,line=>{lock(outputLines)outputLines.Add(line);},CancellationToken.None,TimeSpan.FromMinutes(4));if(result.ExitCode!=0||result.TimedOut)Console.WriteLine(string.Join(Environment.NewLine,outputLines.TakeLast(20)));Check(result.ExitCode==0&&!result.TimedOut,framework+" template "+label+" with all curated optional packages");}
+   await Step("installs", "install","--ignore-scripts","--no-audit","--no-fund");await Step("type checks","run","check");await Step("builds","run","build");await Step("formats","run","format");
+  }
+
+ }
+ Reject(()=>BundleTemplates.Render(new NewProject("bad","a","d","1.1.0",new UiOptions("svelte",true,false,false,false,["https://attacker.example/pkg"]))),"arbitrary web package URLs are rejected");
+ var linkTarget=Path.Combine(root,"link-outside");var linkBundle=Path.Combine(root,"link-bundle");var linkStage=Path.Combine(root,"link-stage");Directory.CreateDirectory(linkTarget);Directory.CreateDirectory(linkBundle);Directory.CreateDirectory(Path.Combine(linkStage,"vfs"));File.WriteAllText(Path.Combine(linkStage,"vfs","seed.txt"),"must not escape");
+ try{Directory.CreateSymbolicLink(Path.Combine(linkBundle,"vfs"),linkTarget);Reject(()=>BundleSwap.Apply(linkStage,linkBundle,_=>{}),"VFS link cannot redirect uploaded seed files outside bundle");Check(!File.Exists(Path.Combine(linkTarget,"seed.txt")),"linked outside directory remains unchanged");new DirectoryInfo(Path.Combine(linkBundle,"vfs")).Delete();}catch(System.ComponentModel.Win32Exception){Console.WriteLine("SKIP host does not permit symlink creation");}catch(UnauthorizedAccessException){Console.WriteLine("SKIP host does not permit symlink creation");}
+ if(Environment.GetEnvironmentVariable("PANEL_TEST_GIT_NETWORK")=="1"){
+  var networkConfig=new PanelConfig{ServerRoot=root,PasswordHash="configured"};var networkPath=Path.Combine(root,"network-panel.json");PanelConfig.Save(networkPath,networkConfig);
+  using var networkService=new BundleToolsService(networkConfig,networkPath,()=>null);
+  var gitResult=await networkService.Git.RunAsync(["ls-remote","--heads","https://github.com/replayre/blackice-mcp.git"],root,null,"https://github.com/replayre/blackice-mcp.git",CancellationToken.None,timeout:TimeSpan.FromSeconds(30));
+  Check(gitResult.ExitCode==0&&gitResult.Lines.Any(line=>line.Contains("refs/heads/")),"real public Git HTTPS works with DNS-pinned addresses and redirects disabled");
+ }
+ // Optional host integration: run on a development machine with all four tools installed.
+ if(Environment.GetEnvironmentVariable("PANEL_TEST_SYSTEM_TOOLS")=="1"){
+  using var hostHttp=new HttpClient();
+  var hostTools=new Toolchain(Path.Combine(root,"host-toolchain"),hostHttp);
+  var status=hostTools.Status();
+  Check(status.All(t=>t.Installed&&t.Source=="system"&&!string.IsNullOrWhiteSpace(t.Version)),"host Git, .NET SDK, Node/npm and WASI are recognized with versions");
+  var env=hostTools.BuildEnvironment();
+  async Task<string> RunHostTool(string exe,params string[] args){
+   using var process=new System.Diagnostics.Process();process.StartInfo=new(exe){UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true,WorkingDirectory=root};
+   process.StartInfo.Environment.Clear();foreach(var entry in env)process.StartInfo.Environment[entry.Key]=entry.Value;
+   foreach(var arg in args)process.StartInfo.ArgumentList.Add(arg);
+   process.Start();var output=process.StandardOutput.ReadToEndAsync();var error=process.StandardError.ReadToEndAsync();
+   using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(20));
+   try{await process.WaitForExitAsync(timeout.Token);}catch(OperationCanceledException){process.Kill(true);throw;}
+   var text=await output;var detail=await error;Check(process.ExitCode==0,"detected host tool works in scrubbed build environment: "+Path.GetFileName(exe)+" "+string.Join(" ",args)+(process.ExitCode==0?"":": "+detail));return text.Trim();
+  }
+  Check((await RunHostTool(hostTools.DotnetExe!,"--version")).StartsWith("10."),"host SDK runs with resolved DOTNET_ROOT");
+  await RunHostTool(hostTools.GitExe!,"--version");await RunHostTool(hostTools.NodeExe!,hostTools.NpmCli!,"--version");
+  Check(env["WASI_SDK_PATH"]==hostTools.WasiRoot&&env["NUGET_PACKAGES"].StartsWith(root),"existing WASI SDK is reused while restore cache stays private");
+  var nodePath=hostTools.NodeExe;hostTools.Remove("node");
+  Check(File.Exists(nodePath)&&hostTools.NodeExe==nodePath,"removing a panel copy never removes the detected system installation");
+  foreach(var tool in status)Console.WriteLine("HOST "+tool.Id+" "+tool.Version+" ("+tool.Source+")");
  }
  // ---- every template option combination only imports files that exist
  {
@@ -308,6 +404,7 @@ try {
   }
   Check(combosChecked==48&&missingImports.Count==0,"all "+combosChecked+" template option combinations only import files that exist"+(missingImports.Count>0?": "+string.Join("; ",missingImports.Take(3)):""));
  }
+ await BundleRefinementTests.Run(root,Check);
  Console.WriteLine(passed+" core checks passed");
 }finally{foreach(var leftover in Directory.EnumerateFiles(root,"*",SearchOption.AllDirectories))try{File.SetAttributes(leftover,FileAttributes.Normal);}catch(IOException){}Directory.Delete(root,true);}
 sealed class ToolHandler:HttpMessageHandler{

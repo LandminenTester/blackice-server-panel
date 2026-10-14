@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-13T08:44:54.728Z",
+  "generatedAt": "2026-10-14T12:07:15.994Z",
   "title": "Design System: Unofficial BlackICE - Server Webpanel",
   "extensions": {
     "colorMeta": {
@@ -339,6 +339,14 @@
       {
         "name": "mobile",
         "value": "720px"
+      },
+      {
+        "name": "bundle-workspace-stack",
+        "value": "900px"
+      },
+      {
+        "name": "bundle-dialog-compact",
+        "value": "540px"
       }
     ]
   },
@@ -378,7 +386,7 @@
     {
       "name": "Navigation selection",
       "kind": "nav",
-      "description": "Current Console tab with yellow selection and a clipped upper-right corner.",
+      "description": "Yellow angular navigation selection; Bundle Tools reuses tablist styling for General, Build tools and Connected accounts, with wrapping tool/account rows and an experimental footer label above the panel version.",
       "html": "<nav class=\"ds-nav\" aria-label=\"Navigation preview\"><button class=\"ds-nav-tab\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m4 6 6 6-6 6m9 0h7\"/></svg>Console</button></nav>",
       "css": ".ds-nav{padding:12px;background:#151319}.ds-nav-tab{display:flex;align-items:center;gap:14px;min-height:44px;padding:10px 20px;font:500 16px 'IBM Plex Sans',sans-serif;color:var(--yellow,#f4e56e);border:1px solid var(--yellow,#f4e56e);border-radius:0;background:#2c2720;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,0 100%);cursor:pointer;transition:background .14s ease-out}.ds-nav-tab svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5}.ds-nav-tab:hover{background:#3b202b}.ds-nav-tab:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}"
     },
@@ -424,6 +432,13 @@
       "description": "Settings General native directory field with Check and save path; stopped native servers only. Missing-directory/executable header feedback links directly here and preserves Stop while running. Docker is read-only with deployment mount guidance. Static editable preview; application supplies validation, permissions and persistence.",
       "html": "<section class=\"ds-path\"><h2>Server directory</h2><form><label class=\"ds-path-label\" for=\"ds-server-path\">Server directory</label><div class=\"ds-path-row\"><input id=\"ds-server-path\" value=\"C:\\Server Folder\" autocomplete=\"off\" spellcheck=\"false\"><button type=\"button\">Check and save path</button></div></form><p>After moving the server, enter its new absolute directory. Files are checked, not moved.</p></section>",
       "css": ".ds-path{border:1px solid var(--line,#834653);padding:16px 20px;color:var(--foreground,#f5d8d9);font-family:IBM Plex Sans,sans-serif}.ds-path h2{margin:0 0 16px;color:var(--red,#ff6477);font-size:20px;font-weight:500}.ds-path-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.ds-path-row{display:flex;gap:12px;align-items:center}.ds-path input{min-width:0;flex:1;min-height:44px;padding:12px;border:1px solid var(--line,#834653);border-radius:0;background:var(--field,#121118);color:var(--field-foreground,#f9e5e6);font:16px IBM Plex Sans,sans-serif;caret-color:var(--cyan,#74e7e9)}.ds-path button{flex:none;min-height:44px;padding:10px 20px;border:1px solid var(--line,#834653);border-radius:0;background:var(--button,#211b24);color:var(--red,#ff6477);font:500 16px IBM Plex Sans,sans-serif;cursor:pointer;transition:background .14s ease-out}.ds-path button:hover:not(:disabled){background:var(--button-hover,#3b202b);border-color:var(--red,#ff6477)}.ds-path input:focus-visible,.ds-path button:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}.ds-path button:disabled,.ds-path input:disabled{opacity:.45;cursor:not-allowed}.ds-path p{font-size:13px;line-height:1.5;color:var(--muted,#c3abb2);max-width:70ch;overflow-wrap:anywhere}@media(max-width:720px){.ds-path{padding:14px}.ds-path-row{flex-direction:column;align-items:stretch}.ds-path input{width:100%}}@media(prefers-reduced-motion:reduce){.ds-path button{transition:none}}"
+    },
+    {
+      "name": "Bundle project row",
+      "kind": "custom",
+      "description": "Divider-separated project identity and wrapping badges, with focused Details and Build actions. Dialogs carry deeper operations; static row preview.",
+      "html": "<div class=\"ds-project\"><div><strong>My bundle</strong><div class=\"ds-badges\"><span>Template</span><span>Web-UI: Vue</span></div><p>Last build: not built</p></div><div class=\"ds-actions\"><button>Details</button><button class=\"ds-build\">Build</button></div></div>",
+      "css": ".ds-project{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:20px 0;border-top:1px solid var(--line,#834653);border-bottom:1px solid var(--line,#834653);color:var(--foreground,#f5d8d9);font-family:IBM Plex Sans,sans-serif}.ds-project strong{font-size:18px;overflow-wrap:anywhere}.ds-badges{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:8px 0}.ds-badges span{border:1px solid var(--line,#834653);padding:1px 8px;font-size:12px}.ds-project p{margin:8px 0 0;color:var(--muted,#c3abb2);font-size:13px}.ds-actions{display:flex;flex-wrap:wrap;gap:12px}.ds-actions button{min-height:44px;border:1px solid var(--line,#834653);border-radius:0;background:var(--button,#211b24);color:var(--red,#ff6477);font:500 16px IBM Plex Sans,sans-serif;padding:10px 20px;cursor:pointer}.ds-actions .ds-build{background:var(--yellow,#f4e56e);color:#17151a;border-color:var(--yellow,#f4e56e)}.ds-actions button:hover{background:var(--button-hover,#3b202b)}.ds-actions .ds-build:hover{background:#fff393}.ds-actions button:focus-visible{outline:2px solid var(--cyan,#74e7e9);outline-offset:4px}@media(max-width:900px){.ds-project{align-items:stretch;flex-direction:column;gap:12px}.ds-actions{justify-content:flex-end}}"
     }
   ],
   "narrative": {

@@ -1,0 +1,11 @@
+import {readFile,mkdir,writeFile,readdir} from 'node:fs/promises';
+import {resolve,dirname} from 'node:path';import {fileURLToPath,pathToFileURL} from 'node:url';import assert from 'node:assert/strict';
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const ts=(await import(pathToFileURL(resolve(root,'ui/node_modules/typescript/lib/typescript.js')).href)).default;
+const out=resolve(root,'.local/locale-audit');await mkdir(out,{recursive:true});
+for(const name of ['bundle-language','bundle-job-language','locales']){const source=await readFile(resolve(root,'ui/src',name+'.ts'),'utf8');assert(!/[ÃÂ]|�|â€/.test(source),'invalid text encoding in '+name);const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replaceAll("'./bundle-language'","'./bundle-language.mjs'").replaceAll("'./bundle-job-language'","'./bundle-job-language.mjs'");await writeFile(resolve(out,name+'.mjs'),js);}
+const {en,de}=await import(pathToFileURL(resolve(out,'locales.mjs')).href);let count=0;
+function compare(a,b,path='catalog'){assert.deepEqual(Object.keys(a).sort(),Object.keys(b).sort(),'locale keys differ: '+path);for(const key of Object.keys(a)){if(typeof a[key]==='object')compare(a[key],b[key],path+'.'+key);else{assert.equal(typeof b[key],'string');assert.deepEqual([...a[key].matchAll(/\{([a-zA-Z0-9]+)\}/g)].map(m=>m[1]).sort(),[...b[key].matchAll(/\{([a-zA-Z0-9]+)\}/g)].map(m=>m[1]).sort(),'placeholder mismatch: '+path+'.'+key);assert(b[key].trim().length>0,'empty translation: '+path+'.'+key);count++;}}}
+compare(en,de);
+async function references(directory){for(const entry of await readdir(directory,{withFileTypes:true})){const path=resolve(directory,entry.name);if(entry.isDirectory())await references(path);else if(entry.name.endsWith('.svelte')){const source=await readFile(path,'utf8');assert(!/[ÃÂ]|�|â€/.test(source),'invalid text encoding in '+entry.name);for(const m of source.matchAll(/\bt\.([A-Za-z_$][\w$]*)/g))assert(m[1] in en||['trim','toLowerCase','startsWith','includes'].includes(m[1]),'unknown translation '+m[1]+' in '+entry.name);}}}
+await references(resolve(root,'ui/src'));console.log(count+' EN/DE translations: matching keys, placeholders, component references and valid text encoding');

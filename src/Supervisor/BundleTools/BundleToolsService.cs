@@ -2,7 +2,7 @@ using System.Text.Json;
 using ReplayPanel.Shared;
 namespace ReplayPanel.Supervisor.BundleTools;
 
-public sealed record BundleToolsPatch(bool? Enabled, bool? UploadEnabled, bool? SourcesEnabled, bool? RestartAfterBuild, bool? BuildUi, int? KeepBackups, int? MaxUploadMb, string? CommitName, string? CommitEmail);
+public sealed record BundleToolsPatch(bool? Enabled, bool? UploadEnabled, bool? SourcesEnabled, bool? RestartAfterBuild, bool? BuildUi, int? KeepBackups, int? MaxUploadMb, string? CommitName, string? CommitEmail,string? Workflow=null,string? DevelopmentBranch=null,string? ProductionBranch=null);
 
 /// <summary>Facade for the EXPERIMENTAL bundle tools. Every operation except reading the status requires the master switch.</summary>
 public sealed class BundleToolsService : IDisposable
@@ -11,15 +11,16 @@ public sealed class BundleToolsService : IDisposable
     private readonly string configPath;
     private readonly Func<BundleManager?> bundles;
 
-    public BundleToolsService(PanelConfig config, string configPath, Func<BundleManager?> bundles, HttpClient? http = null)
+    public BundleToolsService(PanelConfig config, string configPath, Func<BundleManager?> bundles, HttpClient? http = null, bool useSystemTools = true)
     {
         this.config = config;
         this.configPath = Path.GetFullPath(configPath);
         this.bundles = bundles;
-        var client = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(45) };
+        var client = http ?? OutboundHttp.Create(TimeSpan.FromMinutes(45));
         if (http is null) client.DefaultRequestHeaders.UserAgent.ParseAdd("BlackICE-Panel/" + PanelUpdates.RunningVersion);
         Http = client;
-        Tools = new Toolchain(BundleLayout.Toolchain(this.configPath), client);
+        ProviderHttp = http ?? OutboundHttp.Create(TimeSpan.FromSeconds(30),false);
+        Tools = new Toolchain(BundleLayout.Toolchain(this.configPath), client, useSystemTools);
         Secrets = new SecretStore(BundleLayout.StateDir(this.configPath));
         Projects = new BundleProjects(this);
         Git = new GitService(this);
@@ -31,6 +32,7 @@ public sealed class BundleToolsService : IDisposable
 
     public Toolchain Tools { get; }
     public HttpClient Http { get; }
+    public HttpClient ProviderHttp {get;}
     public BundleProjects Projects { get; }
     public GitService Git { get; }
     public SecretStore Secrets { get; }
@@ -62,6 +64,7 @@ public sealed class BundleToolsService : IDisposable
             config.BundleTools.MaxUploadMb,
             config.BundleTools.CommitName,
             config.BundleTools.CommitEmail,
+            config.BundleTools.Workflow,config.BundleTools.DevelopmentBranch,config.BundleTools.ProductionBranch,
         },
         toolchain = Tools.Status(),
         accounts = PublicAccounts(),
@@ -78,9 +81,16 @@ public sealed class BundleToolsService : IDisposable
         if (patch.CommitName is not null && !Text(patch.CommitName, 100)) throw new InvalidOperationException("bundleTools.invalid");
         if (patch.CommitEmail is not null && (!Text(patch.CommitEmail, 150) || !patch.CommitEmail.Contains('@'))) throw new InvalidOperationException("bundleTools.invalid");
         if (patch.KeepBackups is < 1 or > 20 || patch.MaxUploadMb is < 1 or > 2048) throw new InvalidOperationException("bundleTools.invalid");
+        if(patch.Workflow is not null&&patch.Workflow is not ("review" or "direct" or "branches"))throw new InvalidOperationException("bundleTools.invalid");
+        if(patch.DevelopmentBranch is not null)GitService.ValidateRef(patch.DevelopmentBranch);
+        if(patch.ProductionBranch is not null)GitService.ValidateRef(patch.ProductionBranch);
+        if(Jobs.Busy&&(patch.Enabled==false||patch.SourcesEnabled==false))throw new InvalidOperationException("bundleTools.busy");
         lock (config)
         {
             var s = config.BundleTools;
+            if(patch.Workflow is not null)s.Workflow=patch.Workflow;
+            if(patch.DevelopmentBranch is not null)s.DevelopmentBranch=patch.DevelopmentBranch;
+            if(patch.ProductionBranch is not null)s.ProductionBranch=patch.ProductionBranch;
             if (patch.Enabled is { } enabled) s.Enabled = enabled;
             if (patch.UploadEnabled is { } upload) s.UploadEnabled = upload;
             if (patch.SourcesEnabled is { } sources) s.SourcesEnabled = sources;
@@ -104,7 +114,7 @@ public sealed class BundleToolsService : IDisposable
         try
         {
             var list = await manager.List(ct);
-            return list.CanControl ? list.Bundles.FirstOrDefault(b => b.Name == name)?.State : null;
+            return list.Ok ? list.Bundles.FirstOrDefault(b => b.Name == name)?.State ?? (list.CanControl || list.Bundles.All(b=>b.State=="stopped") ? "stopped" : null) : null;
         }
         catch (InvalidOperationException) { return null; }
     }
@@ -112,7 +122,8 @@ public sealed class BundleToolsService : IDisposable
     /// <summary>Stops a running bundle (when the restart option is on), runs the file work, then starts it again.</summary>
     public async Task WithBundleStoppedAsync(string name, Action<string> log, CancellationToken ct, Func<Task> work)
     {
-        var restart = config.BundleTools.RestartAfterBuild ? await BundleStateAsync(name, ct) : null;
+        var restart = await BundleStateAsync(name, ct);
+        if (Bundles is not null && restart is null) throw new InvalidOperationException("bundle.changed");
         var stopped = false;
         if (restart == "running" && Bundles is { } manager)
         {
@@ -123,7 +134,7 @@ public sealed class BundleToolsService : IDisposable
         try { await work(); }
         finally
         {
-            if (stopped && Bundles is { } again)
+            if (stopped && config.BundleTools.RestartAfterBuild && !new BundleAdministration(config,configPath,this).Disabled(name) && Bundles is { } again)
             {
                 try { log("Starting bundle " + name + "..."); await again.Action(name, "start", CancellationToken.None); }
                 catch (Exception e) { log("Could not start the bundle: " + e.Message); }
@@ -214,7 +225,7 @@ public sealed class BundleToolsService : IDisposable
 
     private sealed record ToolRef(string Id);
 
-    private void RequireSources()
+    public void RequireSources()
     {
         RequireEnabled();
         if (!config.BundleTools.SourcesEnabled) throw new InvalidOperationException("bundleTools.disabled");
@@ -250,30 +261,20 @@ public sealed class BundleToolsService : IDisposable
     public object AccountSave(string json)
     {
         RequireSources();
-        var args = JsonSerializer.Deserialize<AccountArgs>(json, PanelConfig.Json) ?? throw new InvalidOperationException("request.invalid");
-        if (!GitProviders.Types.Contains(args.Type)) throw new InvalidOperationException("bundleTools.account");
-        var baseUrl = GitProviders.NormalizeBase(args.Type, string.IsNullOrWhiteSpace(args.BaseUrl) ? GitProviders.DefaultBase(args.Type) : args.BaseUrl);
-        var label = (args.Label ?? "").Trim();
-        var username = (args.Username ?? "").Trim();
-        if (label.Length > 60 || username.Length > 100 || label.Any(char.IsControl) || username.Any(char.IsControl) || username.Contains(':')) throw new InvalidOperationException("bundleTools.account");
-        lock (config)
-        {
-            var account = args.Id is { Length: > 0 } ? config.BundleTools.Accounts.FirstOrDefault(a => a.Id == args.Id) ?? throw new InvalidOperationException("bundleTools.account") : null;
-            if (account is null)
-            {
-                if (config.BundleTools.Accounts.Count >= 20 || string.IsNullOrWhiteSpace(args.Token)) throw new InvalidOperationException("bundleTools.account");
-                account = new GitAccount { Id = Guid.NewGuid().ToString("N")[..12] };
-                config.BundleTools.Accounts.Add(account);
-            }
-            account.Type = args.Type; account.BaseUrl = baseUrl; account.Label = label.Length > 0 ? label : new Uri(baseUrl).Host; account.Username = username;
-            if (!string.IsNullOrWhiteSpace(args.Token))
-            {
-                var token = args.Token.Trim();
-                if (token.Length > 500 || token.Any(c => char.IsControl(c) || char.IsWhiteSpace(c))) throw new InvalidOperationException("bundleTools.account");
-                account.TokenProtected = Secrets.Protect(token);
-                Redactor.Add(token);
-            }
-            PanelConfig.Save(configPath, config);
+        var args=JsonSerializer.Deserialize<AccountArgs>(json,PanelConfig.Json)??throw new InvalidOperationException("request.invalid");
+        if(!GitProviders.Types.Contains(args.Type))throw new InvalidOperationException("bundleTools.account");
+        var baseUrl=GitProviders.NormalizeBase(args.Type,string.IsNullOrWhiteSpace(args.BaseUrl)?GitProviders.DefaultBase(args.Type):args.BaseUrl);
+        var label=(args.Label??"").Trim();var username=(args.Username??"").Trim();var token=(args.Token??"").Trim();
+        if(label.Length>60||username.Length>100||label.Any(char.IsControl)||username.Any(char.IsControl)||username.Contains(':')||token.Length>500||token.Any(c=>char.IsControl(c)||char.IsWhiteSpace(c)))throw new InvalidOperationException("bundleTools.account");
+        lock(config){
+            var old=args.Id is {Length:>0}?config.BundleTools.Accounts.FirstOrDefault(a=>a.Id==args.Id)??throw new InvalidOperationException("bundleTools.account"):null;
+            if(old is null&&(config.BundleTools.Accounts.Count>=20||token.Length==0))throw new InvalidOperationException("bundleTools.account");
+            if(old is not null&&(old.Type!=args.Type||old.BaseUrl!=baseUrl)&&token.Length==0)throw new InvalidOperationException("bundleTools.tokenDestination");
+            var account=new GitAccount{Id=old?.Id??Guid.NewGuid().ToString("N")[..12],Type=args.Type,BaseUrl=baseUrl,Label=label.Length>0?label:new Uri(baseUrl).Host,Username=username,TokenProtected=token.Length>0?Secrets.Protect(token):old!.TokenProtected};
+            var previous=config.BundleTools.Accounts.ToList();
+            config.BundleTools.Accounts.RemoveAll(a=>a.Id==account.Id);config.BundleTools.Accounts.Add(account);
+            try{PanelConfig.Save(configPath,config);}catch{config.BundleTools.Accounts=previous;throw;}
+            Redactor.Add(token);
         }
         return PublicAccounts();
     }
@@ -296,9 +297,17 @@ public sealed class BundleToolsService : IDisposable
         if (account.TokenProtected.Length == 0) throw new InvalidOperationException("bundleTools.tokenRejected");
         var token = Secrets.Unprotect(account.TokenProtected);
         Redactor.Add(token);
-        var user = await GitProviders.TestAsync(Http, account, token, ct);
+        var user = await GitProviders.TestAsync(ProviderHttp, account, token, ct);
         return new { ok = true, user };
     }
+
+    public async Task<object> Remote(string action,string json,CancellationToken ct){
+        RequireSources();var args=JsonSerializer.Deserialize<RemoteArgs>(json,PanelConfig.Json)??throw new InvalidOperationException("request.invalid");
+        var account=config.BundleTools.Accounts.FirstOrDefault(a=>a.Id==args.AccountId)??throw new InvalidOperationException("bundleTools.account");
+        var token=Secrets.Unprotect(account.TokenProtected);Redactor.Add(token);
+        return action=="owners"?await GitProviders.OwnersAsync(ProviderHttp,account,token,ct,args.Write):await GitProviders.RepositoriesAsync(ProviderHttp,account,token,args.Query??"",args.Page,args.Owner??"",ct);
+    }
+    private sealed record RemoteArgs(string AccountId,string? Query=null,int Page=1,string? Owner=null,bool Write=false);
 
     public object JobInfo(string id)
     {
