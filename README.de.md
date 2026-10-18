@@ -55,25 +55,13 @@ Einrichtung unter localhost:20772 wie oben abschließen. Laufzeit und PTY-Helfer
 
 ## Docker unter Linux
 
-Voraussetzungen: Linux x86-64, Docker Engine und Compose v2. Ein natives Releasepaket für `deploy/` entpacken und `blackice-server-panel-docker.tar.gz` aus demselben Release laden.
+Voraussetzungen: Linux x86-64, Docker Engine und Compose v2. `blackice-server-panel-docker-bundle.tar.gz` herunterladen und entpacken, danach starten:
 
-```sh
-gzip -dc blackice-server-panel-docker.tar.gz | docker load
-cp deploy/compose.env.example .env
-sudo mkdir -p /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blackice-server
-sudo chown 10001:10001 /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blackice-server
-sudo chmod 700 /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blackice-server
-stat -c %g /var/run/docker.sock
+```bash
+sh scripts/docker.sh
 ```
 
-In `.env` eintragen: `PANEL_STATE=/srv/blackice-panel/state`, `PANEL_RUNTIME=/srv/blackice-panel/runtime`, `SERVER_PATH=/srv/blackice-server`, `DOCKER_GID` mit der ausgegebenen Socket-Gruppen-ID und `PANEL_VERSION` passend zur Version des heruntergeladenen Docker-Archivs (zum Beispiel `1.4.0`). Dann:
-
-```sh
-docker compose --env-file .env -f deploy/compose.yaml up -d
-docker compose --env-file .env -f deploy/compose.yaml logs supervisor
-```
-
-Unter localhost:20772 den ausgegebenen Einrichtungsschlüssel verwenden, Docker und `/server` wählen. Nur der Supervisor erhält den weitreichenden Docker-Socket, der Webhost nicht. Panelzustand und Spieldateien bleiben in Hostordnern. Beenden: `docker compose --env-file .env -f deploy/compose.yaml down`. [Docker-Details](docs/docker.md).
+Das Paket lädt das Image, erstellt eine private `.env`, erkennt die Socketgruppe und bereitet die persistenten Schreibrechte vor. Für andere Hostpfade `.env` vorher anpassen. Unter localhost:20772 mit dem protokollierten Einrichtungsschlüssel Docker und `/server` wählen. Spielserver- und Panel-Updates stehen in den Einstellungen bereit. Nur der Supervisor erhält den Docker-Socket. [Docker-Einrichtung, Migration und Wiederherstellung](docs/docker.md).
 
 ## Bedienung und Updates
 
@@ -82,7 +70,7 @@ Unter Einstellungen → Allgemein lässt sich der neue native Serverordner prüf
 
 - Header: Status, Starten, Neustarten und Stoppen. Geordneter Stop wartet bis zu 30 Sekunden; erzwungener Stop ist separat. Bundle-Aktionen warten auf Serverbestätigung.
 - Benutzer: Rechte für Server, Konsole, Logs, Bundles, Einstellungen und Benutzerverwaltung einzeln vergeben. Konsolenschreibzugriff nur vertrauenswürdigen Administratoren geben.
-- Einstellungen → Panel-Updates: stabile GitHub-Releases prüfen, mit SHA-256 verifizieren und mit Sicherung sowie Wiederherstellung bei Startfehlern installieren. Konfiguration, Benutzer und Spieldateien bleiben erhalten. Installation über native Startdateien; Docker/systemd werden über ihre Bereitstellungswerkzeuge aktualisiert. **0.5.1 → 1.0 einmal manuell ersetzen, da das Repository umbenannt wurde; `.local/` erhalten.** [Updates und Wiederherstellung](docs/updates.md).
+- Einstellungen → Panel-Updates: stabile GitHub-Releases prüfen, mit SHA-256 verifizieren und mit Sicherung sowie Wiederherstellung bei Startfehlern installieren. Konfiguration, Benutzer und Spieldateien bleiben erhalten. Installation über native Startdateien und aktuelle Docker-Pakete; systemd wird über Dienstwerkzeuge aktualisiert. **0.5.1 → 1.0 einmal manuell ersetzen, da das Repository umbenannt wurde; `.local/` erhalten.** [Updates und Wiederherstellung](docs/updates.md).
 - Browser-Tab schließen stoppt nichts. `keep-running` / `stop-server` steuert das Beenden des Webhosts; Start schließen beendet immer den gesamten Stack. Externe Server werden erkannt und nicht doppelt gestartet; ihre Konsole kann nicht übernommen werden.
 - Ports: Spiel/Bundle-Download 20770 TCP/UDP, Voice 20771 TCP/UDP, Dashboard 20772 TCP auf localhost. Fernzugriff über dokumentierten [HTTPS-Reverse-Proxy](docs/operations.md).
 - `.local/` und Spielserverordner sichern. Neue Downloads verwenden LAN-Modus und deaktivierte automatische Serverupdates. Öffentliche Server benötigen die [offizielle Registrierung](https://docs.replay.re/servers/registering/).

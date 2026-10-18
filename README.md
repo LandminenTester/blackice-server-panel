@@ -53,25 +53,13 @@ Complete setup at localhost:20772 as above. .NET and the PTY helper are included
 
 ## Docker on Linux
 
-Requires x86-64 Linux, Docker Engine and Compose v2. Extract a native release package for `deploy/`, and download `blackice-server-panel-docker.tar.gz` from the same release.
+Requires x86-64 Linux, Docker Engine and Compose v2. Download and extract `blackice-server-panel-docker-bundle.tar.gz`, then run:
 
-```sh
-gzip -dc blackice-server-panel-docker.tar.gz | docker load
-cp deploy/compose.env.example .env
-sudo mkdir -p /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blackice-server
-sudo chown 10001:10001 /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blackice-server
-sudo chmod 700 /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blackice-server
-stat -c %g /var/run/docker.sock
+```bash
+sh scripts/docker.sh
 ```
 
-Edit `.env`: set `PANEL_STATE=/srv/blackice-panel/state`, `PANEL_RUNTIME=/srv/blackice-panel/runtime`, `SERVER_PATH=/srv/blackice-server`, `DOCKER_GID` to the printed socket group ID, and set `PANEL_VERSION` to the version of the Docker archive you downloaded (for example `1.4.0`). Then:
-
-```sh
-docker compose --env-file .env -f deploy/compose.yaml up -d
-docker compose --env-file .env -f deploy/compose.yaml logs supervisor
-```
-
-Open localhost:20772, use the logged setup key, select Docker and `/server`. Only the Supervisor receives the powerful Docker socket; Webhost does not. Game files and panel state persist in host directories. Stop with `docker compose --env-file .env -f deploy/compose.yaml down`. [Docker details](docs/docker.md).
+The bundle loads its image, creates a private `.env`, detects the socket group and starts the panel with prepared persistent permissions. Edit `.env` first for custom host paths. Open localhost:20772 and use the logged setup key; select Docker and `/server` for the game. Both game and panel updates are available in Settings. Only the Supervisor receives the Docker socket. [Docker setup, migration and recovery](docs/docker.md).
 
 ## Operation and updates
 
@@ -80,7 +68,7 @@ Settings → General can check and save a moved native server directory while th
 
 - Header: status, Start, Restart and Stop. Graceful Stop waits up to 30 seconds; Force Stop is separate. Bundle actions wait for server confirmation.
 - Users: individual rights for server controls, console, logs, bundles, settings and account administration. Give console-write access only to trusted operators.
-- Settings → Panel updates: stable GitHub releases, SHA-256 verification, installation/restart, backup and startup-failure rollback. Configuration, accounts and game files remain. Native Start installations support installation; Docker/systemd use deployment tools. **0.5.1 → 1.0 needs one manual package replacement following the repository rename; preserve `.local/`.** [Updates and recovery](docs/updates.md).
+- Settings → Panel updates: stable GitHub releases, SHA-256 verification, installation/restart, backup and startup-failure rollback. Configuration, accounts and game files remain. Native Start and current Docker packages support dashboard installation; systemd uses deployment tools. **0.5.1 → 1.0 needs one manual package replacement following the repository rename; preserve `.local/`.** [Updates and recovery](docs/updates.md).
 - Closing a browser tab stops nothing. `keep-running` / `stop-server` controls Webhost shutdown; closing Start always stops the whole stack. Externally started servers are detected, preventing duplicate starts; their console cannot be taken over.
 - Ports: game/bundle downloads 20770 TCP/UDP, voice 20771 TCP/UDP, dashboard 20772 TCP on localhost. For remote access use the documented [HTTPS proxy settings](docs/operations.md).
 - Back up `.local/` and your game-server directory. New server downloads use LAN mode and disabled automatic server updates. Public game servers require [official registration](https://docs.replay.re/servers/registering/).

@@ -14,11 +14,12 @@ COPY --from=ui /build/src/Web/wwwroot src/Web/wwwroot
 COPY licenses src/Web/wwwroot/licenses
 RUN dotnet publish src/Web -c Release -r linux-x64 --self-contained true -o /out/web && dotnet publish src/Supervisor -c Release -r linux-x64 --self-contained true -o /out/supervisor && cc -O2 -Wall -Wextra native/terminal.c -lutil -o /out/supervisor/replay-terminal
 FROM debian:trixie-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git libicu76 libssl3t64 libstdc++6 zlib1g && rm -rf /var/lib/apt/lists/* && useradd -u 10001 -m panel
+RUN apt-get update && apt-get install -y --no-install-recommends acl ca-certificates git libicu76 libssl3t64 libstdc++6 zlib1g && rm -rf /var/lib/apt/lists/* && useradd -u 10001 -m panel
 LABEL org.opencontainers.image.source="https://github.com/LandminenTester/blackice-server-panel"
-WORKDIR /app
+WORKDIR /app/artifacts/web
 COPY --from=build /out /app/artifacts
-ENV REPLAY_PANEL_NO_TERMINAL=1 REPLAY_PANEL_CONFIG=/state/panel.json REPLAY_PANEL_RUNTIME=/run/replay-panel REPLAY_PANEL_MOUNTS=/server
+COPY --chmod=755 deploy/docker-init.sh deploy/docker-permissions.sh deploy/docker-entrypoint.sh /app/
+ENV REPLAY_PANEL_NO_TERMINAL=1 REPLAY_PANEL_CONFIG=/state/panel.json REPLAY_PANEL_RUNTIME=/run/replay-panel REPLAY_PANEL_MOUNTS=/server DOTNET_RUNNING_IN_CONTAINER=true
 USER 10001:10001
 EXPOSE 20772
-ENTRYPOINT ["/app/artifacts/web/Web"]
+ENTRYPOINT ["/app/docker-entrypoint.sh", "web"]

@@ -9,7 +9,7 @@ await mkdir(folder,{recursive:true});
 const backend=process.argv.includes('--linux')?'linux':process.argv.includes('--docker')?'docker':'windows';
 const configPath=resolve(folder,'panel.json'),url='http://127.0.0.1:20776';
 let key='',output='',csrf='',cookies=new Map(),supervisor,web,restartWeb,stopWeb;
-const target=backend==='windows'?resolve(folder,'Replay Download'):'/server/download';
+const target=backend==='windows'?resolve(folder,'Replay Download'):backend==='docker'?'/server':'/server/download';
 if(backend==='windows') {
  await writeFile(configPath,JSON.stringify({schemaVersion:2,autoStartServer:false,gamePort:30770,voicePort:30771,pipeName:'panel-install-'+process.pid,url}));
  supervisor=spawn(resolve(root,build,'supervisor/Supervisor.exe'),[configPath],{env:{...process.env,REPLAY_PANEL_NO_TERMINAL:'1'},stdio:['ignore','pipe','inherit']});
@@ -18,22 +18,26 @@ if(backend==='windows') {
  stopWeb=async()=>{const previous=web;execFileSync('node',[resolve(root,'scripts/control.mjs'),'stop-web'],{cwd:root,env:{...process.env,REPLAY_PANEL_CONFIG:configPath},stdio:'ignore'});if(previous.exitCode===null)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Webhost shutdown timed out')),10000);previous.once('exit',()=>{clearTimeout(timer);resolve();});});};
 } else {
  // Containers/volumes use a unique test prefix; no production mounts.
- const name='panel-install-'+process.pid;const volume=name+'-files';
+ const name='panel-install-'+process.pid;const volume=name+'-files';const serverVolume=backend==='docker'?name+'-server':volume;
  execFileSync('docker',['volume','create',volume]);
+ if(backend==='docker'){
+  execFileSync('docker',['volume','create',serverVolume]);
+  execFileSync('docker',['run','--rm','--user','0','--entrypoint','/app/docker-permissions.sh','-v',serverVolume+':/server','replay-panel:next']);
+ }
  execFileSync('docker',['run','--rm','--user','0','--entrypoint','sh','-v',volume+':/test','replay-panel:next','-c','mkdir -p /test/state /test/run /test/server && chown -R 10001:10001 /test']);
  {
    const initial={schemaVersion:2,autoStartServer:false,backend,url:'http://0.0.0.0:20772',allowedHosts:['127.0.0.1:20776'],gamePort:30780,voicePort:30781};
    execFileSync('docker',['run','--rm','--user','0','--entrypoint','sh','-v',volume+':/test','replay-panel:next','-c','printf %s "$1" > /test/state/panel.json && chown 10001:10001 /test/state/panel.json','sh',JSON.stringify(initial)]);
  }
  const dockerGid=process.platform==='linux'?execFileSync('stat',['-c','%g','/var/run/docker.sock'],{encoding:'utf8'}).trim():'0';
- const hostPath=execFileSync('docker',['volume','inspect',volume,'--format','{{.Mountpoint}}'],{encoding:'utf8'}).trim()+'/download';
+ const hostPath=execFileSync('docker',['volume','inspect',serverVolume,'--format','{{.Mountpoint}}'],{encoding:'utf8'}).trim()+(backend==='docker'?'':'/download');
  const env=['-e','REPLAY_PANEL_CONFIG=/test/state/panel.json','-e','REPLAY_PANEL_RUNTIME=/test/run','-e','REPLAY_PANEL_MOUNTS=/server','-e','REPLAY_PANEL_URL=http://0.0.0.0:20772','-e','REPLAY_PANEL_HOSTS=127.0.0.1:20776'];
- execFileSync('docker',['run','-d','--name',name+'-supervisor',...env,'-v',volume+':/test','-v',volume+':/server',...(backend==='docker'?['--user','10001:'+dockerGid,'-v','/var/run/docker.sock:/var/run/docker.sock','-e','REPLAY_PANEL_HOST_SERVER='+hostPath]:[]),'--entrypoint','/app/artifacts/supervisor/Supervisor','replay-panel:next','/test/state/panel.json']);
+ execFileSync('docker',['run','-d','--name',name+'-supervisor',...env,'-v',volume+':/test','-v',serverVolume+':/server',...(backend==='docker'?['--user','10001:'+dockerGid,'-v','/var/run/docker.sock:/var/run/docker.sock','-e','REPLAY_PANEL_HOST_SERVER='+hostPath]:[]),'--entrypoint','/app/artifacts/supervisor/Supervisor','replay-panel:next','/test/state/panel.json']);
  execFileSync('docker',['run','-d','--name',name+'-web',...env,'-v',volume+':/test','-p','127.0.0.1:20776:20772','replay-panel:next']);
  stopWeb=()=>execFileSync('docker',['stop',name+'-web'],{stdio:'ignore'});
  restartWeb=()=>execFileSync('docker',['start',name+'-web'],{stdio:'ignore'});
  supervisor={kill(){if(backend==='docker'){try{const data=JSON.parse(execFileSync('docker',['exec',name+'-supervisor','cat','/test/state/panel.json'],{encoding:'utf8'}));if(/^[a-f0-9]{64}$/.test(data.containerId))execFileSync('docker',['rm','-f',data.containerId]);if(/^[a-f0-9]{32}$/.test(data.instanceId)){const ids=execFileSync('docker',['ps','-aq','--filter','label=replay.panel.instance='+data.instanceId],{encoding:'utf8'}).trim().split(/\s+/).filter(x=>/^[a-f0-9]{12,64}$/.test(x));if(ids.length)execFileSync('docker',['rm','-f',...ids]);try{execFileSync('docker',['network','disconnect','-f','blackice-bridge-'+data.instanceId,name+'-supervisor']);execFileSync('docker',['network','rm','blackice-bridge-'+data.instanceId]);}catch{}} }catch{}}execFileSync('docker',['rm','-f',name+'-supervisor']);}};
- web={kill(){execFileSync('docker',['rm','-f',name+'-web']);execFileSync('docker',['volume','rm',volume]);}};
+ web={kill(){execFileSync('docker',['rm','-f',name+'-web']);execFileSync('docker',['volume','rm',volume]);if(serverVolume!==volume)execFileSync('docker',['volume','rm',serverVolume]);}};
  for(let i=0;i<30&&!key;i++){key=execFileSync('docker',['logs',name+'-supervisor'],{encoding:'utf8'}).match(/Setup key: ([A-Z0-9]+)/)?.[1]??'';await new Promise(r=>setTimeout(r,200));}
 }
 async function req(path,body){const response=await fetch(url+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-CSRF':csrf,Cookie:[...cookies].map(x=>x.join('=')).join('; ')},body:body?JSON.stringify(body):undefined});for(const c of response.headers.getSetCookie()){const [n,...v]=c.split(';')[0].split('=');cookies.set(n,v.join('='));}if(!response.ok)throw Error(await response.text());return response.json();}
@@ -52,6 +56,10 @@ try{
  csrf=(await req('/api/session')).csrf;
  await req('/api/server/start',{});console.log('PASS downloaded Replay starts');
  await new Promise(r=>setTimeout(r,2500));await req('/api/command',{text:'echo installer-tested'});
+ const savedConfig=(await req('/api/server-config')).values;
+ await req('/api/server-config',savedConfig);
+ assert.deepEqual((await req('/api/server-config')).values,savedConfig);
+ console.log('PASS '+backend+' server config save after runtime startup');
  
  await req('/api/settings',{shutdownMode:'keep-running'});
  await stopWeb();restartWeb();
@@ -64,11 +72,15 @@ try{
  assert.equal((await req('/api/status')).status.state,'stopped');console.log('PASS '+backend+' stop-server mode gracefully stops Replay');
  await req('/api/server/start',{});await new Promise(r=>setTimeout(r,1500));
  await req('/api/server/restart',{});await new Promise(r=>setTimeout(r,1500));assert.equal((await req('/api/status')).status.state,'running');console.log('PASS '+backend+' restart');
+ if(backend==='docker'){
+  const settings=JSON.parse(execFileSync('docker',['exec','panel-install-'+process.pid+'-supervisor','cat',target+'/settings/server.settings.json'],{encoding:'utf8'}));
+  assert.equal(settings.channel,savedConfig.channel);assert.equal(settings.auto_update,savedConfig.autoUpdate);assert.equal(settings.restart_after_update,savedConfig.restartAfterUpdate);
+  console.log('PASS Docker game startup preserves dashboard-managed settings');
+ }
 
 
  if(process.env.BUNDLE_E2E==='1'){
   const run=async(path,body,label)=>{const start=await req(path,body);let state='running',lines=[];for(let n=0;n<3600;n++){const r=await req('/api/bundle-tools/jobs/'+start.id);state=r.job.state;lines=r.log;if(state!=='running')break;await new Promise(x=>setTimeout(x,500));}assert.equal(state,'succeeded',label+': '+lines.slice(-25).join(String.fromCharCode(10)));};
-  if(backend==='docker')execFileSync('docker',['run','--rm','--user','0','--entrypoint','sh','-v','panel-install-'+process.pid+'-files:/test','replay-panel:next','-c','chown -R 10001 /test/'+target.split('/').slice(2).join('/')+' || true; chmod -R g+rwX /test/'+target.split('/').slice(2).join('/')]);
   await req('/api/bundle-tools/settings',{enabled:true,sourcesEnabled:true,uploadEnabled:true});
   await run('/api/bundle-tools/tools/install',{id:'dotnet'},'dotnet install');
   await run('/api/bundle-tools/tools/install',{id:'node'},'node install');

@@ -79,7 +79,7 @@ public sealed class SetupService(PanelConfig config, string configPath)
         if (backend is not ("windows" or "linux" or "docker")) throw new InvalidOperationException("platform.invalid");
         if (backend == "windows" != OperatingSystem.IsWindows()) throw new InvalidOperationException("platform.invalid");
         if (!Directory.Exists(path)) throw new InvalidOperationException("path.missing");
-        if (fresh && Directory.EnumerateFileSystemEntries(path).Any()) throw new InvalidOperationException("install.exists");
+        if (fresh && !EmptyInstallDirectory(path)) throw new InvalidOperationException("install.exists");
         var probe = Path.Combine(path, ".panel-write-" + Guid.NewGuid().ToString("N"));
         try { using (File.Create(probe)) {} File.Delete(probe); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new InvalidOperationException("path.readonly"); }
         if (fresh || backend == "docker") return;
@@ -98,6 +98,13 @@ public sealed class SetupService(PanelConfig config, string configPath)
             if (process.ExitCode != 0 || output.Contains("not found")) throw new InvalidOperationException("server.libraries");
         }
     }
+    private static bool EmptyInstallDirectory(string path,string? staging=null){
+        bool Empty(string directory){foreach(var entry in Directory.EnumerateFileSystemEntries(directory)){
+            if(entry==staging)continue;
+            if(!Directory.Exists(entry)||(File.GetAttributes(entry)&FileAttributes.ReparsePoint)!=0||Path.GetRelativePath(path,entry).Replace('\\','/') is not ("cfg" or "settings" or "data" or "data/ugc")||!Empty(entry))return false;
+        }return true;}
+        return Empty(path);
+    }
     public InstallJob Start(InstallInput input)
     {
         Authorize(input.Key); var target = Root(input.ServerRoot);
@@ -107,7 +114,8 @@ public sealed class SetupService(PanelConfig config, string configPath)
             cancellation = new(); job = new(Guid.NewGuid().ToString("N"), "running", "download", 0);
             var token = cancellation.Token;
             _ = Task.Run(async () => {
-                var staging = target + ".install-" + job.Id;
+                var mountRoot=Environment.GetEnvironmentVariable("REPLAY_PANEL_MOUNTS")?.Split(';').Any(x=>Path.GetFullPath(x)==target)==true;
+                var staging = mountRoot?Path.Combine(target,".panel-install-"+job.Id):target + ".install-" + job.Id;
                 string finalState="completed"; string? failure=null;
                 try {
                     Directory.CreateDirectory(staging);
@@ -128,8 +136,18 @@ public sealed class SetupService(PanelConfig config, string configPath)
                         Validate(staging,input.Backend);
                         
                     }
-                    if (Directory.EnumerateFileSystemEntries(target).Any()) throw new InvalidOperationException("install.exists");
-                    token.ThrowIfCancellationRequested();Directory.Delete(target);Directory.Move(staging,target);
+                    if (!EmptyInstallDirectory(target,mountRoot?staging:null)) throw new InvalidOperationException("install.exists");
+                    token.ThrowIfCancellationRequested();
+                    if(mountRoot){
+                        // A bind-mount root cannot be renamed or replaced. Publish
+                        // verified entries inside it, retaining its ACL/identity.
+                        foreach(var entry in Directory.EnumerateFileSystemEntries(staging)){
+                            var destination=Path.Combine(target,Path.GetFileName(entry));
+                            if(Directory.Exists(destination))Directory.Delete(destination,true);
+                            if(Directory.Exists(entry))Directory.Move(entry,destination);else File.Move(entry,destination);
+                        }
+                        Directory.Delete(staging);
+                    }else{Directory.Delete(target,true);Directory.Move(staging,target);}
                 } catch (OperationCanceledException) { finalState="cancelled"; }
                   catch (Exception e) { Console.Error.WriteLine(e);finalState="failed"; failure=e is InvalidOperationException ? e.Message : "install.failed"; }
                 finally {

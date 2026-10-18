@@ -104,6 +104,8 @@ jobs:
       - run: docker build -f tests/Linux.Dockerfile -t replay-panel-linux-tests .
       - run: docker run --rm replay-panel-linux-tests
       - run: docker build -t replay-panel:next .
+      - run: docker build -f tests/DockerUpdates.Dockerfile -t replay-panel:updates-test .
+      - run: node scripts/test-docker-updates.mjs
       - run: node scripts/test-install.mjs --linux
         env:
           BUNDLE_E2E: "1"
@@ -142,8 +144,17 @@ jobs:
           docker build -t ghcr.io/landminentester/blackice-server-panel:$VERSION .
           docker push ghcr.io/landminentester/blackice-server-panel:$VERSION
           docker save ghcr.io/landminentester/blackice-server-panel:$VERSION | gzip > blackice-server-panel-docker.tar.gz
+      - name: Package standalone Docker bundle
+        run: |
+          mkdir -p docker-bundle/scripts
+          cp blackice-server-panel-docker.tar.gz VERSION docker-bundle/
+          cp -R deploy docs docker-bundle/
+          cp README.md README.de.md LICENSE docker-bundle/
+          cp scripts/docker.sh docker-bundle/scripts/
+          chmod +x docker-bundle/scripts/docker.sh
+          tar -czf blackice-server-panel-docker-bundle.tar.gz -C docker-bundle .
       - name: Checksums
-        run: sha256sum blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz > SHA256SUMS.txt
+        run: sha256sum blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz blackice-server-panel-docker-bundle.tar.gz > SHA256SUMS.txt
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
@@ -151,6 +162,7 @@ jobs:
             blackice-server-panel-win-x64.zip
             blackice-server-panel-linux-x64.tar.gz
             blackice-server-panel-docker.tar.gz
+            blackice-server-panel-docker-bundle.tar.gz
       - name: Publish packages
         env:
           GH_TOKEN: ${{ github.token }}
@@ -160,7 +172,7 @@ jobs:
           case "$GITHUB_REF_NAME" in *-*) FLAGS="--prerelease --latest=false";; esac
           NOTES="docs/releases/$GITHUB_REF_NAME.md"
           if [ -f "$NOTES" ]; then
-            gh release create "$GITHUB_REF_NAME" blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --title "BlackICE Panel $GITHUB_REF_NAME" --notes-file "$NOTES" $FLAGS
+            gh release create "$GITHUB_REF_NAME" blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz blackice-server-panel-docker-bundle.tar.gz SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --title "BlackICE Panel $GITHUB_REF_NAME" --notes-file "$NOTES" $FLAGS
           else
-            gh release create "$GITHUB_REF_NAME" blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --generate-notes $FLAGS
+            gh release create "$GITHUB_REF_NAME" blackice-server-panel-win-x64.zip blackice-server-panel-linux-x64.tar.gz blackice-server-panel-docker.tar.gz blackice-server-panel-docker-bundle.tar.gz SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --generate-notes $FLAGS
           fi

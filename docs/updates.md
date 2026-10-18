@@ -8,7 +8,7 @@ Choose **Download and verify**. The supervisor downloads the exact Windows x64 Z
 
 Once ready, choose **Install and restart** and confirm the interruption. A copy of the currently running updater operates outside the installation being replaced. It stops the managed server, Webhost, Supervisor and control terminal, saves the existing artifacts/Start/configuration, swaps the staged artifacts and Start, then opens a new control terminal. Server startup follows the auto-start setting. Configuration, data-protection keys, users, downloaded game files and bundles are retained. No unattended update is installed.
 
-Settings-write permission is required to view/check updates. Download/install additionally requires user-management permission. In-place installation is enabled only for a native package with an open Start control terminal. Docker and systemd deployments expose the version check, but are upgraded through Compose/systemd deployment tools; the dashboard does not replace an immutable container or gain host service-manager access.
+Settings-write permission is required to view/check updates. Download/install additionally requires user-management permission. Native installation requires an open Start control terminal. Docker installations using the current Compose package also support dashboard installation: a verified Linux runtime is stored in shared panel state, selected by both entrypoints, and checked after restarting only the panel services. Failed startup restores the previous runtime. The game continues running. Base-image/OS upgrades and systemd service deployments remain deployment operations. See [Docker migration and recovery](docker.md).
 
 On an SSH host the new control terminal is a tmux session; use `tmux list-sessions` and attach to `replay-panel-<instance-prefix>`.
 
@@ -24,7 +24,7 @@ When building a release, VERSION must match the assemblies' Directory.Build.prop
 
 ### Update channels
 
-**Settings → Updates → Update channel** selects the release stream. **Stable** (default) only offers normal releases. **Experimental** additionally offers pre-releases tagged `vX.Y.Z-experimental.N`, which carry new, unfinished features and can be unstable; a stable release that supersedes a pre-release is offered as well. Switching back to Stable never downgrades; it only stops offering pre-releases. Pre-releases are marked with an **Experimental** tag in the panel and on GitHub (they are never marked "Latest"), use the same SHA-256 verification and automatic rollback, and Docker users must pin the exact image version themselves.
+**Settings → Updates → Update channel** selects the release stream. **Stable** (default) only offers normal releases. **Experimental** additionally offers pre-releases tagged `vX.Y.Z-experimental.N`, which carry new, unfinished features and can be unstable; a stable release that supersedes a pre-release is offered as well. Switching back to Stable never downgrades; it only stops offering pre-releases. Pre-releases are marked with an **Experimental** tag in the panel and on GitHub (they are never marked "Latest"), use the same SHA-256 verification and automatic rollback, and are installable through the Docker dashboard after the one-time deployment migration.
 
 ## Deutsch
 
@@ -34,7 +34,7 @@ Unter **Einstellungen → Panel-Updates** prüft das Panel das neueste stabile �
 
 Nach erfolgreicher Prüfung **Installieren und neu starten** auswählen und die Unterbrechung bestätigen. Eine Kopie des bisherigen Updaters läuft außerhalb der auszutauschenden Installation. Sie beendet den verwalteten Server, Webhost, Supervisor und das Steuerterminal, sichert Artefakte/Start/Konfiguration, tauscht das vorbereitete Paket aus und öffnet ein neues Startterminal. Für den Spielserver gilt die Autostart-Einstellung. Konfiguration, Sitzungsschlüssel, Benutzer, Spieldateien und Bundles bleiben erhalten. Updates werden nicht unbeaufsichtigt installiert.
 
-Zum Prüfen wird **Einstellungen ändern** benötigt; Herunterladen/Installieren benötigt zusätzlich **Benutzer verwalten**. Direkte Installation ist nur für native Pakete mit geöffnetem Startterminal aktiviert. Docker- und systemd-Betrieb zeigen den Versionscheck, werden aber mit Compose beziehungsweise den Dienstwerkzeugen aktualisiert. Das Dashboard ersetzt keinen unveränderlichen Container und erhält keinen Zugriff auf den Host-Dienstmanager.
+Zum Prüfen wird **Einstellungen ändern** benötigt; Herunterladen/Installieren benötigt zusätzlich **Benutzer verwalten**. Native Installation benötigt das geöffnete Startterminal. Aktuelle Docker-Pakete unterstützen die Dashboard-Installation über eine geprüfte Laufzeit im gemeinsamen Zustand mit automatischem Rückfall. Der Spielserver bleibt aktiv. Basisimage-/Betriebssystem-Updates und systemd-Bereitstellungen bleiben Aufgaben der Bereitstellungswerkzeuge. Siehe Docker-Anleitung für Migration und Wiederherstellung.
 
 Per SSH läuft das neue Steuerterminal als tmux-Sitzung; mit `tmux list-sessions` anzeigen und an `replay-panel-<Instanzpräfix>` anhängen.
 
@@ -50,5 +50,5 @@ VERSION muss beim Releasebau der Assemblyversion aus Directory.Build.props entsp
 
 ### Update-Kanäle
 
-**Einstellungen → Updates → Update-Kanal** wählt den Release-Strom. **Stabil** (Standard) bietet nur normale Releases an. **Experimentell** bietet zusätzlich Vorabversionen mit dem Tag `vX.Y.Z-experimental.N` an; sie enthalten neue, unfertige Funktionen und können instabil sein. Ein stabiles Release, das eine Vorabversion ablöst, wird ebenfalls angeboten. Der Wechsel zurück zu Stabil führt kein Downgrade durch, es werden nur keine Vorabversionen mehr angeboten. Vorabversionen sind im Panel und auf GitHub mit **Experimentell** markiert (nie als „Latest“), nutzen dieselbe SHA-256-Prüfung samt automatischem Rollback; Docker-Nutzer wählen die genaue Image-Version selbst.
+**Einstellungen → Updates → Update-Kanal** wählt den Release-Strom. **Stabil** (Standard) bietet nur normale Releases an. **Experimentell** bietet zusätzlich Vorabversionen mit dem Tag `vX.Y.Z-experimental.N` an; sie enthalten neue, unfertige Funktionen und können instabil sein. Ein stabiles Release, das eine Vorabversion ablöst, wird ebenfalls angeboten. Der Wechsel zurück zu Stabil führt kein Downgrade durch, es werden nur keine Vorabversionen mehr angeboten. Vorabversionen sind im Panel und auf GitHub mit **Experimentell** markiert (nie als „Latest“), nutzen dieselbe SHA-256-Prüfung samt automatischem Rollback; Docker-Nutzer können nach der einmaligen Bereitstellungsmigration ebenfalls im Dashboard installieren.
 

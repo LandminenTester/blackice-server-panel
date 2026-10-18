@@ -13,6 +13,7 @@ public sealed class PosixServerBackend(PanelConfig config,Func<string[]>? launch
     private Stream? terminal;
     private CancellationTokenSource? reading;
     private Task? reader;
+    private string? terminalStartedAt;
     private readonly DockerEngine? docker=config.Backend=="docker"?new(config):null;
     private readonly HashSet<string> bundleStates=new();
     public int? ExitCode(){if(docker is not null){try{return docker.Inspect().GetAwaiter().GetResult().GetProperty("State").GetProperty("ExitCode").GetInt32();}catch{return null;}}return process?.HasExited==true?process.ExitCode:null;}
@@ -33,7 +34,7 @@ public sealed class PosixServerBackend(PanelConfig config,Func<string[]>? launch
         await gate.WaitAsync();
         try {
             if(Status().State!="stopped")throw new InvalidOperationException("server.running");
-            if(docker is not null) { await docker.Action("start"); await OpenDockerTerminal(); return; }
+            if(docker is not null) { await docker.Action("start"); await OpenDockerTerminal(); await docker.EnsureWritableServer(); return; }
             var helper=Path.Combine(AppContext.BaseDirectory,"replay-terminal");
             if(!File.Exists(helper))throw new InvalidOperationException("server.helper");
             var info=new ProcessStartInfo(helper){WorkingDirectory=config.ServerRoot,RedirectStandardInput=true,RedirectStandardOutput=true,UseShellExecute=false};
@@ -44,13 +45,24 @@ public sealed class PosixServerBackend(PanelConfig config,Func<string[]>? launch
     }
     public async Task Reconnect()
     {
-        if(docker is not null && Status().State=="running" && terminal is null)await OpenDockerTerminal();
+        if(docker is null)return;
+        var state=(await docker.Inspect()).GetProperty("State");
+        if(!state.GetProperty("Running").GetBoolean())return;
+        var startedAt=state.GetProperty("StartedAt").GetString();
+        if(terminal is null||reader?.IsCompleted==true||terminalStartedAt!=startedAt)await OpenDockerTerminal(startedAt);
     }
-    private async Task OpenDockerTerminal() {terminal=await docker!.Attach(CancellationToken.None);reading=new();reader=Read(terminal,reading.Token);}
+    private async Task CloseTerminal(){reading?.Cancel();terminal?.Dispose();if(reader is not null)await reader;reading?.Dispose();terminal=null;reader=null;reading=null;terminalStartedAt=null;}
+    private async Task OpenDockerTerminal(string? startedAt=null) {
+        await CloseTerminal();
+        using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        terminal=await docker!.Attach(timeout.Token);
+        terminalStartedAt=startedAt??(await docker.Inspect()).GetProperty("State").GetProperty("StartedAt").GetString();
+        reading=new();reader=Read(terminal,reading.Token);
+    }
     private async Task Read(Stream stream,CancellationToken ct)
     {
         var buffer=new byte[65536];var decoder=Encoding.UTF8.GetDecoder();var chars=new char[65536];
-        try {int count;while((count=await stream.ReadAsync(buffer,ct))>0) {var n=decoder.GetChars(buffer,0,count,chars,0);Append(new string(chars,0,n));}}catch(OperationCanceledException){}catch(IOException){}
+        try {int count;while((count=await stream.ReadAsync(buffer,ct))>0) {var n=decoder.GetChars(buffer,0,count,chars,0);Append(new string(chars,0,n));}}catch(OperationCanceledException){}catch(IOException){}catch(ObjectDisposedException)when(ct.IsCancellationRequested){}
     }
     private void Append(string chunk)
     {
@@ -79,12 +91,12 @@ public sealed class PosixServerBackend(PanelConfig config,Func<string[]>? launch
                 if(force)process.Kill(true);else {await terminal!.WriteAsync(Encoding.UTF8.GetBytes("exit\r"));await terminal.FlushAsync();}
                 try {await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(config.StopTimeoutSeconds));}catch(TimeoutException){throw new InvalidOperationException("server.stopTimeout");}
             }
-            reading?.Cancel();terminal?.Dispose();terminal=null;
+            await CloseTerminal();
         }finally{gate.Release();}
     }
     public string[] ConsoleSnapshot(){lock(outputLock)return output.Append(remainder).Where(x=>x.Length>0).ToArray();}
     public string[] LogSnapshot() => docker is not null?docker.Logs().GetAwaiter().GetResult():BackendFiles.Logs(config.ServerRoot);
-    public async ValueTask DisposeAsync(){reading?.Cancel();if(Status().State=="running")await StopAsync();terminal?.Dispose();process?.Dispose();if(reader is not null)await reader;reading?.Dispose();gate.Dispose();}
+    public async ValueTask DisposeAsync(){if(Status().State=="running"&&(docker is null||config.ShutdownMode=="stop-server"))await StopAsync();await CloseTerminal();process?.Dispose();gate.Dispose();}
 }
 public static class BackendFiles
 {

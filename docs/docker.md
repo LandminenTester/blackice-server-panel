@@ -1,37 +1,29 @@
-# Docker setup / Einrichtung
+# Docker setup and updates / Einrichtung und Updates
 
 ## English
 
-Linux x86-64, Docker Engine and Compose v2. Webhost and Supervisor are separate; only the Supervisor receives the Docker socket.
+Linux x86-64, Docker Engine and Compose v2 are required. Extract `blackice-server-panel-docker-bundle.tar.gz` from the public release and run `sh scripts/docker.sh`. It contains the matching image, version, Compose file and scripts. No registry login or native package is needed. An existing private `.env` is preserved; on first run one is created and the socket group detected. Edit `.env` first for custom absolute host paths.
 
-First download the versioned Docker archive from the public GitHub release and load it with `gzip -dc blackice-server-panel-docker.tar.gz | docker load`. This installs the exact image tag referenced by Compose without requiring a registry login.
+Compose runs a network-isolated initializer to prepare private state/runtime ownership and named-user/default ACLs on the server's configuration and bundle directories. Webhost and Supervisor then run as UID 10001; only Supervisor joins the socket group and receives the Docker socket. The initializer never receives the socket. Supervisor repairs its labelled game's server-mount permissions on startup, after game start and before config saves. Symlinks are not traversed and no world-write permission is added. Host storage must support POSIX ACLs; read-only mounts and unsupported filesystems fail explicitly.
 
-1. Copy `deploy/compose.env.example` to private `.env`. Set absolute `PANEL_STATE`, `PANEL_RUNTIME` and `SERVER_PATH`. Set `DOCKER_GID` from `stat -c %g /var/run/docker.sock`.
-2. Create these host directories, owned by UID/GID 10001 with mode 0700. The server directory must be empty for installation.
-3. Run `docker compose --env-file .env -f deploy/compose.yaml up -d`.
-4. Get the setup key using `docker compose --env-file .env -f deploy/compose.yaml logs supervisor` and open localhost:20772.
-5. Select Docker, official download and the mounted `/server` directory.
+Open http://127.0.0.1:20772, use the logged setup key, create your administrator and select Docker with `/server`. Fresh downloads require no existing runtime. The prepared empty `cfg`, `settings` and `data/ugc` directories are accepted. Game/voice defaults are 20770/20771 TCP+UDP. Remote panel access uses the documented HTTPS proxy configuration.
 
-The Supervisor pulls `ghcr.io/replayre/server`, creates an owned container with TTY/stdin, persistent storage, LAN configuration and disabled auto-updates. It verifies the full container ID and ownership label before control. `REPLAY_PANEL_HOST_SERVER` is the daemon-side bind path and must match your host directory. Game/voice use 20770/20771 TCP+UDP.
+### Updates and migration
 
-Build locally with `docker build -t replay-panel:local .` and replace both image fields in a private Compose copy. Use fixed release versions. The Docker socket gives the Supervisor powerful host access; keep it private and never mount it into Webhost. Both services use UID 10001; only the Supervisor additionally joins the socket group.
+Game updates use Settings → REServer updates. Panel-managed game startup preserves `settings/server.settings.json`; settings take effect after restarting the game through the panel. Adopting an older game container's entrypoint requires its next panel-managed start and may recreate that stopped game container while preserving mounts and networks.
 
-Stop only Webhost using `docker compose ... stop web` for keep-running behavior. A Supervisor stop also stops its game server. Back up host server files and private state.
+Panel updates use Settings → Panel updates, with stable/experimental channels. Download and verify the release, then install. Docker stores the verified Linux runtime in `state/panel-updates/<job-id>/stage` and selects it with `state/panel-active-runtime`. A temporary helper restarts only this deployment's Webhost and Supervisor, verifies version and HTTP readiness, and restores the previous selection on failure. It mounts private state, runtime and the Docker socket, **never the game directory**. The game remains running. Finish panel jobs before installing an update.
+
+The active runtime survives container recreation and Portainer/Compose redeployment. The base image tag identifies the OS/bootstrap image; the dashboard reports the active panel version. Base-image/OS upgrades remain deployment operations. Back up panel state and game files; retain previous runtime directories for rollback.
+
+Existing deployments need a one-time migration: both services use `/app/docker-entrypoint.sh` with role `web` or `supervisor`; set their `replay.panel.role` labels; add `REPLAY_PANEL_DOCKER_UPDATES=1` to Supervisor; share the same private state/runtime mounts and Compose project. Keep Supervisor non-root and Webhost socket-free. These checks prevent selecting unrelated containers. Account permissions and CSRF remain enforced.
+
+Recovery: stop both panel services and retain `state/panel-updates`. Set `state/panel-active-runtime` to a previous verified job ID, or remove only the marker to use the base image's runtime. Start both services. Inspect `state/panel-updates/<job-id>/apply.log` and `state/panel-update.json` for failures. Never delete the runtime directory selected by the active marker.
 
 ## Deutsch
 
-Linux x86-64 mit Docker Engine und Compose v2. Webhost und Supervisor sind getrennt; nur der Supervisor erhält den Docker-Socket.
+Das eigenständige Docker-Paket enthält Image, Compose-Datei und Startskript. Nach dem Entpacken `sh scripts/docker.sh` ausführen. Eine bestehende private `.env` bleibt erhalten; bei der Ersteinrichtung werden Standardpfade und Socketgruppe vorbereitet. Hostpfade vorher bei Bedarf anpassen. Der Initialisierer bereitet Dateirechte vor, Supervisor und Webhost laufen anschließend unter UID 10001. Nur der Supervisor erhält den Docker-Socket. POSIX-ACLs werden benötigt; Symlinks werden nicht verfolgt und keine Schreibrechte für alle gesetzt.
 
-Zuerst das versionierte Docker-Archiv aus dem öffentlichen GitHub-Release laden und mit `gzip -dc blackice-server-panel-docker.tar.gz | docker load` importieren. Damit liegt das passende Compose-Image ohne Registryanmeldung lokal vor.
+Spielserver- und Panel-Updates sind im Dashboard verfügbar. Panel-Updates prüfen das Linux-Release, speichern die Laufzeit im gemeinsamen Zustand und starten ausschließlich die beiden Panel-Dienste neu. Der Spielserver bleibt aktiv. Bei Startfehlern wird die vorige Panel-Laufzeit wieder ausgewählt. Container-IDs, Netzwerke und die Portainer-/Compose-Definition bleiben erhalten. Das Basisimage aktualisiert weiterhin das Bereitstellungswerkzeug; die aktive Panel-Laufzeit bleibt im Zustand gespeichert.
 
-1. `deploy/compose.env.example` als private `.env` kopieren. Absolute Pfade für `PANEL_STATE`, `PANEL_RUNTIME` und `SERVER_PATH` festlegen. `DOCKER_GID` mit `stat -c %g /var/run/docker.sock` ermitteln.
-2. Hostordner anlegen, UID/GID 10001 und 0700 zuordnen. Serverordner für Installation leer lassen.
-3. `docker compose --env-file .env -f deploy/compose.yaml up -d` ausführen.
-4. Schlüssel mit `docker compose --env-file .env -f deploy/compose.yaml logs supervisor` lesen und localhost:20772 öffnen.
-5. Docker, offiziellen Download und eingebundenen Ordner `/server` wählen.
-
-Der Supervisor lädt `ghcr.io/replayre/server` und erstellt seinen Container mit TTY/stdin, dauerhaftem Speicher, LAN-Konfiguration und deaktivierten Updates. Vor Steuerungsaktionen werden vollständige ID und Zugehörigkeitslabel geprüft. `REPLAY_PANEL_HOST_SERVER` muss dem Pfad auf dem Dockerhost entsprechen. Spiel/Voice nutzen 20770/20771 TCP und UDP.
-
-Lokal mit `docker build -t replay-panel:local .` bauen und beide Imagefelder in einer privaten Compose-Kopie ersetzen. Feste Releaseversionen verwenden. Der Docker-Socket erlaubt dem Supervisor weitreichende Hostzugriffe; intern halten und niemals dem Webhost zuweisen. Beide Dienste verwenden UID 10001, nur der Supervisor bekommt zusätzlich die Socketgruppe.
-
-Für keep-running nur `docker compose ... stop web` ausführen. Supervisor-Stop beendet auch den Spielserver. Host-Serverdateien und privaten Panelzustand sichern.
+Bestehende Installationen einmal auf die mitgelieferten Einstiegspunkte, Rollenlabels, gemeinsamen Mounts und `REPLAY_PANEL_DOCKER_UPDATES=1` umstellen. Zur Wiederherstellung beide Panel-Dienste stoppen und `panel-active-runtime` im privaten Zustand auf die vorige geprüfte Job-ID setzen oder nur diese Datei entfernen, um die Basisimage-Laufzeit zu starten. Zustands- und Spielserverdateien sichern; aktive Laufzeitordner nicht löschen. Kontoberechtigungen bleiben unverändert.
