@@ -53,25 +53,13 @@ Complete setup at localhost:20772 as above. .NET and the PTY helper are included
 
 ## Docker on Linux
 
-Requires x86-64 Linux, Docker Engine and Compose v2. Extract a native release package for `deploy/`, and download `blackice-server-panel-docker.tar.gz` from the same release.
+Requires x86-64 Linux, Docker Engine and Compose v2. Download and extract `blackice-server-panel-docker-bundle.tar.gz`, then run:
 
-```sh
-gzip -dc blackice-server-panel-docker.tar.gz | docker load
-cp deploy/compose.env.example .env
-sudo mkdir -p /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blackice-server
-sudo chown 10001:10001 /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blackice-server
-sudo chmod 700 /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blackice-server
-stat -c %g /var/run/docker.sock
+```bash
+sh scripts/docker.sh
 ```
 
-Edit `.env`: set `PANEL_STATE=/srv/blackice-panel/state`, `PANEL_RUNTIME=/srv/blackice-panel/runtime`, `SERVER_PATH=/srv/blackice-server`, `DOCKER_GID` to the printed socket group ID, and keep `PANEL_VERSION=1.2.2`. Then:
-
-```sh
-docker compose --env-file .env -f deploy/compose.yaml up -d
-docker compose --env-file .env -f deploy/compose.yaml logs supervisor
-```
-
-Open localhost:20772, use the logged setup key, select Docker and `/server`. Only the Supervisor receives the powerful Docker socket; Webhost does not. Game files and panel state persist in host directories. Stop with `docker compose --env-file .env -f deploy/compose.yaml down`. [Docker details](docs/docker.md).
+The bundle loads its image, creates a private `.env`, detects the socket group and starts the panel with prepared persistent permissions. Edit `.env` first for custom host paths. Open localhost:20772 and use the logged setup key; select Docker and `/server` for the game. Both game and panel updates are available in Settings. Only the Supervisor receives the Docker socket. [Docker setup, migration and recovery](docs/docker.md).
 
 ## Operation and updates
 

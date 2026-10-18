@@ -1,8 +1,22 @@
 name: replay-panel
 services:
+  init:
+    image: ghcr.io/landminentester/blackice-server-panel:${PANEL_VERSION:-1.4.1}
+    user: "0:0"
+    entrypoint: ["/app/docker-init.sh"]
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    volumes:
+      - ${PANEL_STATE:?Set PANEL_STATE}:/state
+      - ${PANEL_RUNTIME:?Set PANEL_RUNTIME}:/run/replay-panel
+      - ${SERVER_PATH:?Set SERVER_PATH}:/server
   supervisor:
-    image: ghcr.io/landminentester/blackice-server-panel:${PANEL_VERSION:-1.1.0}
-    entrypoint: ["/app/artifacts/supervisor/Supervisor", "/state/panel.json"]
+    image: ghcr.io/landminentester/blackice-server-panel:${PANEL_VERSION:-1.4.1}
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    entrypoint: ["/app/docker-entrypoint.sh", "supervisor", "/state/panel.json"]
     user: "10001:${DOCKER_GID:?Set DOCKER_GID}"
     environment:
       REPLAY_PANEL_URL: http://0.0.0.0:20772
@@ -11,6 +25,9 @@ services:
       REPLAY_PANEL_RUNTIME: /run/replay-panel
       REPLAY_PANEL_MOUNTS: /server
       REPLAY_PANEL_HOST_SERVER: ${SERVER_PATH:?Set SERVER_PATH}
+      REPLAY_PANEL_DOCKER_UPDATES: "1"
+    labels:
+      replay.panel.role: supervisor
     volumes:
       - ${PANEL_STATE:?Set PANEL_STATE}:/state
       - ${PANEL_RUNTIME:?Set PANEL_RUNTIME}:/run/replay-panel
@@ -18,8 +35,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
   web:
-    image: ghcr.io/landminentester/blackice-server-panel:${PANEL_VERSION:-1.1.0}
+    image: ghcr.io/landminentester/blackice-server-panel:${PANEL_VERSION:-1.4.1}
     depends_on: [supervisor]
+    labels:
+      replay.panel.role: web
     environment:
       REPLAY_PANEL_CONFIG: /state/panel.json
       REPLAY_PANEL_RUNTIME: /run/replay-panel

@@ -2,6 +2,7 @@ using System.Text.Json;
 using ReplayPanel.Shared;
 using ReplayPanel.Supervisor;
 if(args.FirstOrDefault()=="--apply-panel-update"){await PanelUpdateWorker.Run(args[1]);return;}
+if(args.FirstOrDefault()=="--apply-docker-panel-update"){await DockerPanelUpdater.Run(args[1]);return;}
 if(args.FirstOrDefault() is "--controller" or "--stop-stack" or "--force-stop-stack" or "--stop-stack-detached" or "--server-console" or "--stop-server-detached") {
     var mode=args[0];var path=Path.GetFullPath(args.Skip(1).FirstOrDefault()??".local/panel.json");
     if(mode is "--stop-stack-detached" or "--stop-server-detached") {
@@ -35,6 +36,7 @@ var config=PanelConfig.Load(configPath);
 NativeConsole.ConfigPath=configPath;
 using var updates=new PanelUpdates(configPath);
 using var single=new FileStream(Path.Combine(Path.GetDirectoryName(configPath)!,"supervisor.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);
+if(config.Configured&&config.Backend=="docker")await new DockerEngine(config).EnsureWritableServer();
 var setup=new SetupService(config,configPath);setup.PrintKey();
 IServerBackend? backend=null;BundleManager? bundles=null;PipeClient? adapter=null;
 await using var serverUpdates=new ServerUpdates(config,configPath,()=>backend);
@@ -106,7 +108,7 @@ try {await Transport.Listen(config.PipeName,async(stream,ct)=>{
                 reply=new(true,Status:backend!.Status());break;
             }
             case "server-config":if(!config.Configured)throw new InvalidOperationException("setup.required");reply=new(true,Lines:[Enc(ServerConfig.Read(config.ServerRoot,backend?.Status().State=="running"))]);break;
-            case "server-config-save":{if(!config.Configured)throw new InvalidOperationException("setup.required");ServerConfig.Write(config.ServerRoot,JsonSerializer.Deserialize<ServerConfigValues>(request.Command!,PanelConfig.Json)!);reply=new(true,Lines:[Enc(ServerConfig.Read(config.ServerRoot,backend?.Status().State=="running"))]);break;}
+            case "server-config-save":{if(!config.Configured)throw new InvalidOperationException("setup.required");if(config.Backend=="docker")await new DockerEngine(config).EnsureWritableServer(timeout.Token);ServerConfig.Write(config.ServerRoot,JsonSerializer.Deserialize<ServerConfigValues>(request.Command!,PanelConfig.Json)!);reply=new(true,Lines:[Enc(ServerConfig.Read(config.ServerRoot,backend?.Status().State=="running"))]);break;}
             case "settings": { lock(config) {
                 if(request.Locale is not null && request.Locale is not ("de" or "en"))throw new InvalidOperationException("settings.invalid");
                 if(request.UpdateChannel is not null && request.UpdateChannel is not ("stable" or "experimental"))throw new InvalidOperationException("settings.invalid");

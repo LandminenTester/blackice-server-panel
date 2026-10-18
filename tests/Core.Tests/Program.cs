@@ -47,6 +47,11 @@ try {
  ArchiveInstaller.Extract(bad,staging);Check(File.ReadAllText(Path.Combine(staging,"cfg","example"))=="safe","official wrapper is normalized");
  Reject(()=>ArchiveInstaller.Extract(bad,staging),"existing extracted files cannot be overwritten");
  Reject(()=>SetupService.Validate("relative","windows"),"relative host paths rejected");
+ if(!OperatingSystem.IsWindows()){
+  var initialized=Path.Combine(root,"docker-initialized");Directory.CreateDirectory(Path.Combine(initialized,"cfg"));Directory.CreateDirectory(Path.Combine(initialized,"settings"));Directory.CreateDirectory(Path.Combine(initialized,"data","ugc"));
+  SetupService.Validate(initialized,"docker",true);Check(true,"fresh Docker install accepts empty permission-initialized directories");
+  File.WriteAllText(Path.Combine(initialized,"settings","private.json"),"private");Reject(()=>SetupService.Validate(initialized,"docker",true),"fresh install rejects existing private files");
+ }
  var cfgRoot=Path.Combine(root,"cfgtest");Directory.CreateDirectory(Path.Combine(cfgRoot,"cfg"));
  File.WriteAllText(Path.Combine(cfgRoot,"cfg","server.cfg"),"# keep me\r\nsv_bindaddr \"[::]:20770\"\r\n#sv_lan false\r\nsv_name \"Old\"\r\nextra_setting 5\r\n");
  ServerConfig.Write(cfgRoot,new("New name","A description","ep1","DEU","[::]:20770","",true));

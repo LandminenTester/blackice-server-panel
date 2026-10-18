@@ -55,25 +55,13 @@ Einrichtung unter localhost:20772 wie oben abschließen. Laufzeit und PTY-Helfer
 
 ## Docker unter Linux
 
-Voraussetzungen: Linux x86-64, Docker Engine und Compose v2. Ein natives Releasepaket für `deploy/` entpacken und `blackice-server-panel-docker.tar.gz` aus demselben Release laden.
+Voraussetzungen: Linux x86-64, Docker Engine und Compose v2. `blackice-server-panel-docker-bundle.tar.gz` herunterladen und entpacken, danach starten:
 
-```sh
-gzip -dc blackice-server-panel-docker.tar.gz | docker load
-cp deploy/compose.env.example .env
-sudo mkdir -p /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blackice-server
-sudo chown 10001:10001 /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blackice-server
-sudo chmod 700 /srv/blackice-panel/state /srv/blackice-panel/runtime /srv/blackice-server
-stat -c %g /var/run/docker.sock
+```bash
+sh scripts/docker.sh
 ```
 
-In `.env` eintragen: `PANEL_STATE=/srv/blackice-panel/state`, `PANEL_RUNTIME=/srv/blackice-panel/runtime`, `SERVER_PATH=/srv/blackice-server`, `DOCKER_GID` mit der ausgegebenen Socket-Gruppen-ID und `PANEL_VERSION=1.2.2`. Dann:
-
-```sh
-docker compose --env-file .env -f deploy/compose.yaml up -d
-docker compose --env-file .env -f deploy/compose.yaml logs supervisor
-```
-
-Unter localhost:20772 den ausgegebenen Einrichtungsschlüssel verwenden, Docker und `/server` wählen. Nur der Supervisor erhält den weitreichenden Docker-Socket, der Webhost nicht. Panelzustand und Spieldateien bleiben in Hostordnern. Beenden: `docker compose --env-file .env -f deploy/compose.yaml down`. [Docker-Details](docs/docker.md).
+Das Paket lädt das Image, erstellt eine private `.env`, erkennt die Socketgruppe und bereitet die persistenten Schreibrechte vor. Für andere Hostpfade `.env` vorher anpassen. Unter localhost:20772 mit dem protokollierten Einrichtungsschlüssel Docker und `/server` wählen. Spielserver- und Panel-Updates stehen in den Einstellungen bereit. Nur der Supervisor erhält den Docker-Socket. [Docker-Einrichtung, Migration und Wiederherstellung](docs/docker.md).
 
 ## Bedienung und Updates
 
