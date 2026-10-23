@@ -24,6 +24,14 @@ public static class BundleRefinementTests
         var job=admin.Delete(Body(new BundleEdit("example")));while(tools.Jobs.Busy)await Task.Delay(10);check(tools.Jobs.Current?.State=="succeeded","stopped bundle deletion is confirmed");check(!File.Exists(Path.Combine(target,"config.toml"))&&File.ReadAllText(Path.Combine(target,"vfs","save"))=="persistent"&&File.Exists(Path.Combine(source,"source.cs")),"default deletion preserves runtime data and project sources");
         check(Permissions.All.Contains("bundles.merge")&&Permissions.All.Contains("bundles.packages")&&Permissions.All.Contains("bundles.data.delete"),"new capabilities are independent explicit permissions");
         check(NuGetService.Compare("1.2.0-rc.10","1.2.0-rc.2")>0&&NuGetService.Compare("1.2.0-beta","1.2.0-rc.1")<0,"specific prerelease choices follow semantic version order");
+        var pinnedSource=Path.Combine(home,"pinned-packages");Directory.CreateDirectory(pinnedSource);
+        File.WriteAllText(Path.Combine(pinnedSource,"bundle.csproj"),"<Project><ItemGroup><PackageReference Include=\"replay.blackice.server\" Version=\"[1.1.0]\" /><PackageReference Include=\"replay.blackice.client\" Version=\"1.1.0\" /><PackageReference Include=\"replay.blackice.shared\" Version=\"*\" /><PackageReference Include=\"unrelated.package\" Version=\"[1.1.0]\" /></ItemGroup></Project>");
+        check(NuGetService.Apply(pinnedSource,"1.2.0",new Dictionary<string,string>())==1,"package bump updates a source file once");
+        var updatedPackages=NuGetService.Read(pinnedSource);
+        check(updatedPackages.Single(p=>p.Id=="replay.blackice.server").Version=="[1.2.0]","package bump preserves exact NuGet pins");
+        check(updatedPackages.Where(p=>p.Id!="replay.blackice.server").All(p=>p.Version=="1.2.0"&&!p.Floating),"package bump resolves floating versions and updates bare references");
+        check(File.ReadAllText(Path.Combine(pinnedSource,"bundle.csproj")).Contains("Include=\"unrelated.package\" Version=\"[1.1.0]\""),"package bump leaves unrelated packages unchanged");
+        check(NuGetService.Apply(pinnedSource,"1.2.0",new Dictionary<string,string>())==0,"repeating the selected version produces no changes");
         File.WriteAllText(Path.Combine(target,"config.toml"),"[General]\n");var backup=Path.Combine(BundleLayout.Backups(path),"example","one");Directory.CreateDirectory(backup);File.WriteAllText(Path.Combine(backup,"sv.wasm"),"backup");
         admin.Delete(Body(new BundleEdit("example",Sources:true,Backups:true,Data:true)));while(tools.Jobs.Busy)await Task.Delay(10);
         check(tools.Jobs.Current?.State=="succeeded"&&!Directory.Exists(source)&&!Directory.Exists(Path.GetDirectoryName(backup)!)&&!Directory.Exists(Path.Combine(target,"vfs")),"explicit expanded deletion removes only chosen sources, backups and local data");

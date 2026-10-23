@@ -114,7 +114,13 @@ public sealed partial class NuGetService(HttpClient http)
                 if (!id.Success) return match.Value;
                 var name = id.Groups[1].Value;
                 string? target = null;
-                if (name.StartsWith("replay.blackice.", StringComparison.OrdinalIgnoreCase) && ReplayIds.Contains(name.ToLowerInvariant())) target = version;
+                if (name.StartsWith("replay.blackice.", StringComparison.OrdinalIgnoreCase) && ReplayIds.Contains(name.ToLowerInvariant()))
+                {
+                    var current = VersionAttr().Match(match.Value);
+                    var declared = current.Success ? current.Groups[1].Value : "";
+                    // An exact NuGet pin must stay exact; a bare version permits later versions during resolution.
+                    target = declared.StartsWith('[') && declared.EndsWith(']') && !declared.Contains(',') ? "[" + version + "]" : version;
+                }
                 else if (compilerPins.TryGetValue(name, out var pin)) target = VersionAttr().Match(match.Value) is { Success: true } current && current.Groups[1].Value.StartsWith('[') ? "[" + pin + "]" : pin;
                 if (target is null || !VersionAttr().IsMatch(match.Value)) return match.Value;
                 return VersionAttr().Replace(match.Value, "Version=\"" + target + "\"", 1);

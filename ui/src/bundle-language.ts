@@ -1,4 +1,7 @@
 export const bundleEnglish = {
+  "packageSourceVersions": "NuGet in sources",
+  "packageSourceHint": "These versions are declared in the source projects. A repository update does not change the installed bundle until it is built and installed.",
+  "packageOpenFor": "Check NuGet packages for {name}",
   "mergeBranches": "Merge branches",
   "mergeHint": "Merge remote branches without changing the checked-out project. Pull & Build is a separate action.",
   "mergeSource": "Source branch",
@@ -64,6 +67,9 @@ export const bundleEnglish = {
   "packageBranch": "Branch to update"
 };
 export const bundleGerman: typeof bundleEnglish = {
+  "packageSourceVersions": "NuGet in Quellen",
+  "packageSourceHint": "Diese Versionen stehen in den Projektquellen. Eine Änderung im Repository aktualisiert das installierte Bundle erst nach Build und Installation.",
+  "packageOpenFor": "NuGet-Pakete für {name} prüfen",
   "mergeBranches": "Branches zusammenführen",
   "mergeHint": "Remote-Branches zusammenführen, ohne das ausgecheckte Projekt zu ändern. Pull & Build bleibt eine getrennte Aktion.",
   "mergeSource": "Quellbranch",

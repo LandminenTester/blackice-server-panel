@@ -1,7 +1,7 @@
 name: replay-panel
 services:
   init:
-    image: ghcr.io/landminentester/blackice-server-panel:${PANEL_VERSION:-1.5.0-experimental.3}
+    image: ghcr.io/landminentester/blackice-server-panel:${PANEL_VERSION:-1.5.0-experimental.4}
     user: "0:0"
     entrypoint: ["/app/docker-init.sh"]
     network_mode: none
@@ -12,7 +12,7 @@ services:
       - ${PANEL_RUNTIME:?Set PANEL_RUNTIME}:/run/replay-panel
       - ${SERVER_PATH:?Set SERVER_PATH}:/server
   supervisor:
-    image: ghcr.io/landminentester/blackice-server-panel:${PANEL_VERSION:-1.5.0-experimental.3}
+    image: ghcr.io/landminentester/blackice-server-panel:${PANEL_VERSION:-1.5.0-experimental.4}
     depends_on:
       init:
         condition: service_completed_successfully
@@ -35,7 +35,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
   web:
-    image: ghcr.io/landminentester/blackice-server-panel:${PANEL_VERSION:-1.5.0-experimental.3}
+    image: ghcr.io/landminentester/blackice-server-panel:${PANEL_VERSION:-1.5.0-experimental.4}
     depends_on: [supervisor]
     labels:
       replay.panel.role: web

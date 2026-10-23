@@ -51,6 +51,8 @@ Search installed bundles by name and filter server-wide category tags. Categorie
 
 ZIP uploads recheck the final target name before installation and ask **Overwrite or Cancel** for a collision, including after renaming. Replacement stops the current bundle, backs up runtime files and preserves data. File structure checks do not establish that uploaded code is trustworthy.
 
+Project rows show the declared NuGet source versions and a **NuGet** shortcut to the package dialog. Exact pins such as `[1.1.0]` remain exact when bumped to `[1.2.0]`. This source declaration is not an inspection of the installed WASM: merge the review request, then use Pull & Build to install the changed bundle. Projects with committed lock files still need their locks refreshed and verified in the repository's build workflow.
+
 ## Docker
 Supported. The image contains `git`; toolchain data lives in the `/state` volume, bundles are written to the `/server` mount. CI runs the full flow in the container.
 
@@ -90,6 +92,8 @@ Entwickler arbeiten auf ihren Rechnern und pushen Änderungen zum Git-Anbieter. 
 Der Paketdialog prüft installierte und neueste gemeinsame Versionen. Aktuelle oder bestimmte Version samt Remote-Branch auswählen. Das Panel erstellt in einem temporären Checkout einen Änderungsbranch und eine Review-Anfrage; aktive Quellen und Bundle-Dateien bleiben unverändert. Ohne Remote und passenden Zugang ist die Prüfung nur lesend. Bei einem Fehler nach dem Push kann der Änderungsbranch beim Anbieter verbleiben.
 
 Zustandsverwaltung: React ohne Zusatzbibliothek/Zustand/Jotai/Nano Stores; Vue ohne Zusatzbibliothek/Pinia/Nano Stores; Svelte lokale Runes/gemeinsamer Runes-Store/Nano Stores. Beispiele und Abhängigkeiten sind fest gebunden. Vue mit Nano Stores überspringt per `skipLibCheck` inkompatible Bibliotheksdeklarationen unter TypeScript 6; eigener Anwendungscode wird weiterhin geprüft.
+
+Projektzeilen zeigen die deklarierten NuGet-Versionen der Quellen und einen **NuGet**-Direktzugriff auf den Paketdialog. Exakte Bindungen wie `[1.1.0]` bleiben beim Update auf `[1.2.0]` exakt. Diese Quellenanzeige untersucht nicht die installierte WASM-Datei: Nach der Übernahme der Review-Anfrage installiert Pull & Build das geänderte Bundle. Bei eingecheckten Paket-Locks müssen diese zusätzlich im Build-Ablauf des Repositorys aktualisiert und geprüft werden.
 
 ## Kategorien, Autostart und Löschen
 
