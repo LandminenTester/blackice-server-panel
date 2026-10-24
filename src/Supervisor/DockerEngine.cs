@@ -124,8 +124,7 @@ public sealed class DockerEngine
     public async Task ConfigureBridge(bool enabled,string endpoint,string token,string statePath,CancellationToken ct=default) {
         var old=await Inspect(ct);if(old.GetProperty("State").GetProperty("Running").GetBoolean())throw new InvalidOperationException("server.running");
         var oldConfig=old.GetProperty("Config");var previous=oldConfig.TryGetProperty("Cmd",out var cmd)&&cmd.ValueKind==JsonValueKind.Array?cmd.EnumerateArray().Select(x=>x.GetString()!).ToArray():[];
-        var clean=new List<string>();for(var i=0;i<previous.Length;i++){if(previous[i]=="--mcp")continue;if(previous[i] is "--mcp-addr" or "--mcp-token"){i++;continue;}clean.Add(previous[i]);}
-        var desired=enabled?clean.Concat(new LanBridgeLaunchPolicy().Arguments(endpoint,token)).ToArray():clean.ToArray();
+        var desired=new McpBridgeLaunchPolicy().Configure(previous,enabled,endpoint,token);
         var previousEntry=oldConfig.GetProperty("Entrypoint");
         if(desired.SequenceEqual(previous)&&previousEntry.ValueKind==JsonValueKind.Array&&previousEntry.EnumerateArray().Select(x=>x.GetString()).SequenceEqual(GameEntrypoint))return;
         var body=System.Text.Json.Nodes.JsonNode.Parse(oldConfig.GetRawText())!.AsObject();body["Cmd"]=JsonSerializer.SerializeToNode(desired);body["Entrypoint"]=JsonSerializer.SerializeToNode(GameEntrypoint);body.Remove("Hostname");

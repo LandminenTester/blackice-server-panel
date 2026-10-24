@@ -85,7 +85,7 @@ The experimental channel adds compiled-bundle uploads, trusted source projects a
 
 REServer updates are now available in Settings: check official alpha, verify/download files and install with runtime backup and startup rollback. Select current alpha or a locally backed-up previous build. [Server update guide](docs/server-updates.md).
 
-Optional LAN bridge adds server health, phases, commit/tick information, correlated console output and cursor-based module logs. Enable it in Settings and explicitly restart. **--mcp forces sv_lan 1; public servers keep PTY.** History is local, defaults to seven days / 100 MB, and is configurable. [Bridge setup and compatibility](docs/bridge.md).
+Optional MCP bridge adds server health, phases, commit/tick information, correlated console output and cursor-based module logs. Enable it in Settings and explicitly restart. **The bridge uses --mcp-dangerous-allow-server-listing; it does not force LAN mode. Existing sv_lan and network settings still determine public listing.** History is local, defaults to seven days / 100 MB, and is configurable. [Bridge setup and compatibility](docs/bridge.md).
 
 ## Development
 

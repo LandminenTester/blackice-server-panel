@@ -5,8 +5,18 @@ using ReplayPanel.Shared;
 namespace ReplayPanel.Supervisor;
 
 public interface IBridgeLaunchPolicy {string[] Arguments(string endpoint,string token);}
-public sealed class LanBridgeLaunchPolicy : IBridgeLaunchPolicy {
- public string[] Arguments(string endpoint,string token)=>["--mcp","--mcp-addr",endpoint,"--mcp-token",token];
+public sealed class McpBridgeLaunchPolicy : IBridgeLaunchPolicy {
+ public string[] Arguments(string endpoint,string token)=>["--mcp-dangerous-allow-server-listing","--mcp-addr",endpoint,"--mcp-token",token];
+ public string[] Configure(string[] previous,bool enabled,string endpoint,string token){
+  var clean=new List<string>();
+  for(var i=0;i<previous.Length;i++){
+   if(previous[i] is "--mcp" or "-mcp" or "--mcp-dangerous-allow-server-listing")continue;
+   if(previous[i] is "--mcp-addr" or "--mcp-token"){i++;continue;}
+   if(previous[i].StartsWith("--mcp-addr=",StringComparison.Ordinal)||previous[i].StartsWith("--mcp-token=",StringComparison.Ordinal))continue;
+   clean.Add(previous[i]);
+  }
+  return enabled?[..clean,..Arguments(endpoint,token)]:[..clean];
+ }
 }
 public sealed record BridgeDiagnosis(bool Enabled,bool Active,bool Connected,string Transport,string Health,string Phase,string PhaseDetail,string? BuildCommit,long? Tick,DateTimeOffset? LastReply,DateTimeOffset? StartedAt,string? LastExit,int? LastExitCode,BridgeSettings Settings,bool RestartRequired);
 public sealed class BridgeBackend : IServerBackend {
@@ -23,7 +33,7 @@ public sealed class BridgeBackend : IServerBackend {
   if(inner is WindowsServerBackend windows)windows.BeginMonitoring();collecting=Collect();
  }
  public static void ValidateSettings(BridgeSettings s){if(s.Port is <1024 or >65535||s.RetentionDays is <1 or >30||s.MaxMegabytes is <10 or >1000)throw new InvalidOperationException("bridge.settings");}
- string[] LaunchArguments(){if(config.ServerArguments.Any(x=>x=="--mcp"||x.StartsWith("--mcp-")))throw new InvalidOperationException("bridge.arguments");return active.Enabled?[..config.ServerArguments,..new LanBridgeLaunchPolicy().Arguments(endpoint,token)]:config.ServerArguments;}
+ string[] LaunchArguments(){if(config.ServerArguments.Any(x=>x is "--mcp" or "-mcp"||x.StartsWith("--mcp-")))throw new InvalidOperationException("bridge.arguments");return active.Enabled?[..config.ServerArguments,..new McpBridgeLaunchPolicy().Arguments(endpoint,token)]:config.ServerArguments;}
  public bool Connected=>hub?.Current is {Closed:false};
  public string? BuildVersion(){if(Connected)return hub!.Current!.Identity.BuildCommit;return inner.ConsoleSnapshot().Select(x=>System.Text.RegularExpressions.Regex.Match(x,@"Running version ([a-f0-9]{8,40})")).LastOrDefault(x=>x.Success)?.Groups[1].Value;}
  public BridgeDiagnosis Diagnosis(){var agent=hub?.Current;return new(config.Bridge.Enabled,active.Enabled,Connected,Connected?"bridge":"pty",agent?.Health??(inner.Status().State=="stopped"?"dead":"unknown"),agent?.Phase??"unknown",Redact(error??agent?.Detail??""),agent?.Identity.BuildCommit,agent?.Tick,agent?.LastSeen,started,lastExit,lastExitCode,config.Bridge,config.Bridge.Enabled!=active.Enabled||config.Bridge.Port!=active.Port);}

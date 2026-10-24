@@ -51,7 +51,17 @@ var restored=new DiagnosticStore(root,()=>settings);Check(restored.Append("new",
 restored.Append("new",null,"panel","process","exited 0");Check(new DiagnosticStore(root,()=>settings).LastExit?.Text=="exited 0","last exit survives supervisor restart");
 await Reject(()=>Task.FromResult(store.Read(-1)),"negative panel cursor rejected");
 await Reject(()=>{BridgeBackend.ValidateSettings(new(true,80));return Task.CompletedTask;},"invalid bridge port rejected");
-Check(new LanBridgeLaunchPolicy().Arguments("127.0.0.1:20774","private").SequenceEqual(new[]{"--mcp","--mcp-addr","127.0.0.1:20774","--mcp-token","private"}),"only known upstream launch flags emitted");
+var launch=new McpBridgeLaunchPolicy();
+var launchArgs=launch.Arguments("127.0.0.1:20774","private");
+Check(launchArgs.SequenceEqual(new[]{"--mcp-dangerous-allow-server-listing","--mcp-addr","127.0.0.1:20774","--mcp-token","private"}),"bridge uses the public-listing MCP flag without the LAN-only flag");
+foreach(var oldFlag in new[]{"--mcp","-mcp","--mcp-dangerous-allow-server-listing"}){
+ var previous=new[]{"--game-option","keep",oldFlag,"--mcp-addr","old-address","--mcp-token","old-token"};
+ Check(launch.Configure(previous,true,"new-address","new-token").SequenceEqual(new[]{"--game-option","keep"}.Concat(launch.Arguments("new-address","new-token"))),"Docker replaces "+oldFlag+" without stale bridge arguments or changing unrelated arguments");
+ Check(launch.Configure(previous,false,"unused","unused").SequenceEqual(new[]{"--game-option","keep"}),"Docker disabling removes "+oldFlag+" and bridge credentials");
+}
+Check(launch.Configure(["--mcp","--mcp-dangerous-allow-server-listing","--mcp-addr=old","--mcp-token=old","--other"],true,"address","token").SequenceEqual(new[]{"--other"}.Concat(launch.Arguments("address","token"))),"mixed legacy and equals-style arguments become one current bridge configuration");
+Check(launch.Configure(launchArgs,true,"127.0.0.1:20774","private").SequenceEqual(launchArgs),"unchanged bridge launch configuration is idempotent");
+Check(launch.Configure(["--other"],false,"unused","unused").SequenceEqual(new[]{"--other"}),"disabled bridge preserves non-bridge startup arguments");
 Console.WriteLine($"{count} bridge checks passed");
 
 sealed class Fake : IAsyncDisposable {

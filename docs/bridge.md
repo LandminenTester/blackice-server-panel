@@ -1,11 +1,11 @@
-# LAN bridge and diagnostics / LAN-Bridge und Diagnose
+# MCP bridge and diagnostics / MCP-Bridge und Diagnose
 
 ## English
 
-The bridge is optional and off on existing installations. It implements the server-side JSON-line protocol from blackice-mcp directly in the .NET Supervisor; no Python or AI runtime is required. Public servers continue to use PTY.
+The bridge is optional and off on existing installations. It implements the server-side JSON-line protocol from blackice-mcp directly in the .NET Supervisor; no Python or AI runtime is required. The panel uses `--mcp-dangerous-allow-server-listing` so enabling the bridge does not itself force LAN mode or remove the server from public listing. Listing still depends on the existing `sv_lan` setting and public networking; this feature does not change either.
 
-1. Use current official REServer files supporting `--mcp`, `--mcp-addr` and `--mcp-token`. Older files can ignore these flags and stay in PTY fallback.
-2. In Settings expand **LAN bridge**, enable it and choose a free internal port (default 20774). Save and confirm the LAN implication: **--mcp forces sv_lan 1 and removes the server from the public list**.
+1. Use current official REServer files supporting `--mcp-dangerous-allow-server-listing`, `--mcp-addr` and `--mcp-token`. Older servers need updating; PTY remains the fallback when a bridge connection is unavailable. The panel does not fall back to launching the old LAN-only `--mcp` flag.
+2. In Settings expand **MCP bridge**, enable it and choose a free internal port (default 20774). Save the settings.
 3. Explicitly restart the server. Saving does not restart or rewrite cfg/server.cfg. Server start parameters are managed by the panel; do not add --mcp flags manually.
 4. Dashboard shows bridge connection, health, phase, commit, tick, last reply and process exit. Missing/unsupported data appears unavailable, not as a healthy server.
 
@@ -23,7 +23,7 @@ Source/module filters, search, pause/resume and downloads respect the existing c
 
 History stays locally in the private state directory/diagnostics, defaults to 7 days and 100 MB total, and rotates in approximately 4 MB files. Limits are configurable (1–30 days, 10–1000 MB). Retention deletes expired/oldest archive segments. Keep state private and back it up if needed. No telemetry is sent externally.
 
-PTY process controls, console and file logs remain available when the bridge is unavailable. A future official public bridge flag will require a tested launch-policy update; this release does not bypass sv_lan. Local testclient support is reserved for a later permission-controlled developer feature.
+PTY process controls, console and file logs remain available when the bridge is unavailable. Native startup and Docker use the same launch policy. On the next explicit startup, Docker replaces managed legacy `--mcp` arguments with the new flag; disabling the bridge removes both forms and their managed endpoint/token arguments. Existing LAN configuration remains unchanged. Local testclient support is reserved for a later permission-controlled developer feature.
 
 ## API and development
 
@@ -33,13 +33,13 @@ Run `dotnet run --project tests/Bridge.Tests`. For isolated native acceptance us
 
 ## Deutsch
 
-Standardmäßig bleibt PTY aktiv. Unter Einstellungen **LAN-Bridge** aufklappen, einen freien internen Port wählen (20774), speichern und ausdrücklich neu starten. Aktuelle offizielle Serverdateien sind erforderlich. **--mcp erzwingt sv_lan 1; der Server erscheint nicht in der öffentlichen Liste.** cfg/server.cfg wird nicht verändert. Öffentliche Server behalten PTY.
+Standardmäßig bleibt PTY aktiv. Unter Einstellungen **MCP-Bridge** aufklappen, einen freien internen Port wählen (20774), speichern und ausdrücklich neu starten. Aktuelle offizielle Serverdateien mit Unterstützung für `--mcp-dangerous-allow-server-listing`, `--mcp-addr` und `--mcp-token` sind erforderlich. Der neue Startparameter erzwingt keinen LAN-Modus. Die öffentliche Listung hängt weiterhin von `sv_lan` und den Netzwerkeinstellungen ab; cfg/server.cfg wird nicht verändert. Bei fehlender Bridge-Verbindung bleibt PTY verfügbar; das Panel startet nicht ersatzweise mit dem alten LAN-Parameter `--mcp`.
 
 Windows/Linux verwenden nur localhost. Docker nutzt ein privates instanzeigenes Netz ohne veröffentlichten Bridge-Port. Beim bestätigten Wechsel wird der gestoppte verwaltete Spielcontainer neu erstellt; Speicher bleibt, alter Container und private Definition bleiben für Wiederherstellung erhalten.
 
 Dashboard zeigt Verbindung, Health, Phase, Commit, Tick, letzte Antwort und Prozessende. Empfangszeit ist eine Beobachtung des Panels. Sequenznummern, Module, Quellen und erkennbare Lücken bleiben erhalten. Filter, Pause, Historie und Download beachten bestehende Rechte. Download enthält bis zu 2000 angezeigte gefilterte Zeilen. Historie bleibt lokal: standardmäßig sieben Tage / insgesamt 100 MB, konfigurierbar. Es erfolgt kein externer Versand.
 
-Bei Verbindungsproblemen bleiben PTY und Prozessverwaltung verfügbar. Schreibbefehle werden nach Timeout nicht erneut gesendet; Zustand vor erneutem Versuch prüfen. Für öffentlichen Bridge-Betrieb muss zuerst ein offizieller Parameter unterstützt und getestet werden. Testclients sind eine spätere Erweiterung.
+Bei Verbindungsproblemen bleiben PTY und Prozessverwaltung verfügbar. Schreibbefehle werden nach Timeout nicht erneut gesendet; Zustand vor erneutem Versuch prüfen. Native Starts und Docker verwenden dieselbe Startregel. Beim nächsten ausdrücklich ausgelösten Start ersetzt Docker verwaltete alte `--mcp`-Argumente; beim Deaktivieren verschwinden beide Formen samt verwalteter Adresse und Token. Vorhandene LAN-Einstellungen bleiben unverändert. Testclients sind eine spätere Erweiterung.
 
 ## Docker recovery / Wiederherstellung
 
